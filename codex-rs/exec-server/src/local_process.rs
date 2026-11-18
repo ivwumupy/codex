@@ -437,7 +437,7 @@ impl LocalProcess {
             env: &prepared.env,
             arg0: &prepared.arg0,
             sandbox: prepared.sandbox,
-            windows_sandbox: prepared.windows_sandbox_spawn_request(),
+            windows_sandbox: None,
             tty: params.tty,
             stdin_open: params.tty || params.pipe_stdin,
             inherited_fds: codex_utils_pty::ChildFds::Attached(&inherited_fds),

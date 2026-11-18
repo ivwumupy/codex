@@ -17,7 +17,6 @@ fn resume_parses_prompt_after_global_flags() {
         "--skip-git-repo-check",
         "--ephemeral",
         "--ignore-user-config",
-        "--ignore-rules",
         PROMPT,
     ]);
 
@@ -99,38 +98,22 @@ fn fork_parses_prompt_after_global_flags() {
 
 #[test]
 fn parses_config_isolation_flags() {
-    let cli = Cli::parse_from([
-        "codex-exec",
-        "--ignore-user-config",
-        "--ignore-rules",
-        "summarize",
-    ]);
+    let cli = Cli::parse_from(["codex-exec", "--ignore-user-config", "summarize"]);
 
     assert!(cli.ignore_user_config);
     assert!(cli.ignore_rules);
 }
 
 #[test]
-fn approve_for_me_flag_applies_to_resume_when_passed_at_exec_root() {
-    for flag in ["--approve-for-me", "--not-so-yolo"] {
-        let cli = Cli::parse_from(["codex-exec", flag, "resume", "--last"]);
-
-        assert!(cli.auto_review);
-    }
-}
-
-#[test]
-fn approve_for_me_flag_conflicts_with_other_sandbox_modes() {
-    for conflicting_args in [
-        vec!["--sandbox", "read-only"],
-        vec!["--dangerously-bypass-approvals-and-sandbox"],
+fn removed_execution_modes_are_rejected() {
+    for flag in [
+        "--sandbox",
+        "--approve-for-me",
+        "--not-so-yolo",
+        "--ask-for-approval",
     ] {
-        let mut args = vec!["codex-exec", "--approve-for-me"];
-        args.extend(conflicting_args);
-        args.push("summarize");
-
-        let error = Cli::try_parse_from(args).expect_err("flags should conflict");
-        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+        let err = Cli::try_parse_from(["codex-exec", flag]).expect_err("removed mode");
+        assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 }
 

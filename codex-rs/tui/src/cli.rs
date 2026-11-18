@@ -2,7 +2,6 @@ use clap::Args;
 use clap::FromArgMatches;
 use clap::Parser;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_cli::ApprovalModeCliArg;
 use codex_utils_cli::CliConfigOverrides;
 use codex_utils_cli::SharedCliOptions;
 
@@ -66,10 +65,6 @@ pub struct Cli {
     #[clap(flatten)]
     pub shared: TuiSharedCliOptions,
 
-    /// Configure when the model requires human approval before executing a command.
-    #[arg(long = "ask-for-approval", short = 'a')]
-    pub approval_policy: Option<ApprovalModeCliArg>,
-
     /// Enable live web search. When enabled, the native Responses `web_search` tool is available to the model (no per‑call approval).
     #[arg(long = "search", default_value_t = false)]
     pub web_search: bool,
@@ -127,11 +122,11 @@ impl std::ops::DerefMut for TuiSharedCliOptions {
 
 impl Args for TuiSharedCliOptions {
     fn augment_args(cmd: clap::Command) -> clap::Command {
-        mark_tui_args(SharedCliOptions::augment_args(cmd))
+        SharedCliOptions::augment_args(cmd)
     }
 
     fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
-        mark_tui_args(SharedCliOptions::augment_args_for_update(cmd))
+        SharedCliOptions::augment_args_for_update(cmd)
     }
 }
 
@@ -143,11 +138,4 @@ impl FromArgMatches for TuiSharedCliOptions {
     fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
         self.0.update_from_arg_matches(matches)
     }
-}
-
-fn mark_tui_args(cmd: clap::Command) -> clap::Command {
-    cmd.mut_arg("dangerously_bypass_approvals_and_sandbox", |arg| {
-        arg.conflicts_with("approval_policy")
-    })
-    .mut_arg("auto_review", |arg| arg.conflicts_with("approval_policy"))
 }

@@ -1,7 +1,6 @@
 //! Validate a trusted host's policy snapshot against the destination's managed requirements.
 
 use super::ExecPolicyManager;
-use super::policy_files;
 use codex_config::ConfigLayerStack;
 use codex_execpolicy::Policy;
 use codex_execpolicy::RequirementsExecPolicy;
@@ -21,41 +20,16 @@ impl ExecPolicyManager {
         snapshot: &InheritedExecPolicy,
         stack: &ConfigLayerStack,
     ) -> CodexResult<Self> {
-        if !stack.ignore_user_and_project_exec_policy_rules()
-            || !policy_files(stack)
-                .await
-                .map_err(|err| CodexErr::Fatal(format!("failed to load rules: {err}")))?
-                .is_empty()
+        if stack.requirements().exec_policy.is_some()
+            || snapshot.source_requirements.is_some()
+            || !snapshot.policy.rules().is_empty()
+            || !snapshot.policy.network_rules().is_empty()
+            || !snapshot.policy.host_executables().is_empty()
         {
             return Err(CodexErr::InvalidRequest(
-                "inherited execution policy requires a managed-only destination".to_string(),
+                "execution policies are unsupported in this YOLO-only build".to_string(),
             ));
         }
-        let destination = stack.requirements().exec_policy.as_deref();
-        let compatible = match (snapshot.source_requirements.as_deref(), destination) {
-            (None, None) => true,
-            (Some(source), Some(target)) => {
-                source == target
-                    && source.as_ref().network_rules() == target.as_ref().network_rules()
-                    && source.as_ref().host_executables() == target.as_ref().host_executables()
-            }
-            _ => false,
-        };
-        if !compatible {
-            return Err(CodexErr::InvalidRequest(
-                "inherited execution policy requirements differ from the destination".to_string(),
-            ));
-        }
-        if let Some(requirements) = destination
-            && !snapshot.policy.preserves_managed_requirements(requirements)
-        {
-            return Err(CodexErr::InvalidRequest(
-                "inherited execution policy does not preserve destination requirements".to_string(),
-            ));
-        }
-        Ok(Self::from_snapshot(
-            Arc::clone(&snapshot.policy),
-            snapshot.source_requirements.clone(),
-        ))
+        Ok(Self)
     }
 }

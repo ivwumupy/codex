@@ -130,9 +130,6 @@ tikv-jemallocator = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-codex-windows-sandbox = { workspace = true }
-
 [dev-dependencies]
 codex-message-board = { workspace = true }
 zip = { workspace = true }

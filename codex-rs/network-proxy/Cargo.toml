@@ -79,4 +79,3 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(windows)'.dev-dependencies]
-codex-windows-sandbox = { path = "../windows-sandbox-rs" }

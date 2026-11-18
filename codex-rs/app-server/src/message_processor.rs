@@ -636,12 +636,6 @@ impl MessageProcessor {
             Arc::clone(&environment_manager_for_requests),
             FsWatchManager::new(outgoing.clone()),
         );
-        let windows_sandbox_processor = WindowsSandboxRequestProcessor::new(
-            outgoing.clone(),
-            Arc::clone(&config),
-            config_manager,
-        );
-
         Self {
             turn_admission,
             user_verification,
@@ -674,7 +668,7 @@ impl MessageProcessor {
             thread_queue_processor,
             thread_processor,
             turn_processor,
-            windows_sandbox_processor,
+            windows_sandbox_processor: WindowsSandboxRequestProcessor,
             request_serialization_queues,
         }
     }

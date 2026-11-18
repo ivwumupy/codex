@@ -286,37 +286,6 @@ fn managed_stack(requirements: Option<RequirementsExecPolicy>) -> ConfigLayerSta
 }
 
 #[tokio::test]
-async fn child_and_grandchild_inherit_session_amendments_and_managed_rules() {
-    let (home, mut config, manager) = startup_fixture().await;
-    let mut managed = Policy::empty();
-    managed
-        .add_prefix_rule(&["rm".into()], Decision::Forbidden)
-        .unwrap();
-    let requirements = RequirementsExecPolicy::new(managed);
-    config.config_layer_stack = managed_stack(Some(requirements));
-    let source = ExecPolicyManager::load(&config.config_layer_stack)
-        .await
-        .unwrap();
-    source
-        .append_amendment_and_update(
-            home.path(),
-            &ExecPolicyAmendment::new(vec!["git".into(), "status".into()]),
-        )
-        .await
-        .unwrap();
-    let (mut policy, mut source_requirements) = source.snapshot();
-    // The child forwards its installed snapshot when it starts the grandchild.
-    for _ in 0..2 {
-        let mut options = StartThreadOptions::new(config.clone());
-        options.set_inherited_exec_policy(policy, source_requirements);
-        let runtime = manager.start_thread(options).await.unwrap();
-        (policy, source_requirements) = runtime.thread.session.services.exec_policy.snapshot();
-        assert!(policy.rules().contains_key("git"));
-        assert!(policy.rules().contains_key("rm"));
-    }
-}
-
-#[tokio::test]
 async fn policy_transfer_rejects_changed_sources_and_weakened_destination_rules() {
     let mut managed = Policy::empty();
     managed

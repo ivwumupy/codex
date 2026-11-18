@@ -13,7 +13,6 @@ use codex_exec_server::ExecServerTelemetry;
 use codex_exec_server::RequestDispatchMode;
 use codex_http_client::HttpClientFactory;
 use codex_http_client::OutboundProxyPolicy;
-use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
 use codex_test_binary_support::TestBinaryDispatchGuard;
 use codex_test_binary_support::TestBinaryDispatchMode;
 use codex_test_binary_support::configure_test_binary_dispatch;
@@ -44,7 +43,7 @@ macro_rules! skip_if_mxc_unavailable {
 
 #[ctor]
 pub static TEST_BINARY_DISPATCH_GUARD: Option<TestBinaryDispatchGuard> = {
-    let guard = configure_test_binary_dispatch("codex-exec-server-tests", |exe_name, argv1| {
+    let guard = configure_test_binary_dispatch("codex-exec-server-tests", |_exe_name, argv1| {
         if argv1 == Some(CODEX_ARG0_EXEC_HELPER_ARG1) {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
@@ -52,12 +51,6 @@ pub static TEST_BINARY_DISPATCH_GUARD: Option<TestBinaryDispatchGuard> = {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
         if argv1 == Some(CODEX_WINDOWS_SANDBOX_ARG1) {
-            return TestBinaryDispatchMode::DispatchArg0Only;
-        }
-        if argv1 == Some(codex_sandboxing::CODEX_WINDOWS_MXC_ARG1) {
-            return TestBinaryDispatchMode::DispatchArg0Only;
-        }
-        if exe_name == CODEX_LINUX_SANDBOX_ARG0 {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
         TestBinaryDispatchMode::InstallAliases

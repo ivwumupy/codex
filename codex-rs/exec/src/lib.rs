@@ -69,7 +69,6 @@ use codex_config::ConfigLoadOptions;
 use codex_config::LoaderOverrides;
 use codex_config::format_config_error_with_source;
 use codex_core::StateDbHandle;
-use codex_core::check_execpolicy_for_warnings;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
 use codex_core::config::ConfigOverrides;
@@ -81,7 +80,6 @@ use codex_core::config::load_config_toml_with_layer_stack;
 use codex_core::config::resolve_oss_provider;
 use codex_core::config::resolve_profile_v2_config_path;
 use codex_core::find_thread_meta_by_name_str;
-use codex_core::format_exec_policy_error_with_source;
 use codex_core::path_utils;
 use codex_core::read_session_meta_line;
 use codex_features::Feature;
@@ -231,7 +229,6 @@ struct ExecRunArgs {
     config: Config,
     resume_approvals_reviewer_override: Option<codex_app_server_protocol::ApprovalsReviewer>,
     daybreak_override: Option<bool>,
-    dangerously_bypass_approvals_and_sandbox: bool,
     exec_span: tracing::Span,
     images: Vec<PathBuf>,
     json_mode: bool,
@@ -241,7 +238,6 @@ struct ExecRunArgs {
     oss: bool,
     output_schema_path: Option<PathBuf>,
     prompt: Option<String>,
-    skip_git_repo_check: bool,
     stderr_with_ansi: bool,
     thread_source: ThreadSource,
     cyber_access_program: Option<codex_app_server_protocol::CyberAccessProgram>,
@@ -286,7 +282,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         shared,
         thread_source,
         cyber_access_program,
-        skip_git_repo_check,
+        skip_git_repo_check: _,
         trust,
         ephemeral,
         ignore_user_config,
@@ -309,17 +305,14 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             Some(ExecCommand::Resume(_) | ExecCommand::Fork(_)) | None => {}
         }
     }
-    let mut shared = shared.into_inner();
-    shared.take_auto_review_config_overrides(&mut config_overrides);
+    let shared = shared.into_inner();
     let SharedCliOptions {
         images,
         model: model_cli_arg,
         oss,
         oss_provider,
         config_profile_v2,
-        sandbox_mode: sandbox_mode_cli_arg,
-        auto_review: _,
-        dangerously_bypass_approvals_and_sandbox,
+        dangerously_bypass_approvals_and_sandbox: _,
         bypass_hook_trust,
         cwd,
         mut add_dir,
@@ -356,12 +349,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         .with_ansi(stderr_with_ansi)
         .with_writer(std::io::stderr)
         .with_filter(exec_stderr_env_filter());
-
-    let sandbox_mode = if dangerously_bypass_approvals_and_sandbox {
-        Some(SandboxMode::DangerFullAccess)
-    } else {
-        sandbox_mode_cli_arg.map(Into::<SandboxMode>::into)
-    };
 
     // Parse `-c` overrides from the CLI.
     let mut cli_kv_overrides = match config_overrides.parse_overrides() {
@@ -631,7 +618,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         // the fully resolved reviewer is AutoReview.
         approval_policy: Some(AskForApproval::Never),
         approvals_reviewer: None,
-        sandbox_mode,
+        sandbox_mode: Some(SandboxMode::DangerFullAccess),
         permission_profile: None,
         default_permissions: None,
         persisted_permission_profile_id: None,
@@ -664,12 +651,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             .cloud_config_bundle(cloud_config_bundle.clone())
             .build()
     };
-    let mut config = build_exec_config(
-        overrides,
-        dangerously_bypass_approvals_and_sandbox,
-        build_config,
-    )
-    .await?;
+    let mut config = build_config(overrides).await?;
     embedded_network_policy.activate(&mut config);
     #[allow(clippy::print_stderr)]
     if config
@@ -692,18 +674,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")
         .then(|| config.approvals_reviewer.into());
-
-    #[allow(clippy::print_stderr)]
-    match check_execpolicy_for_warnings(&config.config_layer_stack).await {
-        Ok(None) => {}
-        Ok(Some(err)) | Err(err) => {
-            eprintln!(
-                "Error loading rules:\n{}",
-                format_exec_policy_error_with_source(&err)
-            );
-            std::process::exit(1);
-        }
-    }
 
     set_default_client_residency_requirement(config.enforce_residency.value());
 
@@ -822,7 +792,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         config,
         resume_approvals_reviewer_override,
         daybreak_override,
-        dangerously_bypass_approvals_and_sandbox,
         exec_span: exec_span.clone(),
         images,
         json_mode,
@@ -832,48 +801,12 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         oss,
         output_schema_path,
         prompt,
-        skip_git_repo_check,
         stderr_with_ansi,
         thread_source: thread_source.map(Into::into).unwrap_or(ThreadSource::User),
         cyber_access_program: cyber_access_program.map(Into::into),
     })
     .instrument(exec_span)
     .await
-}
-
-async fn build_exec_config<BuildConfig, BuildFuture>(
-    overrides: ConfigOverrides,
-    preserve_headless_approval_policy: bool,
-    build_config: BuildConfig,
-) -> std::io::Result<Config>
-where
-    BuildConfig: Fn(ConfigOverrides) -> BuildFuture,
-    BuildFuture: Future<Output = std::io::Result<Config>>,
-{
-    let build_without_headless_approval_policy = || {
-        build_config(ConfigOverrides {
-            approval_policy: None,
-            ..overrides.clone()
-        })
-    };
-    match build_config(overrides.clone()).await {
-        Ok(config)
-            if config.approvals_reviewer == ApprovalsReviewer::AutoReview
-                && !preserve_headless_approval_policy =>
-        {
-            build_without_headless_approval_policy().await
-        }
-        Ok(config) => Ok(config),
-        Err(headless_error) if !preserve_headless_approval_policy => {
-            match build_without_headless_approval_policy().await {
-                Ok(config) if config.approvals_reviewer == ApprovalsReviewer::AutoReview => {
-                    Ok(config)
-                }
-                Ok(_) | Err(_) => Err(headless_error),
-            }
-        }
-        Err(headless_error) => Err(headless_error),
-    }
 }
 
 #[allow(clippy::print_stderr)]
@@ -924,7 +857,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         config,
         resume_approvals_reviewer_override,
         daybreak_override,
-        dangerously_bypass_approvals_and_sandbox,
         exec_span,
         images,
         json_mode,
@@ -934,7 +866,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         oss,
         output_schema_path,
         prompt,
-        skip_git_repo_check,
         stderr_with_ansi,
         thread_source,
         cyber_access_program,
@@ -1072,16 +1003,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             )
         }
     };
-
-    // When --yolo (dangerously_bypass_approvals_and_sandbox) is set, also skip the git repo check
-    // since the user is explicitly running in an externally sandboxed environment.
-    if !skip_git_repo_check
-        && !dangerously_bypass_approvals_and_sandbox
-        && get_git_repo_root(&default_cwd).is_none()
-    {
-        eprintln!("Not inside a trusted directory and --skip-git-repo-check was not specified.");
-        std::process::exit(1);
-    }
 
     // Bind before starting the agent. Sandbox activity cannot redirect the final write.
     let bound_output = last_message_file

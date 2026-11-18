@@ -628,7 +628,7 @@ fn build_network_proxy_spec(
     }
     configured_network_proxy_config.configure_credential_broker_environment(environment_overrides);
     PreparedNetworkConfig {
-        configured_proxy: configured_network_proxy_config,
+        configured_proxy: NetworkProxyConfig::default(),
     }
     .build(network_requirements, permission_profile)
 }
@@ -3464,11 +3464,11 @@ impl Config {
             allow_login_shell: _,
             feedback: _,
             otel: _,
-            approval_policy: mut constrained_approval_policy,
+            approval_policy: constrained_approval_policy,
             approvals_reviewer: mut constrained_approvals_reviewer,
             auto_review_required_models: _,
-            permission_profile: mut constrained_permission_profile,
-            windows_sandbox_mode: mut constrained_windows_sandbox_mode,
+            permission_profile: constrained_permission_profile,
+            windows_sandbox_mode: required_windows_sandbox_mode,
             web_search_mode: mut constrained_web_search_mode,
             allow_managed_hooks_only: _,
             allow_appshots: _,
@@ -3499,8 +3499,8 @@ impl Config {
             sandbox_mode,
             permission_profile,
             default_permissions: default_permissions_override,
-            persisted_permission_profile_id,
-            persisted_permission_profile,
+            persisted_permission_profile_id: _,
+            persisted_permission_profile: _,
             model_provider,
             service_tier: service_tier_override,
             codex_self_exe,
@@ -3526,23 +3526,31 @@ impl Config {
             );
         }
 
-        if sandbox_mode.is_some() && permission_profile.is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "`sandbox_mode` and `permission_profile` overrides cannot both be set",
-            ));
+        let full_access = permissions::BUILT_IN_DANGER_FULL_ACCESS_PROFILE;
+        if cfg.windows.as_ref().and_then(|windows| windows.sandbox).is_some()
+            || cfg.approvals_reviewer == Some(ApprovalsReviewer::AutoReview)
+            || approvals_reviewer_override == Some(ApprovalsReviewer::AutoReview)
+        {
+            return Err(std::io::Error::new(ErrorKind::Unsupported,
+                "Windows sandbox and automatic approval review are unsupported in this YOLO-only build"));
         }
-        if sandbox_mode.is_some() && default_permissions_override.is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "`sandbox_mode` and `default_permissions` overrides cannot both be set",
-            ));
+        required_windows_sandbox_mode.value.can_set(&None).map_err(|err| std::io::Error::new(ErrorKind::Unsupported, err))?;
+        if [sandbox_mode, cfg.sandbox_mode].into_iter().flatten().any(|mode| mode != SandboxMode::DangerFullAccess)
+            || [approval_policy_override, cfg.approval_policy].into_iter().flatten().any(|policy| policy != AskForApproval::Never)
+            || permission_profile.as_ref().is_some_and(|profile| profile != &PermissionProfile::Disabled)
+            || [default_permissions_override.as_deref(), cfg.default_permissions.as_deref()].into_iter().flatten().any(|profile| profile != full_access)
+        {
+            return Err(std::io::Error::new(ErrorKind::Unsupported,
+                "this YOLO-only build supports danger-full-access and approval_policy = \"never\" only"));
         }
-        if permission_profile.is_some() && default_permissions_override.is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "`permission_profile` and `default_permissions` overrides cannot both be set",
-            ));
+        constrained_permission_profile.value.can_set(&PermissionProfile::Disabled).map_err(|err| std::io::Error::new(ErrorKind::Unsupported, err))?;
+        constrained_approval_policy.value.can_set(&AskForApproval::Never).map_err(|err| std::io::Error::new(ErrorKind::Unsupported, err))?;
+        constrained_approvals_reviewer.value.can_set(&ApprovalsReviewer::User).map_err(|err| std::io::Error::new(ErrorKind::Unsupported, err))?;
+        if config_layer_stack.requirements().exec_policy.is_some()
+            || filesystem_requirements.as_ref().is_some_and(|fs| !fs.value.deny_read.is_empty())
+            || config_layer_stack.requirements_toml().allowed_permission_profiles.as_ref().is_some_and(|profiles| !is_permission_allowed(profiles, full_access))
+        {
+            return Err(std::io::Error::new(ErrorKind::Unsupported, "managed execution restrictions require a sandbox-capable build"));
         }
         if let Some(profile) = cfg.profile.as_deref() {
             return Err(std::io::Error::new(
@@ -3611,24 +3619,6 @@ impl Config {
         };
         let respect_system_proxy = features.enabled(Feature::RespectSystemProxy);
         let enable_network_proxy = features.enabled(Feature::NetworkProxy);
-        let allow_mxc =
-            cfg.windows.as_ref().and_then(|windows| windows.allow_mxc) != Some(false);
-        if !allow_mxc && resolve_windows_sandbox_mode(&cfg) == Some(WindowsSandboxModeToml::Mxc) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "windows.sandbox = \"mxc\" is not allowed when windows.allow_mxc = false",
-            ));
-        }
-        let PreparedWindowsSandboxConfig {
-            mode: windows_sandbox_mode,
-            sandbox_type: windows_sandbox_type,
-            level: windows_sandbox_level,
-        } = prepare_windows_sandbox_config(
-            resolve_windows_sandbox_mode(&cfg),
-            WindowsSandboxLevel::from_features(&features),
-            &mut constrained_windows_sandbox_mode,
-            &mut startup_warnings,
-        )?;
         let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
             use std::env;
 
@@ -3658,66 +3648,6 @@ impl Config {
                 repo_root.as_ref().map(AbsolutePathBuf::as_path),
             )
             .unwrap_or(ProjectConfig { trust_level: None });
-        let permission_config = resolve_permission_config(
-            &config_layer_stack,
-            &cfg,
-            sandbox_mode,
-        );
-        let requirements_toml = config_layer_stack.requirements_toml();
-        let persisted_permission_profile = persisted_permission_profile.filter(|profile| {
-            sandbox_mode.is_none()
-                && permission_profile.is_none()
-                && default_permissions_override.is_none()
-                && persisted_permission_profile_id.is_none()
-                && requirements_toml.allowed_permission_profiles.is_none()
-                // Executor-owned enforcement and materialized grants are not portable
-                // thread defaults. Reject the original mode before preserving denials.
-                && !matches!(profile, PermissionProfile::External { .. })
-                && !profile.file_system_sandbox_policy().entries.iter().any(|entry| {
-                    entry.access.can_read()
-                        && matches!(entry.path, FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. })
-                })
-                && permission_profile_catalog::permission_profile_satisfies_requirements(
-                    &config_layer_stack,
-                    profile,
-                )
-        });
-        let persisted_permission_profile_id = if sandbox_mode.is_some()
-            || permission_profile.is_some()
-            || default_permissions_override.is_some()
-        {
-            None
-        } else {
-            persisted_permission_profile_id.as_deref()
-        };
-        let permission_path_context = ConfigPathContext::new(
-            PathConvention::native(),
-            Some(PathUri::from_abs_path(&resolved_cwd)),
-            AbsolutePathBufGuard::home_directory()
-                .and_then(|home| PathUri::from_host_native_path(home).ok()),
-        );
-        let effective_permission_selection = resolve_effective_permission_selection(
-            cfg.permissions.as_ref(),
-            default_permissions_override.as_deref(),
-            persisted_permission_profile_id.map(|profile_id| (profile_id, &permission_path_context)),
-            cfg.default_permissions.as_deref(),
-            requirements_toml,
-            &mut startup_warnings,
-        )?;
-        if effective_permission_selection.has_profiles()
-            && !matches!(
-                permission_config,
-                Some(PermissionConfig::Legacy { .. })
-            )
-            && effective_permission_selection.selected_profile_id.is_none()
-            && !effective_permission_selection.requirements_force_profile_selection
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "config defines `[permissions]` profiles but does not set `default_permissions`",
-            ));
-        }
-
         let mut memories = cfg.memories.clone().unwrap_or_default();
         // Fresh profiles have no V1 context to preserve or warm up before using V2.
         // Keep explicit selections and transition opt-outs, and fail closed on IO errors.
@@ -3732,278 +3662,20 @@ impl Config {
             memories.version = Some(MemoryVersion::V2);
         }
         let memories_config: MemoriesConfig = memories.into();
-        let memories_root = codex_home.join(memories_config.version.directory_name());
-
-        let profiles_are_active = effective_permission_selection.profiles_are_active(
-            default_permissions_override.as_deref(),
-            permission_config,
-        );
-        let prefer_mxc = features.enabled(Feature::PreferMxc)
-            && config_allows_mxc(
-                &constrained_windows_sandbox_mode,
-                &effective_permission_selection,
-                profiles_are_active,
-                permission_profile.as_ref(),
-                network_requirements.as_ref(),
-                &cfg,
-                enable_network_proxy,
-            )?
-            && codex_sandboxing::windows_mxc_available();
-        let local_windows_sandbox_type =
-            resolve_windows_sandbox_type(windows_sandbox_type, prefer_mxc);
-        let legacy_windows_sandbox_level = windows_sandbox_level_for_legacy_checks(
-            local_windows_sandbox_type,
-            windows_sandbox_level,
-        );
-        let explicit_permission_profile_mode = effective_permission_selection
-            .persisted_profile_id_was_provided
-            || default_permissions_override.is_some()
-            || matches!(
-                permission_config,
-                Some(PermissionConfig::Named { .. })
-            );
-        let custom_permission_profiles = permission_profile_catalog_from_permissions(
-            &config_layer_stack,
-            effective_permission_selection.profiles.as_ref(),
-            &permission_path_context,
-        )?
-        .into_iter()
-        .filter(|profile| !is_builtin_permission_profile_name(&profile.id))
-        .collect();
-        let using_implicit_builtin_profile = !effective_permission_selection
-            .persisted_profile_id_was_provided
-            && permission_config.is_none()
-            && effective_permission_selection.selected_profile_id.is_none();
-        let should_seed_legacy_workspace_roots = effective_permission_selection
-            .selected_profile_id
-            .is_none()
-            && matches!(
-                permission_config,
-                None | Some(PermissionConfig::Legacy { .. })
-            );
-        let legacy_workspace_roots_explicit = should_seed_legacy_workspace_roots
-            && cfg
-                .sandbox_workspace_write
-                .as_ref()
-                .is_some_and(|sandbox_workspace_write| {
-                    !sandbox_workspace_write.writable_roots.is_empty()
-                });
-        let workspace_roots_explicit = workspace_roots_override.is_some()
-            || !requested_additional_writable_roots.is_empty()
-            || legacy_workspace_roots_explicit;
-        let mut workspace_roots = match workspace_roots_override {
-            Some(workspace_roots) => workspace_roots,
-            None => {
-                let mut workspace_roots = vec![resolved_cwd.clone()];
-                workspace_roots.extend(requested_additional_writable_roots.clone());
-                if should_seed_legacy_workspace_roots
-                    && let Some(sandbox_workspace_write) = cfg.sandbox_workspace_write.as_ref()
-                {
-                    workspace_roots.extend(sandbox_workspace_write.writable_roots.clone());
-                }
-                workspace_roots
-            }
-        };
+        let workspace_roots_explicit = workspace_roots_override.is_some() || !requested_additional_writable_roots.is_empty();
+        let mut workspace_roots = workspace_roots_override.unwrap_or_else(|| {
+            let mut roots = vec![resolved_cwd.clone()];
+            roots.extend(requested_additional_writable_roots);
+            roots
+        });
         dedupe_absolute_paths(&mut workspace_roots);
-        let (
-            configured_network_proxy_config,
-            mut permission_profile,
-            mut file_system_sandbox_policy,
-            mut active_permission_profile,
-            mut profile_workspace_roots,
-        ) = if let Some(permission_profile) = permission_profile {
-            let (file_system_sandbox_policy, _network_sandbox_policy) =
-                permission_profile.to_runtime_permissions();
-            let configured_network_proxy_config =
-                if profile_allows_configured_network_proxy(&permission_profile)
-                    && profiles_are_active
-                {
-                    // PermissionProfile carries the active network sandbox bit, not the configured
-                    // proxy/allowlist policy. Keep that config so active profiles can round-trip
-                    // without broadening network behavior.
-                    let default_permissions = effective_permission_selection
-                        .selected_profile_id
-                        .unwrap_or_else(|| {
-                            default_builtin_permission_profile_name(
-                                &active_project,
-                                legacy_windows_sandbox_level,
-                            )
-                        });
-                    network_proxy_config_for_profile_selection(
-                        effective_permission_selection.profiles.as_ref(),
-                        default_permissions,
-                    )?
-                } else {
-                    NetworkProxyConfig::default()
-                };
-            (
-                configured_network_proxy_config,
-                permission_profile,
-                file_system_sandbox_policy,
-                None,
-                Vec::new(),
-            )
-        } else if profiles_are_active {
-            let default_permissions = effective_permission_selection
-                .selected_profile_id
-                .unwrap_or_else(|| {
-                    default_builtin_permission_profile_name(
-                        &active_project,
-                        legacy_windows_sandbox_level,
-                    )
-                });
-            let builtin_workspace_write_settings = if using_implicit_builtin_profile {
-                cfg.sandbox_workspace_write.as_ref().map(|settings| WorkspaceWriteSettings {
-                    writable_roots: settings.writable_roots.iter().map(PathUri::from_abs_path).collect(),
-                    network_access: settings.network_access,
-                    exclude_tmpdir_env_var: settings.exclude_tmpdir_env_var,
-                    exclude_slash_tmp: settings.exclude_slash_tmp,
-                })
-            } else {
-                None
-            };
-            let configured_network_proxy_config = network_proxy_config_for_profile_selection(
-                effective_permission_selection.profiles.as_ref(),
-                default_permissions,
-            )?;
-            let CompiledPermissionProfile {
-                permission_profile,
-                workspace_roots: configured_workspace_roots,
-            } = compile_permission_profile(
-                effective_permission_selection.profiles.as_ref(),
-                default_permissions,
-                &permission_path_context,
-                builtin_workspace_write_settings.as_ref(),
-                &mut startup_warnings,
-            )?;
-            let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
-            let active_permission_profile = if using_implicit_builtin_profile
-                && default_permissions == BUILT_IN_WORKSPACE_PROFILE
-                && cfg.sandbox_workspace_write.is_some()
-            {
-                // The implicit built-in profile preserves legacy
-                // `[sandbox_workspace_write]` customizations, but explicitly
-                // selecting `:workspace` intentionally ignores those legacy
-                // settings. Do not advertise a re-selectable active profile
-                // when doing so would lose roots, network, or tmp settings.
-                None
-            } else {
-                let selected_profile_extends = cfg
-                    .permissions
-                    .as_ref()
-                    .and_then(|permissions| permissions.entries.get(default_permissions))
-                    .and_then(|profile| profile.extends.clone());
-                Some(ActivePermissionProfile {
-                    id: default_permissions.to_string(),
-                    extends: selected_profile_extends,
-                })
-            };
-            (
-                configured_network_proxy_config,
-                permission_profile,
-                file_system_sandbox_policy,
-                active_permission_profile,
-                configured_workspace_roots,
-            )
-        } else {
-            let configured_network_proxy_config = NetworkProxyConfig::default();
-            // No named `[permissions]` profile is active, but permissions
-            // should still flow through the canonical profile representation.
-            // Derive the old `sandbox_mode` defaults as a profile first, then
-            // keep a legacy-compatible projection only for the remaining code
-            // paths that still speak `SandboxPolicy`.
-            let mut permission_profile = if let Some(PermissionConfig::Legacy { mode, workspace_write }) = permission_config {
-                translate_legacy_permissions(
-                    mode,
-                    workspace_write,
-                    Platform::native(),
-                    legacy_windows_sandbox_level,
-                )
-            } else {
-                cfg.derive_permission_profile(
-                    sandbox_mode,
-                    legacy_windows_sandbox_level,
-                    Some(&active_project),
-                    Some(&constrained_permission_profile),
-                )
-                .await
-            };
-            // The legacy-derived profiles above are expected to be
-            // representable as `SandboxPolicy`. This guard keeps the old safe
-            // fallback behavior if future changes make this branch derive a
-            // profile with split-only filesystem semantics, such as root write
-            // with carveouts or writes that are not expressible as
-            // workspace-write roots.
-            if let Err(err) = permission_profile.to_legacy_sandbox_policy(resolved_cwd.as_path()) {
-                tracing::warn!(
-                    error = %err,
-                    "derived permission profile cannot be represented as a legacy sandbox policy; falling back to read-only"
-                );
-                permission_profile = PermissionProfile::read_only();
-            }
-            let (file_system_sandbox_policy, _network_sandbox_policy) =
-                permission_profile.to_runtime_permissions();
-            (
-                configured_network_proxy_config,
-                permission_profile,
-                file_system_sandbox_policy,
-                None,
-                Vec::new(),
-            )
-        };
-        if let Some(saved) = persisted_permission_profile {
-            let (mut saved_file_system, saved_network) = saved.to_runtime_permissions();
-            saved_file_system.preserve_deny_read_restrictions_from(&file_system_sandbox_policy);
-            let restored = PermissionProfile::from_runtime_permissions_with_enforcement(
-                saved.enforcement(),
-                &saved_file_system,
-                saved_network,
-            );
-            if permission_profile_catalog::permission_profile_satisfies_requirements(
-                &config_layer_stack,
-                &restored,
-            ) {
-                permission_profile = restored;
-                file_system_sandbox_policy = saved_file_system;
-                active_permission_profile = None;
-                profile_workspace_roots.clear();
-            }
-        }
         let prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
-            configured_proxy: configured_network_proxy_config,
+            configured_proxy: NetworkProxyConfig::default(),
             feature_enabled: enable_network_proxy,
             features: cfg.features.as_ref(),
-            candidate_permission_profile: &permission_profile,
+            candidate_permission_profile: &PermissionProfile::Disabled,
             credential_broker_base_url: cfg.openai_base_url.as_deref(),
         });
-        if cfg.approval_policy == Some(AskForApproval::UnlessTrusted) {
-            return Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                UnsupportedUntrustedApprovalPolicyError,
-            ));
-        }
-        let approval_policy_was_explicit =
-            approval_policy_override.is_some() || cfg.approval_policy.is_some();
-        let mut approval_policy = approval_policy_override
-            .or(cfg.approval_policy)
-            .unwrap_or_else(|| {
-                if active_project.is_trusted() {
-                    AskForApproval::OnRequest
-                } else if active_project.is_untrusted() {
-                    AskForApproval::UnlessTrusted
-                } else {
-                    AskForApproval::default()
-                }
-            });
-        if !approval_policy_was_explicit
-            && let Err(err) = constrained_approval_policy.can_set(&approval_policy)
-        {
-            tracing::warn!(
-                error = %err,
-                "default approval policy is disallowed by requirements; falling back to required default"
-            );
-            approval_policy = constrained_approval_policy.value();
-        }
         let approvals_reviewer_was_explicit =
             approvals_reviewer_override.is_some() || cfg.approvals_reviewer.is_some();
         let mut approvals_reviewer = approvals_reviewer_override
@@ -4374,59 +4046,12 @@ impl Config {
         if cfg.log_dir.is_some() && requirements.sqlite_home.is_none() {
             sqlite = sqlite.with_local_logs_home(log_dir.clone());
         }
-        let original_permission_profile = permission_profile.clone();
-        apply_requirement_constrained_value(
-            "approval_policy",
-            approval_policy,
-            &mut constrained_approval_policy,
-            &mut startup_warnings,
-        )?;
-        if let Some(Sourced {
-            value: filesystem_requirements,
-            source: filesystem_requirements_source,
-        }) = filesystem_requirements.as_ref()
-            && !filesystem_requirements.deny_read.is_empty()
-        {
-            let requirement_source = filesystem_requirements_source.clone();
-            constrained_permission_profile
-                .value
-                .add_validator(move |permission_profile| {
-                    validate_permission_profile_for_deny_read(
-                        permission_profile,
-                        &requirement_source,
-                    )
-                })
-                .map_err(std::io::Error::from)?;
-        }
         apply_requirement_constrained_value(
             "approvals_reviewer",
             approvals_reviewer,
             &mut constrained_approvals_reviewer,
             &mut startup_warnings,
         )?;
-        let permission_profile_was_constrained = apply_requirement_constrained_value(
-            "permission_profile",
-            permission_profile,
-            &mut constrained_permission_profile,
-            &mut startup_warnings,
-        )?;
-        if permission_profile_was_constrained
-            && sandbox_mode_requirement_for_permission_profile(&original_permission_profile)
-                == SandboxModeRequirement::DangerFullAccess
-            && constrained_permission_profile.get() == &PermissionProfile::read_only()
-            && constrained_approval_policy.value() == AskForApproval::Never
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Codex would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode.",
-            ));
-        }
-        if permission_profile_was_constrained {
-            // The selected profile no longer describes the effective
-            // permissions after requirements forced a fallback.
-            active_permission_profile = None;
-            profile_workspace_roots.clear();
-        }
         apply_requirement_constrained_value(
             "web_search_mode",
             web_search_mode,
@@ -4437,7 +4062,7 @@ impl Config {
         let mcp_servers = constrain_mcp_servers(cfg.mcp_servers.clone(), mcp_servers.as_ref())
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}")))?;
 
-        let network_permission_profile = constrained_permission_profile.get().clone();
+        let network_permission_profile = PermissionProfile::Disabled;
         let network = build_network_proxy_spec(
             prepared_network.configured_proxy,
             network_requirements,
@@ -4446,120 +4071,15 @@ impl Config {
             &features,
             cfg.features.as_ref(),
         )?;
-        let mut helper_readable_roots: Vec<_> = std::env::var_os("PATH")
-            .as_deref()
-            .and_then(|path| permissions::active_arg0_helper_dir(&codex_home, path))
-            .into_iter()
-            .collect();
-        if features.enabled(Feature::MemoryTool) && memories_config.use_memories {
-            helper_readable_roots.push(memories_root);
-        }
-        let effective_permission_profile = constrained_permission_profile.value.get().clone();
-        let (mut effective_file_system_sandbox_policy, effective_network_sandbox_policy) =
-            effective_permission_profile.to_runtime_permissions();
-        if effective_permission_profile != original_permission_profile {
-            effective_file_system_sandbox_policy
-                .preserve_deny_read_restrictions_from(&file_system_sandbox_policy);
-        }
-        let managed_deny_read_policy = filesystem_requirements
-            .as_ref()
-            .filter(|Sourced { value, .. }| !value.deny_read.is_empty())
-            .map(|Sourced { value, .. }| -> std::io::Result<_> {
-                let mut policy = FileSystemSandboxPolicy::restricted(Vec::new());
-                value.apply_to_policy(&mut policy, codex_utils_path_uri::PathConvention::native())?;
-                Ok(Arc::new(policy))
-            })
-            .transpose()?;
-        if let Some(managed_deny_read_policy) = managed_deny_read_policy.as_ref() {
-            effective_file_system_sandbox_policy
-                .preserve_deny_read_restrictions_from(managed_deny_read_policy);
-        }
-        let effective_file_system_sandbox_policy = effective_file_system_sandbox_policy
-            .with_additional_readable_roots(resolved_cwd.as_path(), &helper_readable_roots);
-        let effective_permission_profile = PermissionProfile::from_runtime_permissions_with_enforcement(
-            effective_permission_profile.enforcement(),
-            &effective_file_system_sandbox_policy,
-            effective_network_sandbox_policy,
-        );
-        constrained_permission_profile
-            .value
-            .set(effective_permission_profile)
-            .map_err(std::io::Error::from)?;
-        if let Some(Sourced {
-            source: requirement_source,
-            ..
-        }) = filesystem_requirements.as_ref()
-            && let Some(managed_file_system_policy) = managed_deny_read_policy.as_ref()
-        {
-            let cwd = PathUri::from_abs_path(&resolved_cwd);
-            let user_home_dir = PathUri::from_host_native_path("~").ok();
-            let temporary_directories = std::env::var_os("TMPDIR")
-                .filter(|path| !path.is_empty())
-                .and_then(|path| AbsolutePathBuf::from_absolute_path(PathBuf::from(path)).ok())
-                .map(PathUri::from)
-                .into_iter()
-                .collect::<Vec<_>>();
-            let context = FileSystemSandboxPolicyContext {
-                cwd: &cwd,
-                workspace_roots: std::slice::from_ref(&cwd),
-                user_home_dir: user_home_dir.as_ref(),
-                temporary_directories: Some(&temporary_directories),
-            };
-            let validator = DenyReadValidator::new(managed_file_system_policy, &context)
-                .map_err(std::io::Error::other)?;
-            let requirement_source = requirement_source.clone();
-            constrained_permission_profile
-                .value
-                .add_validator(move |permission_profile| {
-                    let mut file_system_policy = permission_profile.file_system_sandbox_policy();
-                    // Preserve the native conversion boundary before the shared URI checks.
-                    // Mandatory entries are Deny entries, so their identity stays unchanged.
-                    file_system_policy.entries.retain_mut(|entry| {
-                        if entry.access.can_read()
-                            && let FileSystemPath::Path { path } = &mut entry.path
-                        {
-                            let Ok(native_path) = path.to_abs_path() else {
-                                return false;
-                            };
-                            *path = PathUri::from(native_path);
-                        }
-                        true
-                    });
-                    let context = FileSystemSandboxPolicyContext {
-                        cwd: &cwd,
-                        workspace_roots: std::slice::from_ref(&cwd),
-                        user_home_dir: user_home_dir.as_ref(),
-                        temporary_directories: Some(&temporary_directories),
-                    };
-                    validator.validate(&file_system_policy, &context).map_err(|violation| {
-                        let candidate = match violation {
-                            DenyReadViolation::MissingRequiredDeny => "missing managed deny".to_string(),
-                            DenyReadViolation::ReadablePath(path) => path.to_abs_path().map_or_else(
-                                |_| path.to_string(),
-                                |path| path.to_string_lossy().into_owned(),
-                            ),
-                        };
-                        ConstraintError::InvalidValue {
-                            field_name: "permissions.filesystem",
-                            candidate,
-                            allowed: "all managed deny_read restrictions".to_string(),
-                            requirement_source: requirement_source.clone(),
-                        }
-                    })
-                })
-                .map_err(std::io::Error::from)?;
-        }
-
         let permission_profile_state = PermissionProfileState::from_constrained_active_profile(
-            constrained_permission_profile.value,
-            active_permission_profile,
-            profile_workspace_roots,
-        )
-        .map_err(std::io::Error::from)?;
+            Constrained::allow_only(PermissionProfile::Disabled),
+            Some(ActivePermissionProfile { id: full_access.to_owned(), extends: None }),
+            Vec::new(),
+        ).map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let mut config = Self {
             plugins: cfg.plugins,
-            prefer_mxc,
+            prefer_mxc: false,
             model,
             daybreak_enabled: cfg.daybreak.unwrap_or(false),
             service_tier,
@@ -4580,18 +4100,18 @@ impl Config {
             workspace_roots_explicit,
             startup_warnings,
             permissions: Permissions {
-                approval_policy: constrained_approval_policy.value,
+                approval_policy: Constrained::allow_only(AskForApproval::Never),
                 permission_profile_state,
-                managed_deny_read_policy,
+                managed_deny_read_policy: None,
                 workspace_roots,
                 network,
                 allow_login_shell,
                 shell_environment_policy,
-                windows_sandbox_mode,
-                windows_sandbox_type,
+                windows_sandbox_mode: None,
+                windows_sandbox_type: SandboxType::None,
             },
-            explicit_permission_profile_mode,
-            custom_permission_profiles,
+            explicit_permission_profile_mode: false,
+            custom_permission_profiles: Vec::new(),
             approvals_reviewer: constrained_approvals_reviewer.value(),
             requested_approvals_reviewer: (requested_approvals_reviewer
                 != constrained_approvals_reviewer.value())

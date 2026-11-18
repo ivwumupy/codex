@@ -47,9 +47,6 @@ class PackageInputs:
     code_mode_host_bin: Path
     exec_server_bin: Path
     rg_bin: Path
-    bwrap_bin: Path | None
-    codex_command_runner_bin: Path | None
-    codex_windows_sandbox_setup_bin: Path | None
 
 
 PACKAGE_VARIANTS: dict[str, PackageVariant] = {
@@ -103,18 +100,6 @@ TARGET_SPECS: dict[str, TargetSpec] = {
         is_linux=False,
         dotslash_platform="macos-aarch64",
     ),
-    "x86_64-pc-windows-msvc": TargetSpec(
-        target="x86_64-pc-windows-msvc",
-        is_windows=True,
-        is_linux=False,
-        dotslash_platform="windows-x86_64",
-    ),
-    "aarch64-pc-windows-msvc": TargetSpec(
-        target="aarch64-pc-windows-msvc",
-        is_windows=True,
-        is_linux=False,
-        dotslash_platform="windows-aarch64",
-    ),
 }
 
 
@@ -123,8 +108,6 @@ HOST_RELEASE_TARGETS: dict[tuple[str, str], str] = {
     ("darwin", "x86_64"): "x86_64-apple-darwin",
     ("linux", "aarch64"): "aarch64-unknown-linux-musl",
     ("linux", "x86_64"): "x86_64-unknown-linux-musl",
-    ("windows", "aarch64"): "aarch64-pc-windows-msvc",
-    ("windows", "x86_64"): "x86_64-pc-windows-msvc",
 }
 
 

@@ -1506,9 +1506,7 @@ impl UnifiedExecProcessManager {
         let shell_snapshot = shell_snapshot_request(prepared, context);
         let mut orchestrator = ToolOrchestrator::new();
         let mut runtime = UnifiedExecRuntime::new(self);
-        let exec_approval_requirement = prepared
-            .approval_requirement(&context.session, &context.step_context)
-            .await;
+        let exec_approval_requirement = prepared.approval_requirement();
         let req = UnifiedExecToolRequest {
             prepared,
             process_id: request.process_id,

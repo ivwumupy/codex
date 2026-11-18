@@ -51,7 +51,6 @@ codex-http-client = { workspace = true }
 codex-exec = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-exec-server-cli = { workspace = true }
-codex-execpolicy = { workspace = true }
 codex-extension-api = { workspace = true }
 codex-features = { workspace = true }
 codex-multi-env-copy-file = { workspace = true }
@@ -116,7 +115,6 @@ which = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-codex_windows_sandbox = { package = "codex-windows-sandbox", path = "../windows-sandbox-rs" }
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Storage_Packaging_Appx",

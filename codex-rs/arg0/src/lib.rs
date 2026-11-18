@@ -10,10 +10,7 @@ use codex_async_utils::THREAD_STACK_SIZE_BYTES;
 use codex_exec_server::CODEX_ARG0_EXEC_HELPER_ARG1;
 use codex_exec_server::CODEX_FS_HELPER_ARG1;
 use codex_install_context::InstallContext;
-use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
 use codex_utils_home_dir::find_codex_home;
-#[cfg(target_os = "windows")]
-use codex_windows_sandbox::CODEX_WINDOWS_SANDBOX_ARG1;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 use tempfile::TempDir;
@@ -69,27 +66,17 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
-    if exe_name == CODEX_LINUX_SANDBOX_ARG0 {
-        // Safety: [`run_main`] never returns.
-        codex_linux_sandbox::run_main();
-    } else if exe_name == APPLY_PATCH_ARG0 || exe_name == MISSPELLED_APPLY_PATCH_ARG0 {
+    if exe_name == APPLY_PATCH_ARG0 || exe_name == MISSPELLED_APPLY_PATCH_ARG0 {
         codex_apply_patch::main();
     }
 
     let argv1 = args.next().unwrap_or_default();
-    if argv1 == codex_sandboxing::CODEX_WINDOWS_MXC_ARG1 {
-        codex_sandboxing::run_windows_mxc_main();
-    }
     #[cfg(unix)]
     if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
         codex_exec_server::run_arg0_exec_helper_main();
     }
     if argv1 == CODEX_FS_HELPER_ARG1 {
         codex_exec_server::run_fs_helper_main();
-    }
-    #[cfg(target_os = "windows")]
-    if argv1 == CODEX_WINDOWS_SANDBOX_ARG1 {
-        codex_windows_sandbox::run_windows_sandbox_wrapper_main();
     }
     if argv1 == CODEX_CORE_APPLY_PATCH_ARG1 {
         let patch_arg = args.next().and_then(|s| s.to_str().map(str::to_owned));
@@ -173,22 +160,6 @@ fn prepare_path_env_var_with_aliases(
 /// us to simulate deploying multiple executables as a single binary on Mac and
 /// Linux (but not Windows).
 ///
-/// When the current executable is invoked through the hard-link or alias named
-/// `codex-linux-sandbox` we *directly* execute
-/// [`codex_linux_sandbox::run_main`] (which never returns). Otherwise we:
-///
-/// 1.  Load `.env` values from `~/.codex/.env` before creating any threads.
-/// 2.  Spawn a main runtime thread with a controlled stack size.
-/// 3.  Construct a Tokio multi-thread runtime.
-/// 4.  Capture the current executable path and derive the
-///     `codex-linux-sandbox` helper path (falling back to the current
-///     executable if needed) so children can re-invoke the sandbox when running
-///     on Linux.
-/// 5.  Execute the provided async `main_fn` inside that runtime, forwarding any
-///     error. Note that `main_fn` receives [`Arg0DispatchPaths`], which
-///     contains the helper executable paths needed to construct
-///     [`codex_core::config::Config`].
-///
 /// This function should be used to wrap any `main()` function in binary crates
 /// in this workspace that depends on these helper CLIs.
 pub fn arg0_dispatch_or_else<F, Fut>(main_fn: F) -> anyhow::Result<()>
@@ -233,12 +204,8 @@ where
 {
     let paths = Arg0DispatchPaths {
         main_execve_wrapper_exe: None,
-        codex_self_exe: current_exe.clone(),
-        codex_linux_sandbox_exe: if cfg!(target_os = "linux") {
-            linux_sandbox_exe_path(path_entry_guard.as_ref(), current_exe)
-        } else {
-            None
-        },
+        codex_self_exe: current_exe,
+        codex_linux_sandbox_exe: None,
     };
 
     let result = main_fn(paths).await;
@@ -246,18 +213,6 @@ where
     // runtime paths above can point at aliases inside that directory.
     drop(path_entry_guard);
     result
-}
-
-fn linux_sandbox_exe_path(
-    path_entry_guard: Option<&Arg0PathEntryGuard>,
-    current_exe: Option<PathBuf>,
-) -> Option<PathBuf> {
-    // Prefer the `codex-linux-sandbox` alias when available so callers can
-    // re-exec through a path whose basename still triggers arg0 dispatch on
-    // bubblewrap builds that do not support `--argv0`.
-    path_entry_guard
-        .and_then(|path_entry| path_entry.paths().codex_linux_sandbox_exe.clone())
-        .or(current_exe)
 }
 
 fn build_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
@@ -377,12 +332,7 @@ fn prepare_aliases_in_home(
         .open(&lock_path)?;
     lock_file.try_lock()?;
 
-    for filename in &[
-        APPLY_PATCH_ARG0,
-        MISSPELLED_APPLY_PATCH_ARG0,
-        #[cfg(target_os = "linux")]
-        CODEX_LINUX_SANDBOX_ARG0,
-    ] {
+    for filename in &[APPLY_PATCH_ARG0, MISSPELLED_APPLY_PATCH_ARG0] {
         let exe = std::env::current_exe()?;
 
         #[cfg(unix)]
@@ -411,16 +361,7 @@ fn prepare_aliases_in_home(
     let paths = Arg0DispatchPaths {
         main_execve_wrapper_exe: None,
         codex_self_exe: std::env::current_exe().ok(),
-        codex_linux_sandbox_exe: {
-            #[cfg(target_os = "linux")]
-            {
-                Some(path.join(CODEX_LINUX_SANDBOX_ARG0))
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                None
-            }
-        },
+        codex_linux_sandbox_exe: None,
     };
 
     Ok((
@@ -534,7 +475,6 @@ mod tests {
     use super::Arg0PathEntryGuard;
     use super::LOCK_FILENAME;
     use super::janitor_cleanup;
-    use super::linux_sandbox_exe_path;
     use super::run_main_with_arg0_guard;
     use anyhow::ensure;
     use codex_install_context::CodexPackageLayout;
@@ -641,28 +581,6 @@ mod tests {
             ),
             r"D:\Tools\codex.exe",
         );
-    }
-
-    #[test]
-    fn linux_sandbox_exe_path_prefers_codex_linux_sandbox_alias() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let lock_file = create_lock(temp_dir.path())?;
-        let alias_path = temp_dir.path().join("codex-linux-sandbox");
-        let path_entry = Arg0PathEntryGuard::new(
-            temp_dir,
-            lock_file,
-            Arg0DispatchPaths {
-                main_execve_wrapper_exe: None,
-                codex_self_exe: Some(PathBuf::from("/usr/bin/codex")),
-                codex_linux_sandbox_exe: Some(alias_path.clone()),
-            },
-        );
-
-        assert_eq!(
-            linux_sandbox_exe_path(Some(&path_entry), Some(PathBuf::from("/usr/bin/codex"))),
-            Some(alias_path),
-        );
-        Ok(())
     }
 
     #[test]

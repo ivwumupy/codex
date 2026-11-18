@@ -317,7 +317,11 @@ impl SlashCommand {
             SlashCommand::Copy => !cfg!(target_os = "android"),
             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
             SlashCommand::Voice => true,
-            SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
+            SlashCommand::Permissions
+            | SlashCommand::AutoReview
+            | SlashCommand::ElevateSandbox
+            | SlashCommand::TestApproval => false,
+            SlashCommand::Rollout => cfg!(debug_assertions),
             _ => true,
         }
     }

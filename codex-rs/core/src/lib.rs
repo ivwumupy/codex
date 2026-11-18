@@ -151,8 +151,6 @@ mod stream_events_utils;
 pub mod test_support;
 mod unified_exec;
 pub mod windows_sandbox;
-#[cfg(windows)]
-mod windows_system_config;
 pub use client::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
 pub use codex_protocol::config_types::ModelProviderAuthInfo;
 mod event_mapping;
@@ -181,7 +179,6 @@ pub use thread_spawn::ThreadCreateRequest;
 pub use thread_spawn::ThreadSpawnError;
 pub use thread_spawn::ThreadSpawnResult;
 pub(crate) mod web_search;
-pub(crate) mod windows_sandbox_read_grants;
 pub use agent::control::ThreadEvictionOutcome;
 pub use thread_manager::AgentTreeShutdown;
 pub use thread_manager::AgentTreeShutdownFailure;
@@ -205,7 +202,6 @@ pub use thread_store_builder::ThreadStoreBuilder;
 pub use tools::MULTI_AGENT_V2_NAMESPACE_DESCRIPTION;
 pub use tools::handlers::WaitForEnvironmentToolConfig;
 pub use web_search::web_search_action_detail;
-pub use windows_sandbox_read_grants::grant_read_root_non_elevated;
 #[deprecated(note = "use ThreadManager")]
 pub type ConversationManager = ThreadManager;
 #[deprecated(note = "use NewThread")]
@@ -283,10 +279,6 @@ pub use current_time::SleepFuture;
 pub use current_time::TimeFuture;
 pub use current_time::TimeProvider;
 pub use event_mapping::parse_turn_item;
-pub use exec_policy::ExecPolicyError;
-pub use exec_policy::check_execpolicy_for_warnings;
-pub use exec_policy::format_exec_policy_error_with_source;
-pub use exec_policy::load_exec_policy;
 pub mod compact;
 mod memory_usage;
 pub mod otel_init;

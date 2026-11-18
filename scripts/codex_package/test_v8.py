@@ -92,8 +92,8 @@ class FetchCodexV8ArtifactsTest(unittest.TestCase):
             self.assertEqual(download.call_args_list[0].args[1].name, manifest_name)
             self.assertEqual(download.call_count, 3)
 
-    def test_authenticates_windows_manifest_with_crlf(self) -> None:
-        with self.release("x86_64-pc-windows-msvc", line_ending=b"\r\n") as (
+    def test_authenticates_manifest_with_crlf(self) -> None:
+        with self.release("x86_64-unknown-linux-gnu", line_ending=b"\r\n") as (
             spec,
             download,
             _manifest_name,

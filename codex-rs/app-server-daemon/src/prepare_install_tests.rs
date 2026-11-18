@@ -37,10 +37,6 @@ fn package(root: &Path, version: &str) -> PathBuf {
             .expect("executable helper");
     }
     std::fs::write(root.join("codex-resources/nested/runtime"), b"runtime").expect("package file");
-    if cfg!(target_os = "linux") {
-        codex_utils_cargo_bin::write_executable(&root.join("codex-resources/bwrap"), "runtime")
-            .expect("executable bwrap");
-    }
     std::fs::write(
         root.join("codex-package.json"),
         serde_json::json!({

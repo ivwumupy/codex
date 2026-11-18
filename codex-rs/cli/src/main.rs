@@ -1,3 +1,6 @@
+#[cfg(windows)]
+compile_error!("This Codex CLI supports Unix hosts only.");
+
 use clap::Args;
 use clap::CommandFactory;
 use clap::Parser;
@@ -22,7 +25,6 @@ use codex_cli::run_logout;
 use codex_exec::Cli as ExecCli;
 use codex_exec::Command as ExecCommand;
 use codex_exec::ReviewArgs;
-use codex_execpolicy::ExecPolicyCheckCommand;
 use codex_responses_api_proxy::Args as ResponsesApiProxyArgs;
 use codex_rollout_trace::REDUCED_STATE_FILE_NAME;
 use codex_rollout_trace::replay_bundle;
@@ -72,9 +74,6 @@ mod migrate_rollouts;
 mod plugin_cmd;
 mod queue_cmd;
 mod remote_control_cmd;
-#[cfg(target_os = "windows")]
-mod sandbox_setup;
-mod sandbox_uninstall;
 mod state_db_recovery;
 #[cfg(not(windows))]
 mod wsl_paths;
@@ -192,15 +191,8 @@ enum Subcommand {
     /// Diagnose local Codex installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
-    /// Run commands within a Codex-provided sandbox.
-    Sandbox(SandboxCommand),
-
     /// Debugging tools.
     Debug(DebugCommand),
-
-    /// Execpolicy tooling.
-    #[clap(hide = true)]
-    Execpolicy(ExecpolicyCommand),
 
     /// Apply the latest diff produced by Codex agent as a `git apply` to your local working tree.
     #[clap(visible_alias = "a")]
@@ -465,58 +457,6 @@ impl clap::FromArgMatches for SessionTuiCli {
     fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
         self.0.update_from_arg_matches(matches)
     }
-}
-
-#[derive(Debug, Parser)]
-struct SandboxCommand {
-    #[command(flatten)]
-    host: HostSandboxArgs,
-
-    #[command(subcommand)]
-    subcommand: Option<SandboxSubcommand>,
-}
-
-#[derive(Debug, clap::Subcommand)]
-enum SandboxSubcommand {
-    Uninstall(sandbox_uninstall::SandboxUninstallCommand),
-}
-
-#[cfg(target_os = "macos")]
-type HostSandboxArgs = codex_cli::SeatbeltCommand;
-#[cfg(target_os = "linux")]
-type HostSandboxArgs = codex_cli::LandlockCommand;
-#[cfg(target_os = "windows")]
-type HostSandboxArgs = codex_cli::WindowsCommand;
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-type HostSandboxArgs = UnsupportedSandboxArgs;
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-#[derive(Debug, Parser)]
-struct UnsupportedSandboxArgs {
-    /// Layer $CODEX_HOME/<name>.config.toml on top of the base user config.
-    #[arg(long = "profile", short = 'p')]
-    pub config_profile: Option<ProfileV2Name>,
-
-    #[clap(skip)]
-    pub config_overrides: CliConfigOverrides,
-
-    /// Full command args to run under the host sandbox.
-    #[arg(trailing_var_arg = true)]
-    pub command: Vec<String>,
-}
-
-#[derive(Debug, Parser)]
-struct ExecpolicyCommand {
-    #[command(subcommand)]
-    sub: ExecpolicySubcommand,
-}
-
-#[derive(Debug, clap::Subcommand)]
-enum ExecpolicySubcommand {
-    /// Check execpolicy files against a command.
-    #[clap(name = "check")]
-    Check(ExecPolicyCheckCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -902,10 +842,6 @@ fn run_update_command() -> anyhow::Result<()> {
     }
 }
 
-fn run_execpolicycheck(cmd: ExecPolicyCheckCommand) -> anyhow::Result<()> {
-    cmd.run()
-}
-
 async fn run_session_archive_cli_command(
     action: codex_tui::SessionArchiveAction,
     cmd: SessionArchiveCommand,
@@ -1099,9 +1035,7 @@ async fn dispatch_cli(
         interactive.no_daemon |= options.no_daemon;
     }
     let root_strict_config = interactive.strict_config;
-    interactive
-        .shared
-        .take_auto_review_config_overrides(&mut root_config_overrides);
+
     reject_root_strict_config_for_subcommand(root_strict_config, &subcommand)?;
     if let Some(subcommand) = subcommand.as_ref() {
         profile_v2_for_subcommand(&interactive, subcommand)?;
@@ -1778,69 +1712,6 @@ async fn dispatch_cli(
             )
             .await?;
         }
-        Some(Subcommand::Sandbox(SandboxCommand {
-            host: mut sandbox_cli,
-            subcommand,
-        })) => {
-            let config_profile = sandbox_cli
-                .config_profile
-                .as_ref()
-                .or(interactive.config_profile_v2.as_ref());
-            prepend_config_flags(
-                &mut sandbox_cli.config_overrides,
-                root_config_overrides.clone(),
-            );
-            #[cfg(target_os = "windows")]
-            if let Some(setup_cli) = sandbox_setup::parse_setup_command(&sandbox_cli.command)? {
-                reject_remote_mode_for_subcommand(
-                    root_remote.as_deref(),
-                    root_remote_auth_token_env.as_deref(),
-                    "sandbox setup",
-                )?;
-                let cli_overrides = sandbox_cli
-                    .config_overrides
-                    .parse_overrides()
-                    .map_err(anyhow::Error::msg)?;
-                sandbox_setup::run(setup_cli, config_profile.cloned(), cli_overrides).await?;
-                return Ok(None);
-            }
-            reject_remote_mode_for_subcommand(
-                root_remote.as_deref(),
-                root_remote_auth_token_env.as_deref(),
-                "sandbox",
-            )?;
-            if let Some(SandboxSubcommand::Uninstall(command)) = subcommand {
-                command.run()?;
-                return Ok(None);
-            }
-            let loader_overrides = loader_overrides_for_profile(config_profile)?;
-            #[cfg(target_os = "macos")]
-            codex_cli::run_command_under_seatbelt(
-                sandbox_cli,
-                arg0_paths.codex_linux_sandbox_exe.clone(),
-                loader_overrides,
-            )
-            .await?;
-            #[cfg(target_os = "linux")]
-            codex_cli::run_command_under_landlock(
-                sandbox_cli,
-                arg0_paths.codex_linux_sandbox_exe.clone(),
-                loader_overrides,
-            )
-            .await?;
-            #[cfg(target_os = "windows")]
-            codex_cli::run_command_under_windows_sandbox(
-                sandbox_cli,
-                arg0_paths.codex_linux_sandbox_exe.clone(),
-                loader_overrides,
-            )
-            .await?;
-            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-            {
-                let _ = loader_overrides;
-                anyhow::bail!("`codex sandbox` is not supported on this operating system");
-            }
-        }
         Some(Subcommand::Debug(DebugCommand { subcommand })) => match subcommand {
             DebugSubcommand::Models(cmd) => {
                 reject_remote_mode_for_subcommand(
@@ -1887,16 +1758,6 @@ async fn dispatch_cli(
                     "debug clear-memories",
                 )?;
                 run_debug_clear_memories_command(&root_config_overrides).await?;
-            }
-        },
-        Some(Subcommand::Execpolicy(ExecpolicyCommand { sub })) => match sub {
-            ExecpolicySubcommand::Check(cmd) => {
-                reject_remote_mode_for_subcommand(
-                    root_remote.as_deref(),
-                    root_remote_auth_token_env.as_deref(),
-                    "execpolicy check",
-                )?;
-                run_execpolicycheck(cmd)?
             }
         },
         Some(Subcommand::Apply(mut apply_cli)) => {
@@ -2014,12 +1875,11 @@ fn profile_v2_for_subcommand<'a>(
         | Subcommand::Fork(_)
         | Subcommand::Mcp(_)
         | Subcommand::MigrateNfsDb(_)
-        | Subcommand::Sandbox(_)
         | Subcommand::Debug(DebugCommand {
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands, `codex mcp`, and `codex migrate-nfs-db`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex queue`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex migrate-nfs-db`, `codex sandbox`, and `codex debug prompt-input`."
+            "--profile only applies to runtime commands, `codex mcp`, and `codex migrate-nfs-db`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex queue`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex migrate-nfs-db`, and `codex debug prompt-input`."
         ),
     }
 }
@@ -2122,20 +1982,8 @@ async fn run_debug_prompt_input_command(
         ));
     }
 
-    let approval_policy = if shared.dangerously_bypass_approvals_and_sandbox {
-        Some(AskForApproval::Never)
-    } else {
-        interactive.approval_policy.map(Into::into)
-    };
-    let sandbox_mode = if shared.dangerously_bypass_approvals_and_sandbox {
-        Some(codex_protocol::config_types::SandboxMode::DangerFullAccess)
-    } else {
-        shared.sandbox_mode.map(Into::into)
-    };
     let overrides = ConfigOverrides {
         model: shared.model,
-        approval_policy,
-        sandbox_mode,
         cwd: shared.cwd,
         codex_self_exe: arg0_paths.codex_self_exe,
         codex_linux_sandbox_exe: arg0_paths.codex_linux_sandbox_exe,
@@ -2420,9 +2268,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Completion(_)) => Some("completion"),
         Some(Subcommand::Update) => Some("update"),
-        Some(Subcommand::Sandbox(_)) => Some("sandbox"),
         Some(Subcommand::Debug(_)) => Some("debug"),
-        Some(Subcommand::Execpolicy(_)) => Some("execpolicy"),
         Some(Subcommand::Apply(_)) => Some("apply"),
         Some(Subcommand::ResponsesApiProxy(_)) => Some("responses-api-proxy"),
         Some(Subcommand::StdioToUds(_)) => Some("stdio-to-uds"),
@@ -2791,7 +2637,6 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
     let TuiCli {
         shared,
         strict_config,
-        approval_policy,
         web_search,
         no_alt_screen,
         no_daemon,
@@ -2799,18 +2644,10 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         mut config_overrides,
         ..
     } = subcommand_cli;
-    let subcommand_auto_review = shared.auto_review;
     interactive
         .shared
         .apply_subcommand_overrides(shared.into_inner());
-    interactive
-        .shared
-        .take_auto_review_config_overrides(&mut config_overrides);
-    if subcommand_auto_review {
-        interactive.approval_policy = None;
-    } else if let Some(approval) = approval_policy {
-        interactive.approval_policy = Some(approval);
-    }
+
     if web_search {
         interactive.web_search = true;
     }
@@ -2989,9 +2826,6 @@ enabled = true
             feature_toggles: _,
             remote: _,
         } = cli;
-        interactive
-            .shared
-            .take_auto_review_config_overrides(&mut root_overrides);
 
         let Subcommand::Resume(ResumeCommand {
             session_id,
@@ -3026,9 +2860,6 @@ enabled = true
             feature_toggles: _,
             remote: _,
         } = cli;
-        interactive
-            .shared
-            .take_auto_review_config_overrides(&mut root_overrides);
 
         let Subcommand::Fork(ForkCommand {
             session_id,
@@ -3047,17 +2878,14 @@ enabled = true
 
     fn finalize_exec_from_args(args: &[&str]) -> ExecCli {
         let mut cli = MultitoolCli::try_parse_from(args).expect("parse");
-        cli.interactive
-            .shared
-            .take_auto_review_config_overrides(&mut cli.config_overrides);
+
         let Some(Subcommand::Exec(mut exec)) = cli.subcommand else {
             panic!("expected exec subcommand");
         };
         exec.shared
             .inherit_exec_root_options(&cli.interactive.shared);
         prepend_config_flags(&mut exec.config_overrides, cli.config_overrides);
-        exec.shared
-            .take_auto_review_config_overrides(&mut exec.config_overrides);
+
         exec
     }
 
@@ -3285,166 +3113,20 @@ enabled = true
     }
 
     #[test]
-    fn dangerous_bypass_conflicts_with_approval_policy() {
-        let err = MultitoolCli::try_parse_from([
-            "codex",
-            "--dangerously-bypass-approvals-and-sandbox",
-            "--ask-for-approval",
-            "on-request",
-        ])
-        .expect_err("conflicting permission flags should be rejected");
-
-        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
-    }
-
-    #[test]
-    fn approve_for_me_configures_interactive_mode() {
-        for flag in ["--approve-for-me", "--not-so-yolo"] {
-            let mut cli = MultitoolCli::try_parse_from(["codex", flag]).expect("parse flag");
-
-            assert!(cli.interactive.auto_review);
-            cli.interactive
-                .shared
-                .take_auto_review_config_overrides(&mut cli.interactive.config_overrides);
-            assert_eq!(
-                cli.interactive.config_overrides.raw_overrides,
-                vec![
-                    r#"approvals_reviewer="auto_review""#.to_string(),
-                    r#"approval_policy="on-request""#.to_string(),
-                    r#"sandbox_mode="workspace-write""#.to_string(),
-                ]
-            );
-            assert!(!cli.interactive.auto_review);
-        }
-    }
-
-    #[test]
-    fn not_so_yolo_alias_is_hidden_from_help() {
-        for args in [&["codex", "--help"][..], &["codex", "exec", "--help"][..]] {
-            let help = help_from_args(args);
-
-            assert!(!help.contains("--not-so-yolo"), "{help}");
-        }
-    }
-
-    #[test]
-    fn approve_for_me_defaults_propagate_from_root_to_exec() {
-        let exec = finalize_exec_from_args(&["codex", "--approve-for-me", "exec", "summarize"]);
-
-        assert_eq!(
-            exec.config_overrides.raw_overrides,
-            vec![
-                r#"approvals_reviewer="auto_review""#.to_string(),
-                r#"approval_policy="on-request""#.to_string(),
-                r#"sandbox_mode="workspace-write""#.to_string(),
-            ]
-        );
-        assert!(exec.sandbox_mode.is_none());
-    }
-
-    #[test]
-    fn later_exec_sandbox_partially_overrides_approve_for_me() {
-        let exec = finalize_exec_from_args(&[
-            "codex",
-            "--approve-for-me",
-            "exec",
+    fn only_yolo_mode_is_available() {
+        for flag in [
             "--sandbox",
-            "read-only",
-        ]);
-
-        assert_matches!(
-            exec.sandbox_mode,
-            Some(codex_utils_cli::SandboxModeCliArg::ReadOnly)
-        );
-        assert_eq!(
-            exec.config_overrides.raw_overrides,
-            vec![
-                r#"approvals_reviewer="auto_review""#.to_string(),
-                r#"approval_policy="on-request""#.to_string(),
-                r#"sandbox_mode="workspace-write""#.to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn later_approve_for_me_overrides_root_exec_sandbox() {
-        let exec = finalize_exec_from_args(&[
-            "codex",
-            "--sandbox",
-            "read-only",
-            "exec",
-            "--approve-for-me",
-        ]);
-
-        assert!(exec.sandbox_mode.is_none());
-        assert_eq!(
-            exec.config_overrides.raw_overrides,
-            vec![
-                r#"approvals_reviewer="auto_review""#.to_string(),
-                r#"approval_policy="on-request""#.to_string(),
-                r#"sandbox_mode="workspace-write""#.to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn later_resume_approval_policy_partially_overrides_approve_for_me() {
-        let interactive = finalize_resume_from_args(&[
-            "codex",
-            "--approve-for-me",
-            "resume",
             "--ask-for-approval",
-            "never",
-        ]);
-
-        assert_matches!(
-            interactive.approval_policy,
-            Some(codex_utils_cli::ApprovalModeCliArg::Never)
-        );
-        assert_eq!(
-            interactive.config_overrides.raw_overrides,
-            vec![
-                r#"approvals_reviewer="auto_review""#.to_string(),
-                r#"approval_policy="on-request""#.to_string(),
-                r#"sandbox_mode="workspace-write""#.to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn later_approve_for_me_overrides_root_tui_approval_policy() {
-        let interactive = finalize_resume_from_args(&[
-            "codex",
-            "--ask-for-approval",
-            "never",
-            "resume",
             "--approve-for-me",
-        ]);
-
-        assert!(interactive.approval_policy.is_none());
-        assert_eq!(
-            interactive.config_overrides.raw_overrides,
-            vec![
-                r#"approvals_reviewer="auto_review""#.to_string(),
-                r#"approval_policy="on-request""#.to_string(),
-                r#"sandbox_mode="workspace-write""#.to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn approve_for_me_conflicts_with_explicit_interactive_permissions() {
-        for conflicting_args in [
-            vec!["--sandbox", "read-only"],
-            vec!["--ask-for-approval", "on-request"],
-            vec!["--dangerously-bypass-approvals-and-sandbox"],
+            "--not-so-yolo",
         ] {
-            let mut args = vec!["codex", "--approve-for-me"];
-            args.extend(conflicting_args);
-
-            let error =
-                MultitoolCli::try_parse_from(args).expect_err("permission flags should conflict");
-            assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+            for args in [vec!["codex", flag], vec!["codex", "exec", flag]] {
+                let err = MultitoolCli::try_parse_from(args).expect_err("removed mode");
+                assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
+            }
+        }
+        for args in [vec!["codex"], vec!["codex", "--yolo"]] {
+            assert!(MultitoolCli::try_parse_from(args).is_ok());
         }
     }
 
@@ -3693,127 +3375,6 @@ enabled = true
             err.to_string(),
             "--force requires a session UUID; names must be confirmed interactively"
         );
-    }
-
-    #[test]
-    fn sandbox_uninstall_respects_command_separator() {
-        let cli = MultitoolCli::try_parse_from(["codex", "sandbox", "uninstall"]).expect("parse");
-        assert!(matches!(
-            cli.subcommand,
-            Some(Subcommand::Sandbox(SandboxCommand {
-                subcommand: Some(SandboxSubcommand::Uninstall(_)),
-                ..
-            }))
-        ));
-
-        for args in [
-            vec!["codex", "sandbox", "--", "uninstall", "--help"],
-            vec![
-                "codex",
-                "sandbox",
-                "--profile",
-                "uninstall",
-                "--",
-                "uninstall",
-                "--help",
-            ],
-        ] {
-            let cli = MultitoolCli::try_parse_from(args).expect("parse forwarded command");
-            let Some(Subcommand::Sandbox(command)) = cli.subcommand else {
-                panic!("expected sandbox command");
-            };
-            assert!(command.subcommand.is_none());
-            assert_eq!(command.host.command, vec!["uninstall", "--help"]);
-        }
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_parses_permission_profile() {
-        let cli = MultitoolCli::try_parse_from([
-            "codex",
-            "sandbox",
-            "--permission-profile",
-            ":workspace",
-            "--",
-            "echo",
-        ])
-        .expect("parse");
-
-        let Some(Subcommand::Sandbox(SandboxCommand { host: command, .. })) = cli.subcommand else {
-            panic!("expected sandbox command");
-        };
-
-        assert_eq!(command.permissions_profile.as_deref(), Some(":workspace"));
-        assert_eq!(command.command, vec!["echo"]);
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_parses_legacy_permissions_profile_alias() {
-        let cli = MultitoolCli::try_parse_from([
-            "codex",
-            "sandbox",
-            "--permissions-profile",
-            ":workspace",
-            "--",
-            "echo",
-        ])
-        .expect("parse");
-
-        let Some(Subcommand::Sandbox(SandboxCommand { host: command, .. })) = cli.subcommand else {
-            panic!("expected sandbox command");
-        };
-
-        assert_eq!(command.permissions_profile.as_deref(), Some(":workspace"));
-        assert_eq!(command.command, vec!["echo"]);
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_help_only_shows_singular_permission_profile() {
-        let help = help_from_args(&["codex", "sandbox", "--help"]);
-        assert!(help.contains("--permission-profile"), "{help}");
-        assert!(!help.contains("--permissions-profile"), "{help}");
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_parses_permissions_profile_short_alias() {
-        let cli =
-            MultitoolCli::try_parse_from(["codex", "sandbox", "-P", ":workspace", "--", "echo"])
-                .expect("parse");
-
-        let Some(Subcommand::Sandbox(SandboxCommand { host: command, .. })) = cli.subcommand else {
-            panic!("expected sandbox command");
-        };
-
-        assert_eq!(command.permissions_profile.as_deref(), Some(":workspace"));
-        assert_eq!(command.command, vec!["echo"]);
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_parses_config_profile() {
-        let cli =
-            MultitoolCli::try_parse_from(["codex", "sandbox", "--profile", "work", "--", "echo"])
-                .expect("parse");
-
-        let Some(Subcommand::Sandbox(SandboxCommand { host: command, .. })) = cli.subcommand else {
-            panic!("expected sandbox command");
-        };
-
-        assert_eq!(command.config_profile.as_deref(), Some("work"));
-        assert_eq!(command.command, vec!["echo"]);
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-    #[test]
-    fn sandbox_rejects_explicit_profile_controls_without_profile() {
-        let err = MultitoolCli::try_parse_from(["codex", "sandbox", "-C", "/tmp"])
-            .expect_err("parse should fail");
-
-        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
@@ -4148,10 +3709,6 @@ enabled = true
                 "sid",
                 "--oss",
                 "--search",
-                "--sandbox",
-                "workspace-write",
-                "--ask-for-approval",
-                "on-request",
                 "-m",
                 "gpt-5.1-test",
                 "-p",
@@ -4168,14 +3725,6 @@ enabled = true
         assert_eq!(interactive.model.as_deref(), Some("gpt-5.1-test"));
         assert!(interactive.oss);
         assert_eq!(interactive.config_profile_v2.as_deref(), Some("my-config"));
-        assert_matches!(
-            interactive.sandbox_mode,
-            Some(codex_utils_cli::SandboxModeCliArg::WorkspaceWrite)
-        );
-        assert_matches!(
-            interactive.approval_policy,
-            Some(codex_utils_cli::ApprovalModeCliArg::OnRequest)
-        );
         assert_eq!(
             interactive.cwd.as_deref(),
             Some(std::path::Path::new("/tmp"))

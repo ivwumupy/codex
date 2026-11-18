@@ -9,7 +9,6 @@ members = [
     "agent-roles",
     "backend-client",
     "cloud-client",
-    "bwrap",
     "build-info",
     "ansi-escape",
     "attachment-store",
@@ -82,7 +81,6 @@ members = [
     "keyring-store",
     "file-search",
     "file-watcher",
-    "linux-sandbox",
     "lmstudio",
     "login",
     "codex-mcp",
@@ -92,7 +90,6 @@ members = [
     "message-board",
     "message-board-mcp",
     "model-provider-info",
-    "mxc-sandbox",
     "models-manager",
     "network-proxy",
     "ollama",
@@ -119,8 +116,6 @@ members = [
     "v8-poc",
     "websocket-auth",
     "websocket-client",
-    "windows-sandbox-rs/tests/support",
-    "windows-sandbox-service",
     "worktree",
     "workload-identity",
     "utils/absolute-path",
@@ -257,7 +252,6 @@ codex-guardian-context = { path = "guardian-context" }
 codex-hooks = { path = "hooks" }
 codex-history = { path = "history" }
 codex-keyring-store = { path = "keyring-store" }
-codex-linux-sandbox = { path = "linux-sandbox" }
 codex-lmstudio = { path = "lmstudio" }
 codex-login = { path = "login" }
 codex-mermaid = { path = "mermaid" }
@@ -270,7 +264,6 @@ codex-mcp = { path = "codex-mcp" }
 codex-mcp-extension = { path = "ext/mcp" }
 codex-model-provider-info = { path = "model-provider-info" }
 codex-models-manager = { path = "models-manager" }
-codex-mxc-sandbox = { path = "mxc-sandbox" }
 codex-network-proxy = { path = "network-proxy" }
 codex-ollama = { path = "ollama" }
 codex-otel = { path = "otel" }
@@ -335,8 +328,6 @@ codex-utils-template = { path = "utils/template" }
 codex-user-verification = { path = "user-verification" }
 codex-v8-poc = { path = "v8-poc" }
 codex-workload-identity = { path = "workload-identity" }
-codex-windows-sandbox = { path = "windows-sandbox-rs" }
-codex-windows-sandbox-test-support = { path = "windows-sandbox-rs/tests/support" }
 core_test_support = { path = "core/tests/common" }
 
 # External
@@ -516,7 +507,6 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
 sqlx-macros = { version = "=0.9.0", default-features = false, features = ["derive", "migrate"] }
 # Preserve the target driver's query-description support without building it on the host.
 sqlx-sqlite = { version = "=0.9.0", default-features = false, features = ["offline"] }
-starlark = { version = "0.14.2", default-features = false }
 strum = "0.27.2"
 strum_macros = "0.28.0"
 supports-color = "3.0.2"
@@ -690,9 +680,3 @@ v8 = { git = "https://github.com/openai-oss-forks/rusty_v8.git", rev = "90a65f88
 
 [patch."ssh://git@github.com/openai-oss-forks/tungstenite-rs.git"]
 tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "bc589d684755a8c02da0fc7e58d0861cbfc306f1" }
-
-# TEMP-LOCAL (not for commit): the v8 crate's git submodules are only needed when
-# building V8 from source; codex-cli does not depend on it at all. Point at a local
-# snapshot of rev 90a65f8 with submodules stripped to avoid a ~700MB fetch.
-[patch."https://github.com/openai-oss-forks/rusty_v8.git"]
-v8 = { path = "/data/codex/third-party/rusty_v8-90a65f8" }

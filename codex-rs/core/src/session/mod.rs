@@ -43,9 +43,7 @@ use crate::context::world_state::WorldStateUpdateContent;
 use crate::context::world_state::split_prefix_updates;
 use crate::current_time::TimeProvider;
 use crate::environment_selection::TurnEnvironmentSnapshot;
-use crate::exec_policy::BANNED_PREFIX_SUGGESTIONS;
 use crate::exec_policy::ExecPolicyManager;
-use crate::exec_policy::default_policy_path;
 use crate::image_preparation::ImagePreparationMode;
 use crate::image_preparation::ImageResizeNoticeMode;
 use crate::image_preparation::prepare_response_items as prepare_image_response_items;
@@ -79,7 +77,6 @@ use codex_connectors::connector_runtime_context_key;
 use codex_context_fragments::RenderedFragment;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentManager;
-use codex_execpolicy::prefix_rule_migration;
 use codex_extension_api::ConversationHistorySnapshot;
 use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::PromptSlot;
@@ -104,7 +101,6 @@ use codex_models_manager::manager::RefreshStrategy;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_network_proxy::NetworkProxy;
 use codex_network_proxy::NetworkProxyAuditMetadata;
-use codex_network_proxy::normalize_host;
 use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_otel::current_span_trace_id;
 use codex_otel::current_span_w3c_trace_context;
@@ -321,7 +317,6 @@ use self::turn_context::TurnContext;
 #[cfg(test)]
 mod rollout_reconstruction_tests;
 
-use crate::exec_policy::ExecPolicyUpdateError;
 use crate::guardian::GuardianReviewSessionManager;
 use crate::mcp::McpEnvironmentScope;
 use crate::mcp::McpManager;
@@ -773,48 +768,7 @@ impl Session {
         } else {
             instructions
         };
-        let exec_policy = if isolation == codex_extension_api::SessionIsolation::Isolated {
-            let source_requirements = config
-                .config_layer_stack
-                .requirements()
-                .exec_policy
-                .as_deref()
-                .cloned()
-                .map(Arc::new);
-            let managed_policy = source_requirements
-                .as_deref()
-                .map_or_else(codex_execpolicy::Policy::empty, |policy| {
-                    policy.as_ref().clone()
-                });
-            Arc::new(ExecPolicyManager::from_snapshot(
-                Arc::new(managed_policy),
-                source_requirements,
-            ))
-        } else if let Some(exec_policy) = &inherited_exec_policy {
-            Arc::clone(exec_policy)
-        } else {
-            if !config
-                .config_layer_stack
-                .ignore_user_and_project_exec_policy_rules()
-            {
-                let codex_home = config.codex_home.clone();
-                let policy_path = default_policy_path(codex_home.as_path());
-                if let Err(err) = prefix_rule_migration(
-                    codex_home.as_path(),
-                    policy_path.as_path(),
-                    BANNED_PREFIX_SUGGESTIONS,
-                )
-                .await
-                {
-                    tracing::warn!(error = %err, "failed to run prefix rule migration");
-                }
-            }
-            Arc::new(
-                ExecPolicyManager::load(&config.config_layer_stack)
-                    .await
-                    .map_err(|err| CodexErr::Fatal(format!("failed to load rules: {err}")))?,
-            )
-        };
+        let exec_policy = inherited_exec_policy.unwrap_or_default();
 
         let mut config = Arc::new(config);
         let configured_runtime = crate::runtime_auth::runtime_for_config(
@@ -1048,7 +1002,6 @@ impl Session {
         session_configuration
             .validate(&environment_selections)
             .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
-        crate::windows_sandbox::log_windows_sandbox_startup(&config);
 
         // Generate a unique ID for the lifetime of this session.
         let session_source_clone = session_configuration.session_source.clone();
@@ -2161,7 +2114,6 @@ impl Session {
         should_commit: impl FnOnce(&SessionConfiguration, &SessionConfiguration) -> bool + Send,
     ) -> ConstraintResult<Option<SessionSettingsCommit>> {
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-        let windows_sandbox_changed;
         let (
             commit,
             previous_config,
@@ -2214,8 +2166,6 @@ impl Session {
                 self.mark_mcp_runtime_dirty(McpRefreshReason::SessionMcpInputsChanged);
             }
             // Save new environment defaults for future turns. The running turn keeps its own.
-            windows_sandbox_changed =
-                state.session_configuration.windows_sandbox_level != updated.windows_sandbox_level;
             self.services
                 .turn_environments
                 .set_configured_thread_defaults(updated.inferred_environment_config());
@@ -2270,13 +2220,6 @@ impl Session {
                 credential_masking_warning,
             )
         };
-        if windows_sandbox_changed {
-            crate::windows_sandbox::log_windows_sandbox_change(
-                commit.configuration.codex_home.as_path(),
-                commit.configuration.windows_sandbox_type,
-                commit.configuration.windows_sandbox_level,
-            );
-        }
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
         if permission_profile_changed {
             self.refresh_managed_network_proxy_for_current_permission_profile()
@@ -3146,26 +3089,11 @@ impl Session {
         .await;
     }
 
-    /// Adds an execpolicy amendment to both the in-memory and on-disk policies so future
-    /// commands can use the newly approved prefix.
     pub(crate) async fn persist_execpolicy_amendment(
         &self,
-        amendment: &ExecPolicyAmendment,
-    ) -> Result<(), ExecPolicyUpdateError> {
-        let codex_home = self
-            .state
-            .lock()
-            .await
-            .session_configuration
-            .codex_home()
-            .clone();
-
-        self.services
-            .exec_policy
-            .append_amendment_and_update(&codex_home, amendment)
-            .await?;
-
-        Ok(())
+        _amendment: &ExecPolicyAmendment,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("execution policy amendments are unsupported in this YOLO-only build")
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {
@@ -3190,53 +3118,11 @@ impl Session {
 
     pub(crate) async fn persist_network_policy_amendment(
         &self,
-        amendment: &NetworkPolicyAmendment,
-        network_approval_context: &NetworkApprovalContext,
-        on_policy_applied: impl FnOnce() + Send,
+        _amendment: &NetworkPolicyAmendment,
+        _network_approval_context: &NetworkApprovalContext,
+        _on_policy_applied: impl FnOnce() + Send,
     ) -> anyhow::Result<()> {
-        let _refresh_guard = self
-            .managed_network_proxy_refresh_lock
-            .acquire()
-            .await
-            .map_err(|_| anyhow::anyhow!("managed network proxy refresh semaphore closed"))?;
-        let host =
-            Self::validated_network_policy_amendment_host(amendment, network_approval_context)?;
-        let codex_home = self
-            .state
-            .lock()
-            .await
-            .session_configuration
-            .codex_home()
-            .clone();
-        let started_proxy = self.services.network_proxy.load_full();
-        let proxy = started_proxy.as_deref().map(StartedNetworkProxy::proxy);
-        self.services
-            .exec_policy
-            .apply_network_rule_and_persist(
-                &codex_home,
-                &host,
-                amendment,
-                network_approval_context,
-                proxy.as_ref(),
-                on_policy_applied,
-            )
-            .await
-    }
-
-    fn validated_network_policy_amendment_host(
-        amendment: &NetworkPolicyAmendment,
-        network_approval_context: &NetworkApprovalContext,
-    ) -> anyhow::Result<String> {
-        let approved_host = normalize_host(&network_approval_context.host);
-        let amendment_host = normalize_host(&amendment.host);
-        if amendment_host != approved_host {
-            return Err(anyhow::anyhow!(
-                "network policy amendment host '{}' does not match approved host '{}'",
-                amendment.host,
-                network_approval_context.host
-            ));
-        }
-        Ok(approved_host)
+        anyhow::bail!("network policy amendments are unsupported in this YOLO-only build")
     }
 
     pub(crate) async fn record_network_policy_amendment_message(

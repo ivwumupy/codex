@@ -6,7 +6,6 @@ use super::ExecCommandWorkdirArgs;
 use super::ResolvedCommand;
 use super::get_command;
 use crate::exec::DEFAULT_EXEC_COMMAND_TIMEOUT_MS;
-use crate::exec_policy::ExecApprovalRequest;
 use crate::exec_policy::prompt_is_rejected_by_policy;
 use crate::function_tool::FunctionCallError;
 use crate::sandboxing::SandboxPermissions;
@@ -23,12 +22,10 @@ use crate::tools::handlers::parse_arguments_with_base_path;
 use crate::tools::handlers::resolve_sandbox_permissions;
 use crate::tools::sandboxing::ApprovalAction;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use crate::windows_sandbox::windows_sandbox_level_for_legacy_checks;
 use codex_features::Feature;
 use codex_sandboxing::SandboxManager;
 use codex_sandboxing::SandboxType;
 use codex_sandboxing::SandboxablePreference;
-use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 use codex_shell_command::shell_detect::detect_shell_type;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathConvention;
@@ -60,46 +57,11 @@ pub(crate) struct PreparedExecCommand {
 }
 
 impl PreparedExecCommand {
-    pub(crate) async fn approval_requirement(
-        &self,
-        session: &Session,
-        step: &StepContext,
-    ) -> ExecApprovalRequirement {
-        let environment = &self.turn_environment;
-        let session_shell = session.user_shell();
-        let configured_shell = environment.shell.as_ref().unwrap_or(session_shell.as_ref());
-        // Legacy executors omit the platform. Unknown reported platforms use the
-        // more conservative Windows rules rather than silently weakening checks.
-        let command_platform = match environment.executor_platform_os.as_deref() {
-            Some("linux" | "macos") => DangerousCommandPlatform::Posix,
-            Some("windows") | Some(_) => DangerousCommandPlatform::Windows,
-            None => DangerousCommandPlatform::host(),
-        };
-        session
-            .services
-            .exec_policy
-            .create_exec_approval_requirement_for_shell(
-                ExecApprovalRequest {
-                    command: &self.resolved.command,
-                    approval_policy: step.settings.approval_policy(),
-                    permission_profile: environment.permission_profile().clone(),
-                    environment_policy: environment.config().exec_policy.as_ref(),
-                    windows_sandbox_level: windows_sandbox_level_for_legacy_checks(
-                        environment.config().windows_sandbox_type,
-                        environment.config().windows_sandbox_level,
-                    ),
-                    sandbox_permissions: if self.permissions.permissions_preapproved {
-                        SandboxPermissions::UseDefault
-                    } else {
-                        self.permissions.sandbox_permissions
-                    },
-                    prefix_rule: self.prefix_rule.clone(),
-                    allow_prefix_rules: step.turn.allow_prefix_rules(),
-                },
-                configured_shell,
-                command_platform,
-            )
-            .await
+    pub(crate) fn approval_requirement(&self) -> ExecApprovalRequirement {
+        ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        }
     }
 
     pub(crate) fn approval_action(

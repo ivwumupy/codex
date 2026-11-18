@@ -1072,13 +1072,6 @@ impl ChatWidget {
         can_save: bool,
     ) {
         let snapshot = self.feedback.snapshot(self.thread_id);
-        #[cfg(target_os = "windows")]
-        let include_windows_sandbox_log =
-            codex_windows_sandbox::current_log_file_path_for_codex_home(
-                &self.local_settings.codex_home,
-            )
-            .is_file();
-        #[cfg(not(target_os = "windows"))]
         let include_windows_sandbox_log = false;
         let params = crate::bottom_pane::feedback_consent_params(
             self.app_event_tx.clone(),

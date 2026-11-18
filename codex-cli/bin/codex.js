@@ -19,8 +19,6 @@ const PLATFORM_PACKAGE_BY_TARGET = {
   "aarch64-unknown-linux-musl": "@openai/codex-linux-arm64",
   "x86_64-apple-darwin": "@openai/codex-darwin-x64",
   "aarch64-apple-darwin": "@openai/codex-darwin-arm64",
-  "x86_64-pc-windows-msvc": "@openai/codex-win32-x64",
-  "aarch64-pc-windows-msvc": "@openai/codex-win32-arm64",
 };
 
 const { platform, arch } = process;
@@ -52,18 +50,7 @@ switch (platform) {
         break;
     }
     break;
-  case "win32":
-    switch (arch) {
-      case "x64":
-        targetTriple = "x86_64-pc-windows-msvc";
-        break;
-      case "arm64":
-        targetTriple = "aarch64-pc-windows-msvc";
-        break;
-      default:
-        break;
-    }
-    break;
+
   default:
     break;
 }
@@ -90,7 +77,7 @@ function findCodexExecutable() {
     vendorRoot,
     targetTriple,
     "bin",
-    process.platform === "win32" ? "codex.exe" : "codex",
+    "codex",
   );
   if (existsSync(codexExecutable)) {
     return codexExecutable;
@@ -235,7 +222,7 @@ env[packageManagerEnvVar] = "1";
 
 // Replace Node so the native binary receives signals and exits directly.
 // Node exposes execve on Windows too, but calling it there is unsupported.
-if (process.platform !== "win32" && typeof process.execve === "function") {
+if (typeof process.execve === "function") {
   // Node ignores SIGXFSZ, and ignored signals survive execve. Installing a
   // handler lets execve restore the default disposition in the native binary.
   process.on("SIGXFSZ", () => {});

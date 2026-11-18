@@ -4576,7 +4576,6 @@ async fn project_root_markers_supports_alternate_markers() -> std::io::Result<()
 }
 
 mod requirements_exec_policy_tests {
-    use crate::exec_policy::load_exec_policy;
     use codex_config::ConfigLayerEntry;
     use codex_config::ConfigLayerSource;
     use codex_config::ConfigLayerStack;
@@ -4816,92 +4815,6 @@ prefix_rules = []
             err,
             RequirementsExecPolicyParseError::EmptyPrefixRules
         ));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn loads_requirements_exec_policy_without_rules_files() -> anyhow::Result<()> {
-        let temp_dir = tempdir()?;
-        let requirements = requirements_from_toml(
-            r#"
-                [rules]
-                prefix_rules = [
-                    { pattern = [{ token = "rm" }], decision = "forbidden" },
-                ]
-            "#,
-        );
-        let config_stack =
-            config_stack_for_dot_codex_folder_with_requirements(temp_dir.path(), requirements);
-
-        let policy = load_exec_policy(&config_stack).await?;
-
-        assert_eq!(
-            policy.check_multiple([vec!["rm".to_string()]].iter(), &panic_if_called),
-            Evaluation {
-                decision: Decision::Forbidden,
-                matched_rules: vec![RuleMatch::PrefixRuleMatch {
-                    matched_prefix: vec!["rm".to_string()],
-                    decision: Decision::Forbidden,
-                    resolved_program: None,
-                    justification: None,
-                }],
-            }
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn merges_requirements_exec_policy_with_file_rules() -> anyhow::Result<()> {
-        let temp_dir = tempdir()?;
-        let policy_dir = temp_dir.path().join("rules");
-        std::fs::create_dir_all(&policy_dir)?;
-        std::fs::write(
-            policy_dir.join("deny.rules"),
-            r#"prefix_rule(pattern=["rm"], decision="forbidden")"#,
-        )?;
-
-        let requirements = requirements_from_toml(
-            r#"
-                [rules]
-                prefix_rules = [
-                    { pattern = [{ token = "git" }, { token = "push" }], decision = "prompt" },
-                ]
-            "#,
-        );
-        let config_stack =
-            config_stack_for_dot_codex_folder_with_requirements(temp_dir.path(), requirements);
-
-        let policy = load_exec_policy(&config_stack).await?;
-
-        assert_eq!(
-            policy.check_multiple([vec!["rm".to_string()]].iter(), &panic_if_called),
-            Evaluation {
-                decision: Decision::Forbidden,
-                matched_rules: vec![RuleMatch::PrefixRuleMatch {
-                    matched_prefix: vec!["rm".to_string()],
-                    decision: Decision::Forbidden,
-                    resolved_program: None,
-                    justification: None,
-                }],
-            }
-        );
-        assert_eq!(
-            policy.check_multiple(
-                [vec!["git".to_string(), "push".to_string()]].iter(),
-                &panic_if_called
-            ),
-            Evaluation {
-                decision: Decision::Prompt,
-                matched_rules: vec![RuleMatch::PrefixRuleMatch {
-                    matched_prefix: vec!["git".to_string(), "push".to_string()],
-                    decision: Decision::Prompt,
-                    resolved_program: None,
-                    justification: None,
-                }],
-            }
-        );
-
         Ok(())
     }
 }

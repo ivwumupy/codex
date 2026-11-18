@@ -33,7 +33,6 @@ def exec_server_compat_test(
         args = ["--test-threads=1"],
         data = data,
         runfile_env = {
-            "//codex-rs/bwrap:bwrap": "CARGO_BIN_EXE_bwrap",
             current_binary: "CODEX_TEST_CURRENT_CODEX",
             ":" + comparison_alias: "CODEX_TEST_RELEASED_CODEX",
         },

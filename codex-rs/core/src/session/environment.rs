@@ -5,7 +5,6 @@ use std::sync::Arc;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_exec_server::MAX_SELECTED_CAPABILITY_ROOTS;
 use codex_exec_server::SelectedCapabilityRootsStatus;
-use codex_execpolicy::Policy;
 use codex_features::Feature;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::error::CodexErr;
@@ -19,7 +18,6 @@ use codex_protocol::sandbox::SandboxType;
 use crate::config::ConstraintError;
 use crate::config::ConstraintResult;
 use crate::config::ManagedFeatures;
-use crate::config::NetworkProxySpec;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::session::session::Session;
 use crate::session::session::SessionConfiguration;
@@ -109,48 +107,24 @@ fn validate_environment_config(
         )
         .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
     }
-    if let Some(policy) = config.network_policy.as_ref() {
-        if selection.environment_id == LOCAL_ENVIRONMENT_ID {
-            return Err(CodexErr::InvalidRequest(
-                "attachment-owned network policy requires a remote executor".to_string(),
-            ));
-        }
-        if config
-            .exec_policy
-            .as_ref()
-            .is_some_and(|policy| !policy.as_ref().network_rules().is_empty())
-        {
-            return Err(CodexErr::InvalidRequest(
-                "environment network restrictions must use network_policy".to_string(),
-            ));
-        }
-        // Validate owner policy on its own; controller compatibility is checked at execution.
-        NetworkProxySpec::for_environment(
-            /*controller*/ None,
-            policy,
-            config.permission_profile.permission_profile(),
-            &Policy::empty(),
-            codex_network_proxy::LocalBindingPolicy::DefaultFalse,
-        )
-        .map_err(|error| {
-            CodexErr::InvalidRequest(format!("invalid environment network policy: {error}"))
-        })?;
+    if config.permission_profile.permission_profile()
+        != &codex_protocol::models::PermissionProfile::Disabled
+        || config.windows_sandbox_type != SandboxType::None
+        || config.windows_sandbox_level
+            != codex_protocol::config_types::WindowsSandboxLevel::Disabled
+        || config.exec_policy.is_some()
+        || config.network_policy.is_some()
+    {
+        return Err(CodexErr::InvalidRequest(
+            "environment sandbox and execution policies are unsupported in this YOLO-only build"
+                .to_string(),
+        ));
     }
     if config.selected_capability_roots.len() > MAX_SELECTED_CAPABILITY_ROOTS {
         return Err(CodexErr::InvalidRequest(format!(
             "environment readiness contains more than {MAX_SELECTED_CAPABILITY_ROOTS} selected capability roots"
         )));
     }
-    if config
-        .exec_policy
-        .as_ref()
-        .is_some_and(|policy| !policy.as_ref().get_allowed_prefixes().is_empty())
-    {
-        return Err(CodexErr::InvalidRequest(
-            "environment command policy cannot contain allow rules".to_string(),
-        ));
-    }
-
     let mut root_ids = HashSet::with_capacity(config.selected_capability_roots.len());
     for root in &config.selected_capability_roots {
         let CapabilityRootLocation::Environment { environment_id, .. } = &root.location;

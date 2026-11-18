@@ -83,7 +83,6 @@ mod network;
 mod output;
 mod progress;
 mod runtime;
-mod sandbox;
 mod security;
 mod system;
 mod thread_inventory;
@@ -105,7 +104,6 @@ use progress::DoctorProgress;
 use progress::doctor_progress;
 use runtime::runtime_check;
 use runtime::search_check;
-use sandbox::sandbox_check;
 use system::system_check;
 use thread_inventory::thread_inventory_check;
 use title::terminal_title_check;
@@ -426,7 +424,6 @@ async fn build_report(
                 network_check,
                 websocket_check,
                 mcp_check,
-                sandbox_check,
                 terminal_check,
                 git_check,
                 terminal_title_check,
@@ -468,11 +465,6 @@ async fn build_report(
                     websocket_reachability_check(config, auth_manager),
                 ),
                 run_async_check("MCP", progress.clone(), mcp_check(config)),
-                async {
-                    run_sync_check("sandbox", progress.clone(), || {
-                        sandbox_check(config, arg0_paths)
-                    })
-                },
                 async {
                     run_sync_check("terminal", progress.clone(), || {
                         terminal_check(command.no_color)
@@ -516,7 +508,6 @@ async fn build_report(
                 network_check,
                 websocket_check,
                 mcp_check,
-                sandbox_check,
                 filesystem_paths_check,
                 terminal_check,
                 git_check,
@@ -662,20 +653,10 @@ fn config_overrides_from_interactive(
     interactive: &TuiCli,
     arg0_paths: &Arg0DispatchPaths,
 ) -> ConfigOverrides {
-    let approval_policy = if interactive.dangerously_bypass_approvals_and_sandbox {
-        Some(AskForApproval::Never)
-    } else {
-        interactive.approval_policy.map(Into::into)
-    };
-    let sandbox_mode = if interactive.dangerously_bypass_approvals_and_sandbox {
-        Some(codex_protocol::config_types::SandboxMode::DangerFullAccess)
-    } else {
-        interactive.sandbox_mode.map(Into::into)
-    };
     ConfigOverrides {
         model: interactive.model.clone(),
-        approval_policy,
-        sandbox_mode,
+        approval_policy: Some(AskForApproval::Never),
+        sandbox_mode: Some(codex_protocol::config_types::SandboxMode::DangerFullAccess),
         cwd: interactive.cwd.clone(),
         model_provider: interactive
             .oss
@@ -3493,10 +3474,6 @@ mod tests {
             "llama3.2",
             "--cd",
             "/tmp",
-            "--sandbox",
-            "danger-full-access",
-            "--ask-for-approval",
-            "never",
             "--add-dir",
             "/var/tmp",
         ]);

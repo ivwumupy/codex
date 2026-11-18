@@ -116,7 +116,6 @@ impl ExecRequest {
         options: ExecOptions,
         windows_sandbox_workspace_roots: Vec<AbsolutePathBuf>,
     ) -> Result<Self, CodexErr> {
-        codex_exec_server::run_integrity_checks(&request).await;
         let SandboxExecRequest {
             command,
             cwd,

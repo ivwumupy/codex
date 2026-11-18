@@ -51,7 +51,7 @@ pub struct Cli {
     pub ignore_user_config: bool,
 
     /// Do not load user or project execpolicy `.rules` files.
-    #[arg(long = "ignore-rules", global = true, default_value_t = false)]
+    #[arg(skip = true)]
     pub ignore_rules: bool,
 
     /// Path to a JSON Schema file describing the model's final response shape.

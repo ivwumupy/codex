@@ -5,8 +5,6 @@ mod shell_snapshot;
 #[cfg(unix)]
 #[path = "common/tls_proxy.rs"]
 mod tls_proxy;
-#[path = "exec_process/windows_sandbox.rs"]
-mod windows_sandbox;
 
 #[cfg(unix)]
 use std::collections::BTreeMap;

@@ -1196,12 +1196,6 @@ release_dir_is_complete() {
       ;;
   esac
 
-  case "$layout:$expected_target" in
-    package:*linux* | legacy-platform-npm:*linux*)
-      [ -x "$release_dir/codex-resources/bwrap" ] || return 1
-      ;;
-  esac
-
   installed_version="$(version_from_binary "$release_dir/bin/codex" || version_from_binary "$release_dir/codex" || true)"
   [ "$installed_version" = "$expected_version" ]
 }
@@ -1262,7 +1256,7 @@ case "$(uname -s)" in
     os="linux"
     ;;
   *)
-    echo "install.sh supports macOS and Linux. Use install.ps1 on Windows." >&2
+    echo "install.sh supports macOS and Linux." >&2
     exit 1
     ;;
 esac

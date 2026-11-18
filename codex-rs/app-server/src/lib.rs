@@ -59,8 +59,6 @@ use codex_app_server_transport::daemon_recovery_file_path;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLoadError;
 use codex_config::TextRange as CoreTextRange;
-use codex_core::ExecPolicyError;
-use codex_core::check_execpolicy_for_warnings;
 use codex_core::config::find_codex_home;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimeOptions;
@@ -87,12 +85,13 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Codex rebuilt its local database";
 
-fn is_unsupported_untrusted_approval_policy_error(err: &std::io::Error) -> bool {
-    err.get_ref().is_some_and(
-        <dyn std::error::Error + Send + Sync + 'static>::is::<
-            UnsupportedUntrustedApprovalPolicyError,
-        >,
-    )
+fn is_unsupported_config_error(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::Unsupported
+        || err.get_ref().is_some_and(
+            <dyn std::error::Error + Send + Sync + 'static>::is::<
+                UnsupportedUntrustedApprovalPolicyError,
+            >,
+        )
 }
 
 pub use codex_agent_message_board_host::delete_agent_message_boards;
@@ -350,38 +349,6 @@ fn config_error_location(err: &std::io::Error) -> Option<(String, AppTextRange)>
         })
 }
 
-fn exec_policy_warning_location(err: &ExecPolicyError) -> (Option<String>, Option<AppTextRange>) {
-    match err {
-        ExecPolicyError::ParsePolicy { path, source } => {
-            if let Some(location) = source.location() {
-                let range = AppTextRange {
-                    start: AppTextPosition {
-                        line: location.range.start.line,
-                        column: location.range.start.column,
-                    },
-                    end: AppTextPosition {
-                        line: location.range.end.line,
-                        column: location.range.end.column,
-                    },
-                };
-                return (Some(location.path), Some(range));
-            }
-            (Some(path.clone()), None)
-        }
-        _ => (None, None),
-    }
-}
-
-fn exec_policy_config_warning(err: &ExecPolicyError) -> ConfigWarningNotification {
-    let (path, range) = exec_policy_warning_location(err);
-    ConfigWarningNotification {
-        summary: "Error parsing rules; custom rules not applied.".to_string(),
-        details: Some(err.to_string()),
-        path,
-        range,
-    }
-}
-
 fn app_text_range(range: &CoreTextRange) -> AppTextRange {
     AppTextRange {
         start: AppTextPosition {
@@ -532,8 +499,6 @@ pub async fn run_main_with_transport_options(
         }
         None => None,
     };
-    #[cfg(target_os = "windows")]
-    let _registered_core = codex_windows_sandbox::registered_core_requested();
     let managed_daemon = matches!(&transport, AppServerTransport::UnixSocket { .. })
         && runtime_options.managed_daemon;
     #[cfg(unix)]
@@ -579,7 +544,7 @@ pub async fn run_main_with_transport_options(
     let mut plugin_startup_config = PluginStartupConfig::Current;
     let config = match startup.config {
         Ok(config) => config,
-        Err(err) if is_unsupported_untrusted_approval_policy_error(&err) => {
+        Err(err) if is_unsupported_config_error(&err) => {
             return Err(err);
         }
         Err(err) => {
@@ -689,10 +654,6 @@ pub async fn run_main_with_transport_options(
             path: None,
             range: None,
         });
-    }
-
-    if let Ok(Some(err)) = check_execpolicy_for_warnings(&config.config_layer_stack).await {
-        config_warnings.push(exec_policy_config_warning(&err));
     }
 
     if let Some(warning) = project_config_warning(&config) {

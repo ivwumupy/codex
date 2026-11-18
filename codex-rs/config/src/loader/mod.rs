@@ -11,8 +11,6 @@ mod tests;
 #[cfg(test)]
 #[path = "projectless_directory_tests.rs"]
 mod projectless_directory_tests;
-#[cfg(windows)]
-mod windows;
 
 pub use application::LocalApplicationRequirements;
 pub use application::load_local_application_requirements;
@@ -72,10 +70,6 @@ pub use local::LocalTomlLayer;
 pub use local::LocalTomlLayerStack;
 pub use local::load_local_config_layers;
 pub use managed_requirements::load_managed_requirements_state;
-#[cfg(windows)]
-pub use windows::WindowsSystemConfigNamespaceProbe;
-#[cfg(windows)]
-pub use windows::probe_windows_system_config_namespace;
 
 #[cfg(unix)]
 const SYSTEM_CONFIG_TOML_FILE_UNIX: &str = "/etc/codex/config.toml";

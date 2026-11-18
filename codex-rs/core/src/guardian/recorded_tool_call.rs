@@ -187,7 +187,7 @@ pub(crate) async fn review_tool_call(
                         let action = patch.approval_action(&invocation.call_id);
                         (Some(patch.exec_approval_requirement), action)
                     } else {
-                        let requirement = prepared.approval_requirement(session, step).await;
+                        let requirement = prepared.approval_requirement();
                         let action = prepared.approval_action(&invocation.call_id, &requirement);
                         (Some(requirement), action)
                     }

@@ -24,7 +24,6 @@ runs:
       working-directory: codex-rs
       env:
         BASE_BINARIES: "codex codex-app-server codex-code-mode-host codex-exec-server"
-        WINDOWS_ONLY_BINARIES: "codex-command-runner codex-windows-sandbox-setup"
         BUILD_MODE: ${{ inputs.build-mode }}
         BUILD_SYSTEM: ${{ inputs.build-system }}
         PACKAGE_ACTION_PATH: ${{ github.action_path }}
@@ -33,9 +32,6 @@ runs:
         package_source_root="$(cd "${PACKAGE_ACTION_PATH}/../../.." && pwd)"
         echo "source_root=$package_source_root" >> "$GITHUB_OUTPUT"
         needed_binaries="$BASE_BINARIES"
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          needed_binaries+=" $WINDOWS_ONLY_BINARIES"
-        fi
         echo "NEEDED_BINARIES=$needed_binaries" >> "$GITHUB_ENV"
         case "$BUILD_SYSTEM" in
           cargo|bazel) ;;
@@ -143,15 +139,6 @@ runs:
           --package-version "$CODEX_PACKAGE_VERSION"
           --force
         )
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          package_args+=(--bwrap-bin "${release_dir}/bwrap")
-        fi
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          package_args+=(
-            --codex-command-runner-bin "${release_dir}/codex-command-runner.exe"
-            --codex-windows-sandbox-setup-bin "${release_dir}/codex-windows-sandbox-setup.exe"
-          )
-        fi
 
         python3 "${PACKAGE_SOURCE_ROOT}/scripts/build_codex_package.py" \
           "${package_args[@]}" \
@@ -189,8 +176,8 @@ runs:
         )
 
         # CI must exercise packaged tools; local smoke runs may use host tools.
-        if command -v rg || { [[ "$RUNNER_OS" == "Linux" ]] && command -v bwrap; }; then
-          echo "Host rg (or bwrap on Linux) is on PATH; CI must use packaged tools." >&2
+        if command -v rg; then
+          echo "Host rg is on PATH; CI must use packaged tools." >&2
           exit 1
         fi
 

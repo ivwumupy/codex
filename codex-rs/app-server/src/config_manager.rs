@@ -445,10 +445,7 @@ impl ConfigManager {
                 config,
                 used_defaults: false,
             }),
-            Err(error)
-                if self.strict_config
-                    || crate::is_unsupported_untrusted_approval_policy_error(&error) =>
-            {
+            Err(error) if self.strict_config || crate::is_unsupported_config_error(&error) => {
                 Err(error)
             }
             Err(error) => {

@@ -2,17 +2,14 @@
 
 ROOT_OF_EXTRACTED_PACKAGE
 ├── bin
-│   ├── codex[.exe]                       # CLI package only
-│   ├── codex-app-server[.exe]            # app-server package only
-│   ├── codex-code-mode-host[.exe]
-│   └── codex-exec-server[.exe]
+│   ├── codex                       # CLI package only
+│   ├── codex-app-server            # app-server package only
+│   ├── codex-code-mode-host
+│   └── codex-exec-server
 ├── codex-package.json
 ├── codex-path
-│   └── rg[.exe]
+│   └── rg
 └── codex-resources
-    ├── bwrap                             # Linux only
-    ├── codex-command-runner.exe          # Windows only
-    ├── codex-windows-sandbox-setup.exe   # Windows only
 
 Debug symbols for all shipped binaries arrive in a separate companion archive.
 Each package contains one entrypoint, not both codex and codex-app-server.
@@ -21,12 +18,10 @@ Each package contains one entrypoint, not both codex and codex-app-server.
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -72,14 +67,12 @@ def test_cli_version_matches_release_sources(package: SmokePackage) -> None:
 
 
 @pytest.mark.parametrize("variant", ["cli_root", "app_server_root"])
-def test_packaged_executor_initializes_and_enforces_sandbox(
+def test_packaged_executor_supports_only_native_execution(
     package: SmokePackage, variant: str
 ) -> None:
-    """Each package re-enters its executor helpers and enforces filesystem/process policy."""
+    """Verify native subprocess and file operations and reject explicit sandbox requests."""
     root = getattr(package, variant)
-    windows = "windows" in package.target
-    suffix = ".exe" if windows else ""
-    executor = root / "bin" / f"codex-exec-server{suffix}"
+    executor = root / "bin" / "codex-exec-server"
     directory = package.directory / f"{variant}-executor-sandbox"
     directory.mkdir()
     workspace = directory / "workspace"
@@ -89,10 +82,6 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
     blocked = directory / "blocked.txt"
     blocked.write_text("unchanged")
     environment = {**package.environment, "CODEX_HOME": str(home)}
-    if windows:
-        # Elevated mode must discover the setup/runner in this package's resources.
-        # Exclude build outputs and host Codex installations from helper fallback.
-        environment["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
     sandbox = {
         "permissions": {
             "type": "managed",
@@ -112,7 +101,6 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
             "network": "restricted",
         },
         "cwd": workspace.as_uri(),
-        "windowsSandboxLevel": "elevated" if windows else "disabled",
     }
     version = (
         subprocess.check_output(
@@ -162,7 +150,7 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
                 path: Path,
                 *,
                 timeout: int = 45,
-                **params: str,
+                **params: object,
             ) -> dict:
                 process.stdin.write(
                     json.dumps(
@@ -171,7 +159,6 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
                             "method": method,
                             "params": {
                                 "path": path.as_uri(),
-                                "sandbox": sandbox,
                                 **params,
                             },
                         }
@@ -183,64 +170,12 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
                     reader.submit(process.stdout.readline).result(timeout=timeout)
                 )
 
-            if windows:
-                # Resolving the inner helper creates today's log. The first ACL scan must see it.
-                log_dir = home / ".sandbox"
-                log_dir.mkdir(exist_ok=True)
-                sibling = log_dir / "allowed.txt"
-                sibling.write_bytes(b"ok")
-                day = datetime.now(UTC).date()
-                log = log_dir / f"sandbox.{day}.log"
-                assert not log.exists()
-                sandbox["permissions"]["file_system"]["entries"].append(
-                    {
-                        "path": {
-                            "type": "glob_pattern",
-                            "pattern": (log_dir / "*.log").as_posix(),
-                        },
-                        "access": "deny",
-                    }
-                )
-                # The first Windows helper can provision sandbox accounts before replying.
-                denied = file_request(5, "fs/readFile", log, timeout=180)
-                if not log.exists() and day != datetime.now(UTC).date():
-                    # The helper crossed UTC midnight before creating its log.
-                    log = next(log_dir.glob("sandbox.*.log"))
-                    denied = file_request(7, "fs/readFile", log)
-                assert "Access is denied" in denied.get("error", {}).get("message", "")
-                assert log.is_file()
-                assert file_request(6, "fs/readFile", sibling) == {
-                    "id": 6,
-                    "result": {"dataBase64": "b2s="},
-                }
-
-            # Restricted writes always launch the filesystem helper, even when allowed.
-            for request_id, path in [(2, workspace / "allowed.txt"), (3, blocked)]:
-                response = file_request(
-                    request_id, "fs/writeFile", path, dataBase64="b2s="
-                )
-                if request_id == 2:
-                    assert response == {"id": 2, "result": {}}, response
-                    assert path.read_text() == "ok"
-                else:
-                    assert response["id"] == 3 and "error" in response, response
-                    assert blocked.read_text() == "unchanged"
-
-            command = (
-                [
-                    str(Path(os.environ["SystemRoot"]) / "System32" / "cmd.exe"),
-                    "/D",
-                    "/S",
-                    "/C",
-                    r"echo process>process.txt & echo forbidden>..\blocked.txt & exit /b 0",
-                ]
-                if windows
-                else [
-                    "/bin/sh",
-                    "-c",
-                    "printf process >process.txt; printf forbidden >../blocked.txt; exit 0",
-                ]
-            )
+            native = file_request(2, "fs/writeFile", blocked, dataBase64="b2s=")
+            assert native == {"id": 2, "result": {}}, native
+            assert blocked.read_text() == "ok"
+            restricted = file_request(3, "fs/writeFile", blocked, sandbox=sandbox, dataBase64="")
+            assert "error" in restricted and blocked.read_text() == "ok", restricted
+            command = ["/bin/sh", "-c", "printf process >process.txt"]
             process.stdin.write(
                 json.dumps(
                     {
@@ -255,7 +190,6 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
                                 for key, value in environment.items()
                                 if key.casefold() in {"path", "systemroot"}
                             },
-                            "sandbox": sandbox,
                             "tty": False,
                             "pipeStdin": False,
                             "arg0": None,
@@ -274,21 +208,14 @@ def test_packaged_executor_initializes_and_enforces_sandbox(
                 )
                 notifications.append(response)
                 if response.get("id") == 4:
-                    expected_type = (
-                        "windowsRestrictedToken"
-                        if windows
-                        else "macosSeatbelt"
-                        if "apple-darwin" in package.target
-                        else "linuxSeccomp"
-                    )
-                    assert response["result"]["sandboxType"] == expected_type, response
+                    assert response["result"]["sandboxType"] == "none", response
                     started = True
                 if response.get("method") == "process/exited":
                     exit_code = response["params"]["exitCode"]
             assert exit_code == 0, notifications
             assert (workspace / "process.txt").is_file(), notifications
             assert (workspace / "process.txt").read_text().strip() == "process"
-            assert blocked.read_text() == "unchanged"
+            assert blocked.read_text() == "ok"
             process.stdin.close()
             assert process.wait(timeout=45) == 0
         finally:
@@ -372,16 +299,13 @@ def test_app_server_runs_code_mode_through_python_sdk(
     responses_server: MockResponsesServer,
     entrypoint: str,
 ) -> None:
-    """Both packages run their own ripgrep through sandboxed SDK code mode."""
-    windows = "windows" in package.target
-    sandbox_config = ("--config", 'windows.sandbox="unelevated"') if windows else ()
+    """Both packages run their own ripgrep through SDK code mode."""
     if entrypoint == "codex":
         executable = package.cli
         package_root = package.cli_root
         package_path_dir = package.cli_path_dir
         config = CodexConfig(
             codex_bin=str(executable),
-            config_overrides=sandbox_config[1:],
             cwd=str(package.directory),
             env=package.environment,
         )
@@ -390,19 +314,11 @@ def test_app_server_runs_code_mode_through_python_sdk(
         package_root = package.app_server_root
         package_path_dir = package.app_server_path_dir
         config = CodexConfig(
-            launch_args_override=(str(executable), *sandbox_config),
+            launch_args_override=(str(executable),),
             cwd=str(package.directory),
             env=package.environment,
         )
-    if windows:
-        # TODO(anp): Assert resolved rg paths once Windows sandbox PATH finds them.
-        ripgrep = str(package_path_dir / "rg.exe").replace("'", "''")
-        command = (
-            f"$rg = '{ripgrep}'; Write-Output $rg; & $rg --version; "
-            "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
-        )
-    else:
-        command = "command -v rg && rg --version"
+    command = "command -v rg && rg --version"
     exec_arguments = {"cmd": command, "login": False, "yield_time_ms": 10_000}
     responses_server.enqueue_sse(
         sse(
@@ -429,7 +345,7 @@ def test_app_server_runs_code_mode_through_python_sdk(
         turn = client.thread_start(
             ephemeral=True,
             approval_mode=ApprovalMode.deny_all,
-            sandbox=Sandbox.workspace_write,
+            sandbox=Sandbox.full_access,
         ).run("run package smoke")
         assert turn.final_response == "Done", turn
     # The mock also records analytics POSTs, which have no Responses input list.
@@ -527,31 +443,3 @@ def test_macos_debug_symbols_resolve_packaged_code(
         timeout=45,
     ).stdout
     assert "codex_code_mode_host" in resolved, resolved
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows debug symbols")
-def test_windows_debug_symbols_resolve_packaged_code(
-    package: SmokePackage,
-    code_mode_host_debug_symbols: Path,
-) -> None:
-    """Windows host symbols match the packaged executable's debug signature."""
-    # Cargo embeds an underscored PDB name; Bazel uses the binary's name.
-    # Offer the archived PDB under both names so dumpbin still verifies that
-    # its signature matches the packaged executable, regardless of builder.
-    cargo_symbols = code_mode_host_debug_symbols.with_name("codex_code_mode_host.pdb")
-    shutil.copy2(code_mode_host_debug_symbols, cargo_symbols)
-    symbols = (code_mode_host_debug_symbols, cargo_symbols)
-    host = code_mode_host_debug_symbols.with_suffix(".exe")
-    shutil.copy2(package.cli.with_name("codex-code-mode-host.exe"), host)
-    result = subprocess.run(
-        ["dumpbin", "/PDBPATH", str(host)],
-        cwd=package.directory,
-        env=package.environment,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=45,
-    )
-    assert any(str(path).casefold() in result.stdout.casefold() for path in symbols), (
-        result.stdout
-    )

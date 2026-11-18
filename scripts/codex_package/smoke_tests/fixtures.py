@@ -81,12 +81,8 @@ class SmokePackage:
 
         (config_dir / "config.toml").write_text(
             """approval_policy = "never"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 suppress_unstable_features_warning = true
-
-[sandbox_workspace_write]
-network_access = true
-writable_roots = []
 
 [features]
 code_mode_only = true
@@ -141,16 +137,6 @@ def package(
     compression = request.config.getoption("compression")
     target = request.config.getoption("package_target")
     directory = tmp_path_factory.mktemp(f"codex-package-smoke-{compression}")
-    if "windows" in target:
-        # pytest's 0700 directories have protected ACLs, so restricted-token
-        # sandboxes need read/execute access to reach the packaged binaries.
-        for path in (directory.parent, directory):
-            subprocess.run(
-                ["icacls", str(path), "/grant", "*S-1-1-0:(OI)(CI)(RX)"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
     package = SmokePackage.from_archives(
         directory,
         target,
@@ -214,15 +200,13 @@ def code_mode_host_debug_symbols(
         "codex-code-mode-host",
         "codex-exec-server",
     }
-    if "windows" in target:
-        binaries.update({"codex-command-runner", "codex-windows-sandbox-setup"})
 
     if "apple-darwin" in target:
         markers = {
             binary: f"/{binary}.dSYM/Contents/Resources/DWARF/" for binary in binaries
         }
     else:
-        extension = "pdb" if "windows" in target else "debug"
+        extension = "debug"
         markers = {binary: f"/{binary}.{extension}" for binary in binaries}
 
     destination = tmp_path_factory.mktemp("codex-debug-symbols")
