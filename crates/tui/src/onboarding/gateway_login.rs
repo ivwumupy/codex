@@ -6,7 +6,6 @@ use super::auth::onboarding_request_id;
 use super::onboarding_screen::OnboardingScreen;
 use super::onboarding_screen::OnboardingScreenArgs;
 use super::onboarding_screen::run_onboarding_screen;
-use crate::AppServerTarget;
 use crate::app_server_session::AppServerSession;
 use crate::get_login_status;
 use crate::legacy_core::config::Config;
@@ -21,7 +20,6 @@ use codex_app_server_protocol::GatewayOAuthLoginResponse;
 use codex_app_server_protocol::GatewayOAuthReadParams;
 use codex_app_server_protocol::GatewayOAuthReadResponse;
 use codex_app_server_protocol::GatewayOAuthStatus;
-use codex_protocol::config_types::ForcedLoginMethod;
 use color_eyre::Result;
 use color_eyre::eyre::OptionExt;
 
@@ -50,7 +48,6 @@ pub(crate) async fn authenticate_gateway(
                 show_trust_screen: false,
                 remote_project_trust: None,
                 login_status,
-                app_server_target: AppServerTarget::Embedded,
                 app_server_request_handle: Some(handle.clone()),
                 config: config.clone(),
             },
@@ -60,13 +57,6 @@ pub(crate) async fn authenticate_gateway(
             .auth_widget_mut()
             .ok_or_eyre("The gateway login screen is unavailable.")?;
         match login {
-            Login::Primary
-                if widget
-                    .auth_config
-                    .is_login_method_allowed(ForcedLoginMethod::Chatgpt) =>
-            {
-                widget.start_chatgpt_login();
-            }
             Login::Primary => widget.start_api_key_entry(),
             Login::GatewayOAuth => widget.start_gateway_oauth(config.model_provider_id.clone()),
         }

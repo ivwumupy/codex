@@ -15,7 +15,6 @@ mod workload_identity;
 
 mod external_bearer;
 mod manager;
-mod revoke;
 
 pub use api_key::is_fedramp_api_key;
 pub use auth_headers::AuthHeaders;

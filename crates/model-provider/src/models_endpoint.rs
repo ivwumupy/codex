@@ -24,7 +24,6 @@ use codex_login::CodexAuth;
 use codex_login::collect_auth_env_telemetry;
 use codex_login::default_client::ClientRedirectPolicy;
 use codex_login::default_client::create_client_for_route_async;
-use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::GatewayOAuthConfig;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::ModelCatalogOriginator;
@@ -41,14 +40,12 @@ use http::HeaderMap;
 use tokio::time::timeout;
 
 use crate::auth::agent_identity_telemetry;
-use crate::auth::uses_fedramp_api_key;
 use crate::combined_auth::compose_auth;
 use crate::provider::resolve_api_provider;
 use crate::request_setup::resolve_request_auth;
 
 const MODELS_REFRESH_TIMEOUT: Duration = Duration::from_secs(5);
 const MODELS_ENDPOINT: &str = "/models";
-const FEDRAMP_CODEX_BASE_URL: &str = "https://gov.chatgpt.com/backend-api/codex";
 
 // Catalog requests use the model provider's credentials. Before enabling a fetch
 // with gateway OAuth alone, check that the catalog URL has the same origin as the gateway.
@@ -133,10 +130,12 @@ impl OpenAiModelsEndpoint {
     }
 
     async fn uses_codex_backend(&self) -> bool {
-        self.auth()
-            .await
-            .as_ref()
-            .is_some_and(CodexAuth::uses_codex_backend)
+        (self.provider_info.base_url.is_some() || self.provider_info.model_catalog_url.is_some())
+            && self
+                .auth()
+                .await
+                .as_ref()
+                .is_some_and(CodexAuth::uses_codex_backend)
     }
 
     async fn list_models(
@@ -186,20 +185,7 @@ impl OpenAiModelsEndpoint {
         );
         let identity = crate::models_identity::identity(&self.provider_info, auth.as_ref())?;
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
-        let mut api_provider = resolve_api_provider(&self.provider_info, auth.as_ref())?;
-        if (auth.as_ref().is_some_and(CodexAuth::is_api_key_auth) || self.has_provider_api_key())
-            && self.supports_api_key_models()
-            && self.provider_info.base_url.is_none()
-            && self.provider_info.model_catalog_url.is_none()
-        {
-            // Codex metadata is served by the Codex backend, not the public /v1/models API.
-            api_provider.base_url = if uses_fedramp_api_key(auth.as_ref(), &self.provider_info)? {
-                FEDRAMP_CODEX_BASE_URL
-            } else {
-                CHATGPT_CODEX_BASE_URL
-            }
-            .to_string();
-        }
+        let api_provider = resolve_api_provider(&self.provider_info, auth.as_ref())?;
         let http_client_factory = resolved
             .bind_http_client_factory(http_client_factory)
             .map_err(|error| map_api_error(error.into()))?;
@@ -316,7 +302,6 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
 
     fn supports_api_key_models(&self) -> bool {
         self.provider_info.model_catalog_url.is_some()
-            || (self.provider_info.is_openai() && self.provider_info.base_url.is_none())
     }
 
     fn has_provider_api_key(&self) -> bool {

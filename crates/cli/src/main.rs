@@ -14,13 +14,9 @@ use codex_arg0::arg0_dispatch_or_else;
 use codex_chatgpt::apply_command::ApplyCommand;
 use codex_chatgpt::apply_command::run_apply_command;
 use codex_cli::cloud_config;
-use codex_cli::read_access_token_from_stdin;
 use codex_cli::read_api_key_from_stdin;
 use codex_cli::run_login_status;
-use codex_cli::run_login_with_access_token;
 use codex_cli::run_login_with_api_key;
-use codex_cli::run_login_with_browser;
-use codex_cli::run_login_with_device_code;
 use codex_cli::run_logout;
 use codex_exec::Cli as ExecCli;
 use codex_exec::Command as ExecCommand;
@@ -103,7 +99,6 @@ use codex_login::AuthManager;
 use codex_memories_write::clear_memory_roots_contents;
 use codex_models_manager::bundled_models_response;
 use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::auth::AuthMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::user_input::UserInput;
 use codex_terminal_detection::TerminalName;
@@ -471,12 +466,6 @@ struct LoginCommand {
     with_api_key: bool,
 
     #[arg(
-        long = "with-access-token",
-        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | codex login --with-access-token`)"
-    )]
-    with_access_token: bool,
-
-    #[arg(
         long = "api-key",
         num_args = 0..=1,
         default_missing_value = "",
@@ -485,18 +474,6 @@ struct LoginCommand {
         hide = true
     )]
     api_key: Option<String>,
-
-    #[arg(long = "device-auth")]
-    use_device_code: bool,
-
-    /// EXPERIMENTAL: Use custom OAuth issuer base URL (advanced)
-    /// Override the OAuth issuer base URL (advanced)
-    #[arg(long = "experimental_issuer", value_name = "URL", hide = true)]
-    issuer_base_url: Option<String>,
-
-    /// EXPERIMENTAL: Use custom OAuth client ID (advanced)
-    #[arg(long = "experimental_client-id", value_name = "CLIENT_ID", hide = true)]
-    client_id: Option<String>,
 
     #[command(subcommand)]
     action: Option<LoginSubcommand>,
@@ -1083,38 +1060,8 @@ async fn dispatch_cli(
                 arg0_paths,
             )));
         }
-        Some(Subcommand::TcpTunnel(args)) if args.auth_token_stdin => {
-            codex_tcp_tunnel::run(args).await?;
-        }
         Some(Subcommand::TcpTunnel(args)) => {
-            let config =
-                cloud_config::load_config(&root_config_overrides, LoaderOverrides::default())
-                    .await?;
-            let permit = config.application_network_policy.acquire(&args.proxy_url)?;
-            let manager = AuthManager::shared_from_config_with_auth_modes(
-                &config,
-                /*enable_codex_api_key_env*/ false,
-                vec![AuthMode::Chatgpt, AuthMode::ChatgptAuthTokens],
-            )
-            .await?;
-            anyhow::ensure!(
-                manager.auth_mode() == Some(AuthMode::Chatgpt),
-                "ChatGPT OAuth login required for SSH"
-            );
-            let access_token = async {
-                let oauth = manager
-                    .auth()
-                    .await
-                    .ok_or_else(|| anyhow::anyhow!("ChatGPT OAuth login required for SSH"))?;
-                Ok(oauth.get_token_data()?.access_token)
-            };
-            permit
-                .run(codex_tcp_tunnel::run_ssh_proxy(
-                    args,
-                    access_token,
-                    tokio::io::stdout(),
-                ))
-                .await??;
+            codex_tcp_tunnel::run(args).await?;
         }
         Some(Subcommand::Exec(mut exec_cli)) => {
             reject_remote_mode_for_subcommand(
@@ -1639,31 +1586,14 @@ async fn dispatch_cli(
                     run_login_status(login_cli.config_overrides).await;
                 }
                 None => {
-                    if login_cli.with_api_key && login_cli.with_access_token {
-                        eprintln!(
-                            "Choose one login credential source: --with-api-key or --with-access-token."
-                        );
-                        std::process::exit(1);
-                    } else if login_cli.use_device_code {
-                        run_login_with_device_code(
-                            login_cli.config_overrides,
-                            login_cli.issuer_base_url,
-                            login_cli.client_id,
-                        )
-                        .await;
-                    } else if login_cli.api_key.is_some() {
+                    if login_cli.api_key.is_some() {
                         eprintln!(
                             "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`."
                         );
                         std::process::exit(1);
-                    } else if login_cli.with_api_key {
+                    } else {
                         let api_key = read_api_key_from_stdin();
                         run_login_with_api_key(login_cli.config_overrides, api_key).await;
-                    } else if login_cli.with_access_token {
-                        let access_token = read_access_token_from_stdin();
-                        run_login_with_access_token(login_cli.config_overrides, access_token).await;
-                    } else {
-                        run_login_with_browser(login_cli.config_overrides).await;
                     }
                 }
             }

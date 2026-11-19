@@ -862,8 +862,6 @@ impl MessageProcessor {
         connection_id: ConnectionId,
         request_attestation: bool,
     ) {
-        self.account_processor
-            .notify_workspace_routing_to_connection(connection_id);
         self.thread_processor
             .connection_initialized(
                 connection_id,
@@ -1871,16 +1869,10 @@ impl MessageProcessor {
                     .await
                     .map(|response| Some(response.into()))
             }
-            ClientRequest::AccountSessionsList { params, .. } => self
-                .account_processor
-                .list_account_sessions(params)
-                .await
-                .map(|response| Some(ClientResponsePayload::AccountSessionsList(response))),
-            ClientRequest::AccountSessionsSwitch { params, .. } => self
-                .account_processor
-                .switch_account_session(params, &self.thread_processor, &self.turn_admission)
-                .await
-                .map(|response| Some(ClientResponsePayload::AccountSessionsSwitch(response))),
+            ClientRequest::AccountSessionsList { .. }
+            | ClientRequest::AccountSessionsSwitch { .. } => {
+                Err(invalid_request("ChatGPT account sessions are unsupported."))
+            }
             ClientRequest::LogoutAccount { .. } => {
                 self.account_processor
                     .logout_account(request_id.clone())
@@ -1895,30 +1887,13 @@ impl MessageProcessor {
             ClientRequest::GetAuthStatus { params, .. } => {
                 self.account_processor.get_auth_status(params).await
             }
-            ClientRequest::GetAccountSecuritySetup { .. } => Ok(Some(
-                self.account_processor
-                    .get_account_security_setup()
-                    .await
-                    .into(),
-            )),
-            ClientRequest::GetAccountRateLimits { params, .. } => {
-                self.account_processor.get_account_rate_limits(params).await
-            }
-            ClientRequest::ConsumeAccountRateLimitResetCredit { params, .. } => {
-                self.account_processor
-                    .consume_account_rate_limit_reset_credit(params)
-                    .await
-            }
-            ClientRequest::GetAccountTokenUsage { params, .. } => {
-                self.account_processor.get_account_token_usage(params).await
-            }
-            ClientRequest::GetWorkspaceMessages { .. } => {
-                self.account_processor.get_workspace_messages().await
-            }
-            ClientRequest::SendAddCreditsNudgeEmail { params, .. } => {
-                self.account_processor
-                    .send_add_credits_nudge_email(params)
-                    .await
+            ClientRequest::GetAccountSecuritySetup { .. }
+            | ClientRequest::GetAccountRateLimits { .. }
+            | ClientRequest::ConsumeAccountRateLimitResetCredit { .. }
+            | ClientRequest::GetAccountTokenUsage { .. }
+            | ClientRequest::GetWorkspaceMessages { .. }
+            | ClientRequest::SendAddCreditsNudgeEmail { .. } => {
+                Err(invalid_request("ChatGPT account features are unsupported."))
             }
             ClientRequest::GitDiffToRemote { params, .. } => {
                 self.git_processor.git_diff_to_remote(params).await

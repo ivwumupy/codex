@@ -63,54 +63,41 @@ impl ModelsTransportBuilder for CaptureModelsUrl {
 
 #[tokio::test]
 async fn api_key_discovery_respects_provider_routing() {
-    let client_version = codex_models_manager::client_version_to_whole();
-    for (api_key, name, base_url, models_url, inference_url) in [
-        (
-            "test-api-key",
-            "OpenAI",
-            None,
-            Some("https://chatgpt.com/backend-api/codex/models"),
-            "https://api.openai.com/v1",
-        ),
+    for (api_key, name, base_url, inference_url) in [
+        ("test-api-key", "OpenAI", None, "https://api.openai.com/v1"),
         (
             "test-api-key",
             "OpenAI",
             Some("https://example.com/codex"),
-            None,
             "https://example.com/codex",
         ),
         (
             "test-api-key",
             "Azure",
             Some("https://example.openai.azure.com/openai/v1"),
-            None,
             "https://example.openai.azure.com/openai/v1",
         ),
         (
             "sk-proj-fedramp-synthetic-test-key",
             "OpenAI",
             None,
-            Some("https://gov.chatgpt.com/backend-api/codex/models"),
             "https://gov.api.openai.com/v1",
         ),
         (
             "sk-svcacct-fedramp-synthetic-test-key",
             "OpenAI",
             None,
-            Some("https://gov.chatgpt.com/backend-api/codex/models"),
             "https://gov.api.openai.com/v1",
         ),
         (
             "sk-proj-fedramp-synthetic-test-key",
             "OpenAI",
             Some("https://example.com/codex"),
-            None,
             "https://example.com/codex",
         ),
         (
             "sk-svcacct-fedramp-synthetic-test-key",
             "Azure",
-            None,
             None,
             "https://api.openai.com/v1",
         ),
@@ -139,10 +126,7 @@ async fn api_key_discovery_respects_provider_routing() {
                 HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
             )
             .await;
-        assert_eq!(
-            *capture.0.lock().unwrap(),
-            models_url.map(|url| format!("{url}?client_version={client_version}"))
-        );
+        assert_eq!(*capture.0.lock().unwrap(), None);
         assert_eq!(
             provider.api_provider().await.unwrap().base_url,
             inference_url
@@ -151,42 +135,32 @@ async fn api_key_discovery_respects_provider_routing() {
 }
 
 #[tokio::test]
-async fn provider_api_key_without_endpoint_overrides_uses_codex_backend() {
-    for (api_key, auth, models_base_url, inference_url) in [
-        (
-            "provider-key",
-            None,
-            CHATGPT_CODEX_BASE_URL,
-            "https://api.openai.com/v1",
-        ),
+async fn provider_api_key_without_endpoint_overrides_uses_bundled_catalog() {
+    for (api_key, auth, inference_url) in [
+        ("provider-key", None, "https://api.openai.com/v1"),
         (
             "provider-key",
             Some(CodexAuth::create_dummy_chatgpt_auth_for_testing()),
-            CHATGPT_CODEX_BASE_URL,
-            CHATGPT_CODEX_BASE_URL,
+            codex_model_provider_info::CHATGPT_CODEX_BASE_URL,
         ),
         (
             "provider-key",
             Some(CodexAuth::from_api_key("sk-proj-fedramp-ambient-key")),
-            CHATGPT_CODEX_BASE_URL,
             "https://api.openai.com/v1",
         ),
         (
             "sk-proj-fedramp-provider-key",
             None,
-            "https://gov.chatgpt.com/backend-api/codex",
             "https://gov.api.openai.com/v1",
         ),
         (
             "sk-svcacct-fedramp-provider-key",
             Some(CodexAuth::from_api_key("legacy-ambient-key")),
-            "https://gov.chatgpt.com/backend-api/codex",
             "https://gov.api.openai.com/v1",
         ),
         (
             "sk-proj-fedramp-provider-key",
             Some(CodexAuth::create_dummy_chatgpt_auth_for_testing()),
-            "https://gov.chatgpt.com/backend-api/codex",
             "https://gov.api.openai.com/v1",
         ),
     ] {
@@ -214,13 +188,7 @@ async fn provider_api_key_without_endpoint_overrides_uses_codex_backend() {
                 HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
             )
             .await;
-        assert_eq!(
-            *capture.0.lock().unwrap(),
-            Some(format!(
-                "{models_base_url}/models?client_version={}",
-                codex_models_manager::client_version_to_whole(),
-            ))
-        );
+        assert_eq!(*capture.0.lock().unwrap(), None);
         assert_eq!(
             provider.api_provider().await.unwrap().base_url,
             inference_url

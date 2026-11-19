@@ -198,7 +198,7 @@ pub(crate) fn new_session_info(
     session: &ThreadSessionState,
     is_first_event: bool,
     tooltip_override: Option<String>,
-    auth_plan: Option<PlanType>,
+    _auth_plan: Option<PlanType>,
 ) -> SessionInfoCell {
     // Header rendered as history (so it appears at the very top).
     let header = SessionHeaderHistoryCell::new(
@@ -251,7 +251,7 @@ pub(crate) fn new_session_info(
     } else if !is_first_event {
         if local_settings.tui.show_tooltips
             && let Some(tooltips) = tooltip_override
-                .or_else(|| tooltips::get_tooltip(auth_plan, &local_settings.tui.keymap))
+                .or_else(|| tooltips::get_tooltip(&local_settings.tui.keymap))
                 .map(|tip| TooltipHistoryCell::new(tip, &config.cwd))
         {
             parts.push(Box::new(tooltips));
