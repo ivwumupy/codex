@@ -1,5 +1,0 @@
-[env]
-# The pinned V8 fork publishes its binaries and bindings with the Codex releases.
-RUSTY_V8_MIRROR = "https://github.com/openai/codex/releases/download/rusty-v8-v{version}/{file}"
-# Roughly one arena per four CPUs reduces idle RSS after Linux musl conversations unload.
-JEMALLOC_SYS_WITH_MALLOC_CONF = "narenas_ratio:0.25"

@@ -1,0 +1,61 @@
+[[profile.default.overrides]]
+# These cases cold-start a daemon before confirming a second launch with new settings.
+filter = 'package(codex-cli) & binary(daemon_startup) & test(requires_confirmation_to_disable_)'
+slow-timeout = { period = "1m", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# This case validates and copies both the initial and replacement debug package.
+filter = 'package(codex-cli) & binary(=app_server_daemon_package) & test(=packaged_daemon_start_and_explicit_replacement)'
+slow-timeout = { period = "1m", terminate-after = 3 }
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+# These copies must not compete with other tests on the same runner.
+filter = 'package(codex-cli) & binary(=app_server_daemon_package)'
+slow-timeout = { period = "1m", terminate-after = 2 }
+threads-required = "num-test-threads"
+
+[profile.local]
+inherits = "default"
+
+[test-groups.app_server_protocol_codegen]
+max-threads = 1
+
+[test-groups.app_server_integration]
+max-threads = 1
+
+# Higher concurrency causes integration test timeouts under resource contention
+# on common developer machines.
+[test-groups.app_server_integration_local]
+max-threads = 4
+
+[[profile.default.overrides]]
+# Do not add new tests here
+filter = 'test(rmcp_client) | test(humanlike_typing_1000_chars_appears_live_no_placeholder)'
+slow-timeout = { period = "1m", terminate-after = 4 }
+
+[[profile.default.overrides]]
+# This end-to-end case launches several CLI subprocesses and checks cloud policy.
+filter = 'package(codex-exec) & test(worktree_start_and_fork_use_host_pool_and_preserve_legacy_resume)'
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[[profile.default.overrides]]
+filter = 'test(approval_matrix_covers_all_modes)'
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+filter = 'package(codex-app-server-protocol) & (test(typescript_schema_fixtures_match_generated) | test(json_schema_fixtures_match_generated) | test(generate_ts_with_experimental_api_retains_experimental_entries) | test(generated_ts_optional_nullable_fields_only_in_params) | test(generate_json_filters_experimental_fields_and_methods))'
+test-group = 'app_server_protocol_codegen'
+
+[[profile.default.overrides]]
+# These integration tests spawn a fresh app-server subprocess per case.
+# Keep the library unit tests parallel.
+filter = 'package(codex-app-server) & kind(test)'
+test-group = 'app_server_integration'
+
+[[profile.local.overrides]]
+# Use up to four app-server subprocesses locally. The global nextest pool still
+# limits this to the machine's logical CPU count.
+filter = 'package(codex-app-server) & kind(test)'
+test-group = 'app_server_integration_local'
+slow-timeout = { period = "45s", terminate-after = 2 }

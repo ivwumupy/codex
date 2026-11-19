@@ -13,12 +13,11 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 ### Build this fork
 
-From the root of this checkout on Linux or macOS:
+Run the following commands from the repository root on Linux or macOS.
 
 ```shell
-cd codex-rs
-cargo build --locked --release --bin codex --bin codex-code-mode-host --bin codex-exec-server
-./target/release/codex
+cargo build --locked --bin codex --bin codex-code-mode-host --bin codex-exec-server
+./target/debug/codex
 ```
 
 The CLI runs commands with the current user's permissions and never prompts for execution approval. Explicit restricted profiles are rejected.
@@ -32,8 +31,6 @@ You can also use Codex with an API key, but this requires [additional setup](htt
 ## Docs
 
 - [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
+- [**Rust protocol overview**](./docs/protocol_v1.md)
 
 This repository is licensed under the [Apache-2.0 License](LICENSE).
