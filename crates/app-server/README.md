@@ -23,15 +23,9 @@ resolved memory version, including thread-specific configuration overrides.
 It is `null` when memory use is disabled or the selected summary is missing,
 unreadable, or blank. It never falls back to the other memory version.
 
-# Local history by account
+# Local history
 
-Pass `currentAccountOnly: true` on `thread/list` or `thread/search` to scope local
-discovery to the current ChatGPT login. Newly created threads record that discovery
-is account-scoped, and each recorded creator user or account ID must match.
-Threads created before this change and threads without creator IDs stay visible
-across account switches. Resume and revert preserve that distinction; forks are new threads.
-Scoped requests skip candidates whose rollout header cannot be read. API-key
-logins see all local history. Direct access by thread ID remains available.
+API-key logins can list, search, and open local threads.
 
 # Thread list exclusions
 
@@ -584,33 +578,11 @@ use the saved grant.
 
 # Account identity
 
-`account/read` returns a nullable `userId` alongside `account`. For ChatGPT and
-personal access token sessions, this is the canonical ChatGPT user ID from the
-authenticated account metadata, when available. API-only and signed-out sessions
-return `null`. The ID belongs to the same account snapshot as the rest of the
-response. Clients should also accept an absent field from older app servers.
-PAT sessions continue to return no bearer token from `getAuthStatus`.
-
-# Selected workspace routing
-
-`account/securitySetup/read` returns an optional backend-owned security reminder for the saved ChatGPT login. A returned notice includes its account and user IDs; clients must discard it after an account change and validate its copy and action URL before rendering. Ineligible, unavailable, and timed-out reads return `notice: null`. Older app-servers may not support this optional read.
-
-The experimental `account/read.workspaceRouting` response field returns the selected ChatGPT workspace's `chatgptAccountId`, resolved HTTPS `backendOrigin`, and backend-provided `accountRoutingOverride`. The routing value is `us`, `us_cr`, or the explicit `NO_CONSTRAINT` value. API-only and signed-out accounts return `null` and do not need `accounts/check`.
-
-App-server discovers routing for saved ChatGPT logins at startup and for new logins or workspace switches. After requirements and routing are ready, it sends the existing `account/updated` notification. Newly initialized connections also receive this notification once saved-workspace routing is ready, including when discovery finished before the connection initialized. Clients then reread `configRequirements/read` and `account/read`. Saved ChatGPT credentials without a selected workspace ID retain their account information and return `workspaceRouting: null`; app-server does not guess a workspace from the backend's default account. Discovery failures for a selected workspace, including missing or null fields from older backends, return an `account/read` error. They never produce a successful unrestricted result. A later read retries failed discovery. Logout clears the cached routing, and results from earlier authentication owners are discarded. Token refreshes for the same known user and workspace invalidate cached routing without cancelling discovery or failing sign-in. Configuration is reloaded after discovery; a changed backend, model provider, or required backend rejects the result so the next read discovers against current configuration. Account notifications recheck the auth owner generation after waiting for outbound queue capacity. Superseded sign-in attempts emit a failed `account/login/completed` event instead of silently dropping completion. Notifications remain snapshots: clients reread current account and requirements state rather than treating a queued notification as authorization.
-
-Routing compares origins by scheme, host, and effective port, ignoring API paths. A required
-`chatgpt_base_url` must match discovery; if neither provides an origin, `NO_CONSTRAINT` uses the
-configured base URL.
-
-Responses HTTP (including compaction) and WebSockets wait for discovery and preserve API paths.
-Guardian v2 classifier HTTP and pooled WebSockets use the same routing.
-HTTP redirects are rejected. `us` and `us_cr` set `X-OpenAI-Account-Routing-Override`;
-`NO_CONSTRAINT` omits it.
-
-API-key and explicitly external-auth providers bypass discovery. Custom ChatGPT-auth destinations
-require discovery before being treated as independent. Changing a workspace-bound thread's
-bootstrap origin requires a new thread.
+`account/read` reports the active local provider account. The `userId` and
+`workspaceRouting` fields are `null`. Use `account/login/start` with `apiKey`
+to save an API key and `account/logout` to remove it. ChatGPT login, workspace
+switching, security notices, credit and quota RPCs return an unsupported-request
+error. Existing ChatGPT credentials are ignored.
 
 ## Windows sandbox implementation selection
 
@@ -784,29 +756,6 @@ completion time and defaults to false. The server ignores unknown options.
 Both forms set `outputDeferred: true`. Use `thread/items/read` with the turn
 and item ID to retrieve the saved output. For MCP results over the 64 KiB
 history limit, this returns the bounded preview saved at completion.
-
-## Workspace switching (experimental)
-
-For a managed ChatGPT login, `accountSession/list` returns an opaque
-`sessionId` for that login and its selected workspace. Set
-`refreshWorkspaceMetadata` to fetch the user's memberships.
-
-Call `accountSession/switch` with that `sessionId` and the target workspace's
-`accountId`. Core checks the membership, stops loaded threads, exchanges the
-session token and validates the new workspace's routing. Clients receive
-`thread/closed` for unloaded threads and `account/updated` after a successful
-switch. Selecting the current workspace leaves its threads running.
-
-The server remembers the selected workspace on refresh. If routing validation
-fails, Core attempts to restore the previous workspace while the same credentials
-are still current.
-
-Clients that can open a browser may pass `allowBrowserLogin: true`. If the
-workspace requires SSO, the response contains `loginId` and `authUrl`. Open
-that URL and wait for `account/login/completed`. The browser can reuse an
-existing SSO session. Core accepts the callback only for the requesting login
-and target workspace. Cancel through `account/login/cancel` to keep the current
-workspace. Government workspaces require a separate sign-in.
 
 # Model provider configuration
 

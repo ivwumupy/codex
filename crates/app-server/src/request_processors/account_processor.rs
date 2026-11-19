@@ -22,12 +22,6 @@ pub(super) use enterprise_login::EnterpriseLoginCompletion;
 pub(super) use enterprise_login::EnterpriseLoginTarget;
 pub(crate) use gcp_setup::handle_gcp_setup;
 
-enum RefreshTokenRequestOutcome {
-    NotAttemptedOrSucceeded,
-    FailedTransiently,
-    FailedPermanently,
-}
-
 enum CloudLoginProvider {
     AmazonBedrock,
     Gcp,
@@ -587,29 +581,16 @@ impl AccountRequestProcessor {
         Ok(())
     }
 
-    async fn refresh_token_if_requested(&self, do_refresh: bool) -> RefreshTokenRequestOutcome {
-        if self.auth_manager.is_external_chatgpt_auth_active() {
-            return RefreshTokenRequestOutcome::NotAttemptedOrSucceeded;
-        }
-        if do_refresh && let Err(err) = self.auth_manager.refresh_token().await {
-            let failed_reason = err.failed_reason();
-            if failed_reason.is_none() {
-                tracing::warn!("failed to refresh token while getting account: {err}");
-                return RefreshTokenRequestOutcome::FailedTransiently;
-            }
-            return RefreshTokenRequestOutcome::FailedPermanently;
-        }
-        RefreshTokenRequestOutcome::NotAttemptedOrSucceeded
-    }
-
     async fn get_auth_status_response(
         &self,
         params: GetAuthStatusParams,
     ) -> Result<GetAuthStatusResponse, JSONRPCErrorError> {
         let include_token = params.include_token.unwrap_or(false);
-        let do_refresh = params.refresh_token.unwrap_or(false);
-
-        self.refresh_token_if_requested(do_refresh).await;
+        if params.refresh_token.unwrap_or(false)
+            && let Err(err) = self.auth_manager.refresh_token().await
+        {
+            tracing::warn!("failed to refresh provider credentials: {err}");
+        }
 
         // Determine whether auth is required based on the active model provider.
         // If a custom provider is configured with `requires_openai_auth == false`,

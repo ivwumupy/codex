@@ -186,10 +186,6 @@ pub(crate) fn is_session_history_prefix_cell(cell: &dyn HistoryCell) -> bool {
         || cell.as_any().is::<ForkedThreadHistoryCell>()
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "keep local preferences separate while the legacy Config parameter is still required"
-)]
 pub(crate) fn new_session_info(
     config: &Config,
     local_settings: &crate::local_settings::LocalSettings,
@@ -198,7 +194,6 @@ pub(crate) fn new_session_info(
     session: &ThreadSessionState,
     is_first_event: bool,
     tooltip_override: Option<String>,
-    _auth_plan: Option<PlanType>,
 ) -> SessionInfoCell {
     // Header rendered as history (so it appears at the very top).
     let header = SessionHeaderHistoryCell::new(

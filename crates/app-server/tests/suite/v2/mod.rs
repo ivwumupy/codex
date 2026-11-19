@@ -1,9 +1,6 @@
 mod account;
-#[path = "account_system_proxy_tests.rs"]
-mod account_system_proxy;
 
 mod account_gcp;
-mod account_thread_usage;
 mod agent_message_board;
 
 mod app_installed;
@@ -122,7 +119,6 @@ mod plugin_share;
 mod plugin_uninstall;
 mod process_exec;
 mod projects;
-mod rate_limit_reset_credits;
 mod rate_limits;
 #[path = "rate_limits_identity_tests.rs"]
 mod rate_limits_identity;

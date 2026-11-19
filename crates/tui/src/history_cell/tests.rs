@@ -16,7 +16,6 @@ use codex_config::types::McpServerConfig;
 use codex_otel::RuntimeMetricTotals;
 use codex_otel::RuntimeMetricsSummary;
 use codex_protocol::ThreadId;
-use codex_protocol::account::PlanType;
 use codex_protocol::error::UnexpectedResponseError;
 use codex_protocol::parse_command::ParsedCommand;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -765,7 +764,6 @@ async fn session_info_uses_availability_nux_tooltip_override() {
         &session_configured_event("gpt-5"),
         /*is_first_event*/ false,
         Some("Model just became available".to_string()),
-        Some(PlanType::Free),
     );
 
     let rendered = render_transcript(&cell).join("\n");
@@ -788,7 +786,6 @@ async fn session_info_availability_nux_tooltip_snapshot() {
         &session_configured_event("gpt-5"),
         /*is_first_event*/ false,
         Some("Model just became available".to_string()),
-        Some(PlanType::Free),
     );
 
     let rendered = render_transcript(&cell).join("\n");
@@ -809,7 +806,6 @@ async fn session_info_preserves_styled_tooltip_links() {
             "Use **/copy** or `ctrl+y`; visit the [Codex community forum](https://example.com)."
                 .to_string(),
         ),
-        Some(PlanType::Free),
     );
 
     let lines = cell.transcript_hyperlink_lines(/*width*/ 30);
@@ -861,7 +857,6 @@ async fn session_info_first_event_respects_tooltip_preference() {
             &session_configured_event("gpt-5"),
             /*is_first_event*/ true,
             Some("Model just became available".to_string()),
-            Some(PlanType::Free),
         );
 
         let rendered = render_transcript(&cell).join("\n");
@@ -883,7 +878,6 @@ async fn session_info_hides_tooltips_when_disabled() {
         &session_configured_event("gpt-5"),
         /*is_first_event*/ false,
         Some("Model just became available".to_string()),
-        Some(PlanType::Free),
     );
 
     let rendered = render_transcript(&cell).join("\n");

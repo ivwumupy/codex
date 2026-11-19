@@ -75,7 +75,6 @@ use crate::auth::storage::AuthStorageBackend;
 use crate::auth::storage::auth_storage_commit_guard;
 use crate::auth::storage::create_auth_storage;
 use crate::default_client::create_client;
-use crate::default_client::create_default_auth_client;
 use crate::oauth::ErrorBodyLimit;
 use crate::oauth::OAuthClient;
 use crate::oauth::OAuthError;
@@ -1318,8 +1317,13 @@ fn auth_mode_is_allowed(
     allowed_login_methods: Option<&[ForcedLoginMethod]>,
     mode: AuthMode,
 ) -> bool {
-    !mode.uses_codex_backend()
-        && allowed_login_methods.is_none_or(|methods| methods.contains(&ForcedLoginMethod::Api))
+    matches!(
+        mode,
+        AuthMode::ApiKey
+            | AuthMode::BedrockApiKey
+            | AuthMode::BedrockAccessKeys
+            | AuthMode::Headers
+    ) && allowed_login_methods.is_none_or(|methods| methods.contains(&ForcedLoginMethod::Api))
 }
 
 fn validate_auth_restrictions(
