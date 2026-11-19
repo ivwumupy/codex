@@ -61,14 +61,6 @@ async fn list_builtin_and_custom_providers_with_editable_settings() -> Result<()
     std::fs::write(
         home.path().join("config.toml"),
         r#"
-[model_providers.amazon-bedrock]
-base_url = "https://bedrock.example.test/v1"
-[model_providers.amazon-bedrock.aws]
-profile = "work"
-region = "us-east-1"
-[model_providers.amazon-bedrock-runtime.aws]
-region = "us-east-1"
-[model_providers.gcp]
 [model_providers.basic]
 name = "Basic auth gateway"
 base_url = "https://user:password@basic.example.test/v1"
@@ -111,14 +103,6 @@ base_url = "https://managed.example.test"
             "defaultProviderId":"corp.gateway", "canChangeDefault":false,
             "data": [
                 {
-                    "id":"amazon-bedrock", "name":"Amazon Bedrock Mantle", "canEdit":true,
-                    "baseUrl":"https://bedrock.example.test/v1", "settings":{"type":"bedrock", "profile":"work", "region":"us-east-1"},
-                },
-                {
-                    "id":"amazon-bedrock-runtime", "name":"Amazon Bedrock Runtime", "canEdit":true,
-                    "baseUrl":null, "settings":{"type":"bedrock", "profile":null, "region":"us-east-1"},
-                },
-                {
                     "id":"basic", "name":"Basic auth gateway", "canEdit":true, "baseUrl":null,
                     "settings":{"type":"customGateway", "auth":{"mode":"externallyConfigured", "envKey":null}},
                 },
@@ -129,10 +113,6 @@ base_url = "https://managed.example.test"
                 {
                     "id":"external", "name":"External gateway", "canEdit":true,
                     "baseUrl":null, "settings":{"type":"customGateway", "auth":{"mode":"externallyConfigured", "envKey":"EXTERNAL_KEY"}},
-                },
-                {
-                    "id":"gcp", "name":"Google Cloud Vertex AI", "canEdit":true,
-                    "baseUrl":null, "settings":{"type":"gcp", "projectId":null, "location":null, "credentialFile":null},
                 },
                 {
                     "id":"openai", "name":"OpenAI", "canEdit":false,

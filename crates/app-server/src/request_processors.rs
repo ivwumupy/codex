@@ -358,7 +358,6 @@ use codex_git_utils::resolve_root_git_project_for_trust;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::login_with_api_key;
-use codex_login::login_with_bedrock_api_key;
 use codex_mcp::McpRuntimeContext;
 use codex_mcp::McpServerStatusSnapshot;
 use codex_mcp::McpSnapshotDetail;
@@ -473,7 +472,6 @@ use codex_app_server_protocol::ServerRequest;
 
 pub(crate) mod account_processor;
 mod apps_processor;
-mod bedrock_auth;
 mod catalog_processor;
 mod command_exec_processor;
 pub(crate) mod config_processor;

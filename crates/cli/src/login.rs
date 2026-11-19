@@ -8,16 +8,10 @@
 //! support can request from users.
 
 use codex_core::config::Config;
-use codex_core::config::edit::ConfigEdit;
-use codex_core::config::edit::ConfigEditsBuilder;
-use codex_login::AuthManager;
-use codex_login::is_workload_identity_selected;
 use codex_login::login_with_api_key;
 use codex_login::logout_with_revoke;
-use codex_mcp::ema_auth_scope;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
-use codex_rmcp_client::EnterpriseOAuthCredentialGuard;
 use codex_utils_cli::CliConfigOverrides;
 use std::fs::OpenOptions;
 use std::io::IsTerminal;
@@ -168,22 +162,9 @@ fn read_stdin_secret(terminal_message: &str, reading_message: &str, empty_messag
     secret
 }
 
-/// Login using the OAuth device code flow.
+/// Report whether an API key is configured.
 pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
-
-    if is_workload_identity_selected() {
-        match AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await {
-            Ok(_) => {
-                eprintln!("Logged in using workload identity");
-                std::process::exit(0);
-            }
-            Err(err) => {
-                eprintln!("Error checking login status: {err}");
-                std::process::exit(1);
-            }
-        }
-    }
 
     let auth_config = config.auth_config();
     match auth_config
@@ -202,28 +183,9 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
                     std::process::exit(1);
                 }
             },
-            AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens => {
-                eprintln!("ChatGPT account login is unsupported.");
+            _ => {
+                eprintln!("Only API key authentication is supported.");
                 std::process::exit(1);
-            }
-            AuthMode::Headers => {
-                unreachable!("header auth cannot be loaded from auth storage")
-            }
-            AuthMode::AgentIdentity => {
-                eprintln!("Logged in using access token");
-                std::process::exit(0);
-            }
-            AuthMode::PersonalAccessToken => {
-                eprintln!("Logged in using personal access token");
-                std::process::exit(0);
-            }
-            AuthMode::BedrockApiKey => {
-                eprintln!("Logged in using Amazon Bedrock API key");
-                std::process::exit(0);
-            }
-            AuthMode::BedrockAccessKeys => {
-                eprintln!("Logged in using Amazon Bedrock AWS access keys");
-                std::process::exit(0);
             }
         },
         Ok(None) => {
@@ -241,37 +203,6 @@ pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
     let auth_route_config = config.auth_route_config();
 
-    // Cleanup is independent of the current feature gate. Retain the grant lock
-    // through account removal so another process cannot commit a late login.
-    let enterprise_guard = async {
-        let Some(profile) = &config.mcp_enterprise_managed_auth else {
-            return Ok::<_, anyhow::Error>(None);
-        };
-        let auth = config
-            .auth_config()
-            .load_auth(/*enable_codex_api_key_env*/ false)
-            .await?;
-        let Some(scope) = ema_auth_scope(auth.as_ref()) else {
-            return Ok(None);
-        };
-        EnterpriseOAuthCredentialGuard::acquire(
-            &profile.idp.credential_name(&scope),
-            &profile.idp.issuer,
-            config.auth_keyring_backend_kind(),
-        )
-        .await
-        .map(Some)
-    }
-    .await;
-    let cleanup_failed = match &enterprise_guard {
-        Ok(Some(guard)) => guard.delete_tokens().is_err(),
-        Ok(None) => false,
-        Err(_) => true,
-    };
-    if cleanup_failed {
-        eprintln!("Warning: failed to remove enterprise authorization; continuing account logout");
-    }
-
     let logged_out = match logout_with_revoke(
         &config.codex_home,
         config.cli_auth_credentials_store_mode,
@@ -286,27 +217,7 @@ pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
             std::process::exit(1);
         }
     };
-    drop(enterprise_guard);
-
-    let cleared_bedrock_config =
-        if let Some(paths) = ConfigEditsBuilder::bedrock_provider_config_paths_to_clear(&config) {
-            let edits = paths
-                .into_iter()
-                .map(|segments| ConfigEdit::ClearPath { segments });
-            if let Err(err) = ConfigEditsBuilder::for_config(&config)
-                .with_edits(edits)
-                .apply()
-                .await
-            {
-                eprintln!("Error clearing Amazon Bedrock configuration after logout: {err}");
-                std::process::exit(1);
-            }
-            true
-        } else {
-            false
-        };
-
-    if logged_out || cleared_bedrock_config {
+    if logged_out {
         eprintln!("Successfully logged out");
     } else {
         eprintln!("Not logged in");

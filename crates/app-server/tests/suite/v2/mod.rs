@@ -1,6 +1,5 @@
 mod account;
 
-mod account_gcp;
 mod agent_message_board;
 
 mod app_installed;
@@ -13,11 +12,6 @@ mod attestation;
 #[path = "auth_storage_originator_tests.rs"]
 mod auth_storage_originator;
 mod auto_env;
-#[path = "bedrock_gov_cloud_tests.rs"]
-mod bedrock_gov_cloud;
-#[path = "bedrock_service_tier_tests.rs"]
-mod bedrock_service_tier;
-mod bedrock_setup;
 mod client_metadata;
 mod code_mode_host;
 mod collaboration_mode_list;
@@ -69,10 +63,6 @@ mod external_agent_memory_concurrency;
 mod feedback;
 mod frozen_cloud_skills;
 mod fs;
-#[path = "gateway_oauth_tests.rs"]
-mod gateway_oauth;
-#[path = "gcp_setup_tests.rs"]
-mod gcp_setup;
 mod git_attribution;
 mod guardian_v2;
 mod history_notes_extension;

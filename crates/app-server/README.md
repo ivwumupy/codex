@@ -390,31 +390,6 @@ strip constraints in `[network_proxy]` or `[permissions.network]`; intermediarie
 host-local validation. This reader change does not migrate or
 version-gate published policy bundles.
 
-# Amazon Bedrock authentication
-
-If `model_providers.amazon-bedrock.aws.credential_export` is configured, Bedrock setup and
-Bedrock login return an error without changing configuration or saved credentials. Remove the
-exporter configuration before selecting another credential source. `aws.credential_export` and
-`aws.profile` cannot be configured together.
-
-Application network restrictions apply to each AWS credential and region HTTP request and to
-the Bedrock destination. Static access keys with an explicit region need no credential discovery.
-AWS profile `credential_process` commands are run by the AWS SDK; their network traffic is outside
-the application's HTTP policy. Configured credential exporters and AWS reauthentication commands
-require unrestricted application policy; policy revocation cancels their active work.
-
-After Bedrock login or setup, clients can call the experimental
-`account/bedrock/checkGovCloudRequirements` with `{}`. The server reloads configuration and
-requirements and returns `{ isGovCloud, shouldWarn }`. An explicitly configured official
-Bedrock endpoint hostname determines the region; with no URL or a custom proxy URL, the check
-resolves the AWS region using the current authentication state. It does not reload saved
-credentials or change login policy.
-For GovCloud, the advisory check requires API-only login and enabled managed application
-network restrictions with an explicit allow entry for the active Bedrock endpoint's domain.
-Non-Bedrock providers and commercial regions return both fields as `false`. Configuration or
-region resolution failures return an RPC error. This check does not block login or certify
-the entire network configuration.
-
 ## Stored thread attachments
 
 - `thread/attachment/add` — add a durable resource reference to a stored thread without loading it. Repeated writes with the same attachment type and identity key return the existing attachment.
@@ -597,94 +572,6 @@ MXC uses the standard `command/exec` streaming and process-control path, includi
 ConPTY when `tty` is enabled. The buffered legacy Windows sandbox restrictions on
 process control and custom output caps do not apply to MXC.
 
-### Gateway OAuth sign-in
-
-A provider can obtain its gateway token through browser OAuth or a credential
-export command. Clients with a gateway sign-in UI set
-`initialize.capabilities.explicitGatewayOauth: true`, complete initialization, and
-successfully call `account/gatewayOAuth/read` before sending authenticated requests,
-including startup `model/list` and inference requests. Repeat this probe on each
-new connection. A successful `initialize` alone does not confirm support: older
-servers can ignore the unknown capability and retain automatic browser login.
-
-Support for `account/gatewayOAuth/read` and `explicitGatewayOauth` is introduced
-together, so a successful read confirms support even when `required` is `false`
-or `status` is `notReady`. The returned status determines whether sign-in is needed;
-it is separate from the capability check. If the probe fails because the method is
-unsupported, require a server upgrade. Other errors and timeouts also leave
-authenticated requests blocked until a probe succeeds; do not silently fall back
-to automatic login.
-
-With explicit login enabled, app-server refreshes existing credentials, but only the
-`account/gatewayOAuth/login` RPC starts browser authorization. Requests needing
-sign-in fail promptly so the client can offer that flow.
-
-Configure `[model_providers.<id>.gateway_oauth.credential_export]` to obtain the
-gateway access token from a command on first use. Set `command`, optional `args`,
-and optional `timeout_ms` (default 30000). The command prints one access token to
-stdout. Codex caches it in memory and applies the configured gateway header or
-cookie. Choose either `credential_export` or OAuth settings such as
-`authorization_url`, `token_url`, and `client_id`. If the command fails,
-the request returns the export error. Use direct
-inference and catalog URLs because command credentials require same-origin catalog
-access and reject HTTP redirects. After an inference HTTP 401 or a rejected
-WebSocket upgrade with status 401, Codex clears the cached export and reruns
-the command once for the retry.
-
-Clients that omit the capability or set it to `false`, including the TUI, retain
-automatic browser authorization after initialization. Startup credential reads
-cannot open a browser before initialization. Explicit opt-in is shared by gateway
-managers using the same home and network configuration within the process and
-cannot be undone by a later connection that omits the capability.
-
-- `account/gatewayOAuth/read` returns the selected `providerId`,
-  `providerName`, `required`, `supportsDeviceAuth`, `status`, and `error`. `required` indicates that this
-  provider uses gateway OAuth, including when already signed in. With a credential
-  exporter, `required` is false and `status` is null. This read does not refresh
-  tokens or open a browser. `supportsDeviceAuth` means a
-  device authorization endpoint is configured. Older servers omit this field.
-  `notReady` means credentials are not ready. `succeeded` means saved credentials
-  are locally usable, not that a gateway request has been verified. Reads observe
-  usable replacement credentials saved by another process sharing the same home.
-- `account/gatewayOAuth/login` starts browser authorization and returns
-  `{"prompt": null}` after saving the credential. Providers requiring OpenAI
-  authentication need a primary account first. A second login request fails
-  while a login is active.
-  The initiating connection receives a `started` notification with `authUrl`; the
-  client must open that URL in a browser that can reach the server callback port.
-  Pass `deviceAuth: true` to use device authorization. If the saved credential
-  can be reused or refreshed, `prompt` is null. Otherwise it returns a
-  `prompt` with `verificationUrl`, `userCode`, and `loginId` before approval.
-  The initiating connection receives `account/gatewayOAuth/changed` with that
-  login ID when the attempt succeeds or fails. Login requires the connection
-  to accept these notifications.
-- `account/gatewayOAuth/cancel` cancels the calling connection's login and returns
-  `{}` after the active login releases its slot, so the client can immediately
-  start another login. Closing that connection also cancels its login and releases
-  the callback listener. Cancellation makes the pending login request fail.
-- `account/gatewayOAuth/changed` reports `notReady`, `started`, `succeeded`, or
-  `failed`, with an optional `error`. Notifications identify each configured
-  provider sharing the changed gateway credential, even when it is not the current
-  default. Clients can read readiness when connecting and after
-  changing configuration. Notifications follow the standard per-connection
-  `optOutNotificationMethods` setting.
-  These payloads never contain access tokens, refresh tokens, or the device grant credential.
-
-Read and login accept an optional `modelProvider`, for example
-`{"modelProvider": "my_gateway"}`. Omitted params, null params, and an omitted or
-null selector use the current provider. An explicit selector uses the provider definitions
-loaded at startup and is checked against current managed provider policy before
-credentials are read. Unknown or forbidden providers return an error instead of
-falling back to the current provider. Login keeps the selected provider for the
-entire attempt, even if the default changes. Cancel takes no params and cancels
-the calling connection's active login, regardless of its provider.
-Status notifications include `providerId`. During browser sign-in, inference
-requests fail promptly and can be retried when sign-in succeeds.
-
-`model/list` also checks gateway authentication before returning cached models.
-If authentication fails and the catalog's provider differs from the current configuration,
-it asks the client to restart Codex so the catalog and gateway sign-in use the same provider.
-
 ## Application network policy
 
 Application policy uses the same managed TOML merge as agent-network requirements:
@@ -766,14 +653,9 @@ Clients can filter the complete list by `settings.type === "customGateway"`.
 `canChangeDefault` accounts for required selection and higher-precedence overrides.
 
 Every entry contains `id`, `name`, `canEdit`, `baseUrl`, and `settings`.
-The shared `baseUrl` includes a configured endpoint override, including for
-Bedrock and GCP. It is null if unset or unsuitable for display.
-The `settings.type` field selects the provider-specific fields.
+The shared `baseUrl` is null if unset or unsuitable for display.
 
 - `openai` has no additional settings.
-- `bedrock` contains `profile` and `region` for either Bedrock provider.
-- `gcp` contains `projectId`, `location`, and `credentialFile`. The last field
-  is a path on the server host.
 - `customGateway` contains an `auth` object. Mode `none` has no other fields.
   Mode `environmentVariable` includes the variable name in `envKey`. Mode
   `externallyConfigured` includes a nullable `envKey` and indicates that the
@@ -784,15 +666,8 @@ Settings include inherited values and use null for unset nullable fields.
 Credential values are never resolved.
 
 `canEdit` indicates that at least one supported configuration field can be changed
-in the active user layer. Supported built-in fields are AWS profile/region for
-Bedrock and project/location/credential file for GCP. Custom providers support
-name, URL, and environment-variable authentication where applicable. Individual
-writes still require validation. Lower-precedence definitions can be overridden;
-required definitions are read-only. Both capabilities are false when user
-configuration is ignored. The flag does not establish credential validity or
-whether a setup flow that also selects a default provider will succeed.
-`account/bedrock/setup` targets `amazon-bedrock`; edits to `amazon-bedrock-runtime`
-must use that provider's configuration paths instead.
+in the active user layer. Custom providers support name, URL, and environment-variable authentication.
+Requirements can make individual fields read-only.
 
 Use `modelProvider/config/write` with a tagged `settings` patch. To create a
 custom gateway, send `type: "customGateway"`, `name`, and `baseUrl`. Omit
@@ -810,33 +685,9 @@ include its ID inside `settings`.
 }
 ```
 
-The Bedrock branch requires `amazon-bedrock` or `amazon-bedrock-runtime` and
-accepts `profile` and `region`. This patch changes only the runtime region.
-
-```json
-{
-  "settings": {
-    "type": "bedrock",
-    "providerId": "amazon-bedrock-runtime",
-    "region": "us-east-1"
-  }
-}
-```
-
-The GCP branch requires `gcp` and accepts `projectId`, `location`, and
-`credentialFile`. This patch clears the credential-file override.
-
-```json
-{ "settings": { "type": "gcp", "providerId": "gcp", "credentialFile": null } }
-```
-
-Omitted patch fields preserve their values. Setting a nullable field such as
-`region` to `null` removes its user-level override, so any inherited value takes effect.
-A supplied name must be a string. A supported built-in can receive its first
-override even when absent from the list. Custom gateways can share a display
-name with a built-in, except for names that select built-in behavior
-(`OpenAI`, `Amazon Bedrock`, `Amazon Bedrock Runtime`, and `Google Cloud Vertex AI`).
-Built-in provider IDs remain reserved.
+Omitted patch fields preserve their values. Setting `envKey` to null removes its
+user-level override. Provider IDs and names that select built-in authentication
+are reserved.
 
 Send only edited configuration fields. A null `baseUrl` in a summary can mean
 that the endpoint was redacted. When `settings.auth.mode` is `externallyConfigured`,
@@ -851,42 +702,8 @@ one app-server share the config queue: the last write to a field wins while omit
 siblings are preserved. Patches apply without an expected-version check. The
 response summarizes the saved configuration.
 
-Saving does not select a default, authenticate, or contact the provider. Use setup
-RPCs for authentication and selection. Saving the provider used by `model/list`
+Saving does not select a default, authenticate, or contact the provider. Set `model_provider` to select the saved provider. Saving the provider used by `model/list`
 invalidates its catalog for the next access. Existing threads keep their configuration.
-
-# GCP provider account
-
-The experimental `account/gcp/setup` method configures the built-in Vertex AI provider.
-
-- `projectId` (required) — Google Cloud project ID.
-- `location` (optional) — Defaults to `global`.
-- `credentialFile` (optional) — Absolute path to a credential file on the app-server
-  host. Omit it or pass `null` to clear the saved path in the active user
-  configuration and use Application Default Credentials (ADC), including
-  `GOOGLE_APPLICATION_CREDENTIALS`.
-
-If the active profile inherits `model_providers.gcp.credential_file` from the base
-`config.toml`, clearing the profile’s own setting would expose the base path again.
-Setup returns an error without saving changes. To use ADC, remove the inherited
-setting from the file named in the error and retry.
-
-Setup rejects a GCP `base_url` override or higher-priority settings that conflict
-with the request. It fetches an access token before saving the settings and
-selecting GCP, then returns `{}`. The next `model/list` reloads the catalog.
-`account/read` reports `{ "account": { "type": "gcp" }, "requiresOpenaiAuth": false }`.
-Use a model request to verify Vertex model access.
-
-Credential failures include `error.data.reason`.
-
-- `gcloudNotInstalled` — The app-server could not find `gcloud` on its PATH.
-- `credentialFileInvalid` — The path is invalid or the file is unreadable. For
-  default `gcloud` auth, setup also checks for a JSON object with a nonempty string `type`.
-- `authCommandFailed` — The token command failed, including when ADC is missing
-  or a token refresh fails.
-
-For personal sign-in, users can run `gcloud auth application-default login` on
-the app-server host and retry setup.
 
 ## Managed OpenTelemetry configuration
 

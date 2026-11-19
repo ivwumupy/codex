@@ -13,22 +13,18 @@ use super::model_providers::supported_fields;
 use super::model_providers::uses_builtin_auth;
 use super::model_providers::valid_endpoint;
 use super::model_providers::writable_user_layer;
-use codex_app_server_protocol::BedrockProviderId;
 use codex_app_server_protocol::ConfigBatchWriteParams;
 use codex_app_server_protocol::ConfigWriteErrorCode;
 use codex_app_server_protocol::CustomGatewaySettingsParams;
-use codex_app_server_protocol::GcpProviderId;
 use codex_app_server_protocol::ModelProviderConfigWriteParams;
 use codex_app_server_protocol::ModelProviderConfigWriteResponse;
 use codex_app_server_protocol::ProviderSettingsPatch;
 use codex_config::ConfigLayerStack;
 use codex_config::LoaderOverrides;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
-use codex_model_provider_info::GCP_PROVIDER_ID;
 
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::built_in_model_providers;
+use codex_model_provider_info::is_removed_cloud_provider_id;
 use std::collections::HashMap;
 
 impl ConfigManager {
@@ -87,7 +83,9 @@ fn provider_edits(
     let (provider_id, mut fields) = match &params.settings {
         ProviderSettingsPatch::CustomGateway(patch) => {
             let target = patch.provider_id.as_deref();
-            if target.is_some_and(|id| builtins.contains_key(id)) {
+            if target
+                .is_some_and(|id| builtins.contains_key(id) || is_removed_cloud_provider_id(id))
+            {
                 return Err(invalid(
                     "A custom provider or gateway cannot use a built-in provider ID.",
                 ));
@@ -113,6 +111,7 @@ fn provider_edits(
                     .or_else(|| effective.get("model_provider")?.as_str());
                 allocate_custom_id(name, |id| {
                     builtins.contains_key(id)
+                        || is_removed_cloud_provider_id(id)
                         || configured.is_some_and(|table| table.get(id).is_some())
                         || default_id == Some(id)
                 })
@@ -124,29 +123,8 @@ fn provider_edits(
             }
             (id, fields)
         }
-        ProviderSettingsPatch::Bedrock(patch) => {
-            let id = match patch.provider_id {
-                BedrockProviderId::AmazonBedrock => AMAZON_BEDROCK_PROVIDER_ID,
-                BedrockProviderId::AmazonBedrockRuntime => AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
-            };
-            (
-                id.to_owned(),
-                patch_fields([
-                    ("aws.profile", &patch.profile),
-                    ("aws.region", &patch.region),
-                ]),
-            )
-        }
-        ProviderSettingsPatch::Gcp(patch) => {
-            let GcpProviderId::Gcp = patch.provider_id;
-            (
-                GCP_PROVIDER_ID.to_owned(),
-                patch_fields([
-                    ("project_id", &patch.project_id),
-                    ("location", &patch.location),
-                    ("credential_file", &patch.credential_file),
-                ]),
-            )
+        ProviderSettingsPatch::Bedrock(_) | ProviderSettingsPatch::Gcp(_) => {
+            return Err(invalid("Cloud provider configuration is unsupported."));
         }
     };
     if fields.iter().any(|(_, value)| *value == Some("")) {
@@ -157,7 +135,7 @@ fn provider_edits(
     let existing = configured.and_then(|providers| providers.get(&provider_id));
     let builtin = builtins.get(&provider_id);
     let user_layer = writable_user_layer(layers, overrides);
-    let supported = supported_fields(&provider_id, existing, builtin);
+    let supported = supported_fields(builtin);
     for (field, _) in &fields {
         if !supported.contains(field) {
             return Err(invalid(

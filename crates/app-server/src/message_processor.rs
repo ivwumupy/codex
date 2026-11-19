@@ -50,7 +50,6 @@ use crate::request_processors::ThreadRequestProcessor;
 use crate::request_processors::ThreadResumeTarget;
 use crate::request_processors::TurnRequestProcessor;
 use crate::request_processors::WindowsSandboxRequestProcessor;
-use crate::request_processors::account_processor::handle_gcp_setup;
 use crate::request_processors::read_server_diagnostics;
 use crate::request_serialization::QueuedInitializedRequest;
 use crate::request_serialization::RequestSerializationQueueKey;
@@ -313,10 +312,6 @@ impl MessageProcessor {
             remote_control_handle,
             plugin_startup_tasks,
         } = args;
-        // Startup credential reads must not open a browser before initialize selects the policy.
-        let gateway_login_control =
-            codex_login::GatewayLoginControl::for_runtime(&auth_manager.runtime_config());
-        gateway_login_control.require_explicit_login();
         let thread_state_manager = ThreadStateManager::new();
         outgoing.watch_user_verification_auth(Arc::clone(&auth_manager));
         // The thread store is intentionally process-scoped. Config reloads can
@@ -604,7 +599,6 @@ impl MessageProcessor {
                 );
         }
         let initialize_processor = InitializeRequestProcessor::new(
-            gateway_login_control,
             outgoing.clone(),
             Arc::clone(&config),
             Arc::clone(&user_verification),
@@ -923,8 +917,6 @@ impl MessageProcessor {
     ) {
         session_state.disconnect.cancel();
         session_state.rpc_gate.close().await;
-        self.account_processor
-            .gateway_connection_closed(connection_id);
         self.request_serialization_queues.discard_closed().await;
         self.outgoing
             .disconnect_user_verification_connection(connection_id)
@@ -1826,49 +1818,15 @@ impl MessageProcessor {
                     .login_account(request_id.clone(), params)
                     .await
             }
-            ClientRequest::BedrockDiscover { params, .. } => {
-                self.account_processor.bedrock_discover(params).await
-            }
-            ClientRequest::BedrockSetup { params, .. } => {
-                self.account_processor.bedrock_setup(params).await
-            }
-            ClientRequest::GcpSetup { params, .. } => {
-                handle_gcp_setup(&self.account_processor, params).await
-            }
-            ClientRequest::BedrockCheckGovCloudRequirements { .. } => {
-                self.account_processor
-                    .bedrock_check_gov_cloud_requirements()
-                    .await
-            }
-            ClientRequest::GatewayOAuthRead { params, .. } => Box::pin(
-                self.account_processor
-                    .gateway_oauth_read(params.unwrap_or_default()),
-            )
-            .await
-            .map(|response| Some(response.into())),
-            ClientRequest::GatewayOAuthLogin { params, .. } => {
-                if session
-                    .opted_out_notification_methods()
-                    .contains("account/gatewayOAuth/changed")
-                {
-                    Err(invalid_request(
-                        "Gateway login requires account/gatewayOAuth/changed notifications",
-                    ))
-                } else {
-                    Box::pin(self.account_processor.gateway_oauth_login(
-                        params.unwrap_or_default(),
-                        connection_id,
-                        &session.rpc_gate,
-                    ))
-                    .await
-                    .map(|response| Some(response.into()))
-                }
-            }
-            ClientRequest::GatewayOAuthCancel { .. } => {
-                Box::pin(self.account_processor.gateway_oauth_cancel(connection_id))
-                    .await
-                    .map(|response| Some(response.into()))
-            }
+            ClientRequest::BedrockDiscover { .. }
+            | ClientRequest::BedrockSetup { .. }
+            | ClientRequest::GcpSetup { .. }
+            | ClientRequest::BedrockCheckGovCloudRequirements { .. }
+            | ClientRequest::GatewayOAuthRead { .. }
+            | ClientRequest::GatewayOAuthLogin { .. }
+            | ClientRequest::GatewayOAuthCancel { .. } => Err(invalid_request(
+                "Cloud account authentication is unsupported. Configure an API endpoint and API key.",
+            )),
             ClientRequest::AccountSessionsList { .. }
             | ClientRequest::AccountSessionsSwitch { .. } => {
                 Err(invalid_request("ChatGPT account sessions are unsupported."))
@@ -1984,10 +1942,6 @@ impl MessageProcessor {
 #[cfg(test)]
 #[path = "message_processor_tracing_tests.rs"]
 mod message_processor_tracing_tests;
-
-#[cfg(test)]
-#[path = "message_processor_gateway_oauth_tests.rs"]
-mod gateway_oauth_tests;
 
 #[cfg(test)]
 #[path = "message_processor_thread_lifecycle_tests.rs"]

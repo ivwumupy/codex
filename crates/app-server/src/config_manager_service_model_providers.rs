@@ -11,16 +11,14 @@ use codex_app_server_protocol::ProviderSettings;
 use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerStack;
 use codex_config::LoaderOverrides;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_NAME;
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME;
-use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::GCP_PROVIDER_NAME;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_NAME;
 use codex_model_provider_info::built_in_model_providers;
+use codex_model_provider_info::is_removed_cloud_provider_id;
 use std::collections::BTreeSet;
 
 fn string_field(config: Option<&TomlValue>, key: &str) -> Option<String> {
@@ -89,6 +87,7 @@ impl ConfigManager {
         let ids: BTreeSet<_> = configured
             .into_iter()
             .flat_map(|table| table.keys().map(String::as_str))
+            .filter(|id| !is_removed_cloud_provider_id(id))
             .chain([OPENAI_PROVIDER_ID])
             .collect();
         let data = ids
@@ -121,7 +120,6 @@ pub(super) fn summarize_provider(
     writable_user_layer: Option<&ConfigLayerEntry>,
 ) -> ModelProviderSummary {
     let display_name = match builtin {
-        Some(_) if id == AMAZON_BEDROCK_PROVIDER_ID => "Amazon Bedrock Mantle",
         Some(provider) => &provider.name,
         None => config.and_then(|c| c.get("name")?.as_str()).unwrap_or(id),
     };
@@ -138,18 +136,6 @@ pub(super) fn summarize_provider(
     .map(str::to_owned);
     let settings = match id {
         OPENAI_PROVIDER_ID => ProviderSettings::OpenAi,
-        AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID => {
-            let aws = config.and_then(|provider| provider.get("aws"));
-            ProviderSettings::Bedrock {
-                profile: string_field(aws, "profile"),
-                region: string_field(aws, "region"),
-            }
-        }
-        GCP_PROVIDER_ID => ProviderSettings::Gcp {
-            project_id: string_field(config, "project_id"),
-            location: string_field(config, "location"),
-            credential_file: string_field(config, "credential_file"),
-        },
         _ => {
             let env_key = string_field(config, "env_key");
             let auth = if external_auth {
@@ -162,7 +148,7 @@ pub(super) fn summarize_provider(
             ProviderSettings::CustomGateway { auth }
         }
     };
-    let can_edit = supported_fields(id, config, builtin).iter().any(|&field| {
+    let can_edit = supported_fields(builtin).iter().any(|&field| {
         (field == "name" || !requires_rename)
             && (field != "env_key" || !external_auth)
             && field_is_writable(layers, writable_user_layer, id, field)
@@ -195,25 +181,11 @@ pub(super) fn writable_user_layer<'a>(
         .filter(|user| !user.is_disabled() && !overrides.ignore_user_config)
 }
 
-pub(super) fn supported_fields(
-    id: &str,
-    config: Option<&TomlValue>,
-    builtin: Option<&ModelProviderInfo>,
-) -> &'static [&'static str] {
-    let aws_config = config.and_then(|config| config.get("aws"));
-    match (builtin, id) {
-        (Some(_), AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID) => {
-            if config.is_some_and(|config| config.get("auth").is_some()) {
-                &[]
-            } else if aws_config.is_some_and(|aws| aws.get("credential_export").is_some()) {
-                &["aws.region"]
-            } else {
-                &["aws.profile", "aws.region"]
-            }
-        }
-        (Some(_), GCP_PROVIDER_ID) => &["project_id", "location", "credential_file"],
-        (Some(_), _) => &[],
-        (None, _) => &["name", "base_url", "env_key"],
+pub(super) fn supported_fields(builtin: Option<&ModelProviderInfo>) -> &'static [&'static str] {
+    if builtin.is_some() {
+        &[]
+    } else {
+        &["name", "base_url", "env_key"]
     }
 }
 
