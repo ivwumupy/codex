@@ -1,4 +1,3 @@
-use codex_analytics::PluginInstallSource;
 use codex_core::config::ConfigBuilder;
 use codex_core::plugins_manager_for_config_with_runtime;
 use codex_core_plugins::PluginInstallError;
@@ -109,11 +108,8 @@ impl ExternalAgentConfigService {
         let plugins_manager =
             plugins_manager_for_config_with_runtime(&config, Arc::clone(&self.auth_manager))
                 .await
-                .map_err(io::Error::other)?
-                .with_plugin_install_source(PluginInstallSource::ExternalAgentMigration);
-        if let Some(analytics_events_client) = self.analytics_events_client.clone() {
-            plugins_manager.set_analytics_events_client(analytics_events_client);
-        }
+                .map_err(io::Error::other)?;
+
         let configured_marketplace_paths = plugins_manager
             .list_marketplaces_for_config(
                 &config.plugins_config_input(),

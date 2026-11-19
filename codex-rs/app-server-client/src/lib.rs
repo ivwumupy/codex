@@ -21,8 +21,7 @@
 //! unread notifications cannot prevent request responses from being delivered.
 
 mod cloud;
-pub mod cloud_backend;
-pub use codex_cloud_client::ProjectEnvironment;
+pub use cloud::ProjectEnvironment;
 mod path;
 mod remote;
 mod remote_websocket;
@@ -725,7 +724,7 @@ impl AppServerRequestHandle {
         &self,
         request_id: RequestId,
         params: codex_app_server_protocol::ThreadStartParams,
-        project: codex_cloud_client::ProjectEnvironment,
+        project: ProjectEnvironment,
     ) -> Result<codex_app_server_protocol::ThreadStartResponse, TypedRequestError> {
         let response = match self {
             Self::Cloud(handle) => {

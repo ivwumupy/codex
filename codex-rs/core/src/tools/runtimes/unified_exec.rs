@@ -9,7 +9,7 @@ use crate::exec::ExecExpiration;
 use crate::guardian::GUARDIAN_REVIEW_TIMEOUT;
 use crate::guardian::GuardianNetworkAccessTrigger;
 use crate::guardian::routes_approval_policy_to_guardian;
-use crate::plugins::metrics::sidecar_for_command;
+
 use crate::sandboxing::ExecOptions;
 use crate::sandboxing::ExecServerEnvConfig;
 use crate::sandboxing::SandboxPermissions;
@@ -40,7 +40,7 @@ use crate::unified_exec::TerminalPermissions;
 use crate::unified_exec::TerminalSandboxSource;
 use crate::unified_exec::UnifiedExecProcess;
 use crate::unified_exec::UnifiedExecProcessManager;
-use codex_core_plugins::PluginMetricsSidecar;
+
 use codex_features::Feature;
 use codex_file_system::WindowsSandboxSelection;
 use codex_network_proxy::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
@@ -104,7 +104,6 @@ pub struct UnifiedExecRuntime<'a> {
 
 pub(crate) struct UnifiedExecAttempt {
     pub(crate) process: UnifiedExecProcess,
-    pub(crate) metrics_sidecar: Option<PluginMetricsSidecar>,
     pub(crate) permissions: TerminalPermissions,
 }
 
@@ -422,16 +421,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
                 }
             }
         }
-        let metrics_sidecar = sidecar_for_command(
-            ctx,
-            &prepared.resolved.command,
-            &prepared.cwd,
-            prepared.turn_environment.environment().as_ref(),
-        )
-        .await;
-        if let Some(sidecar) = metrics_sidecar.as_ref() {
-            sidecar.install_output_env(&mut env);
-        }
+
         #[cfg(unix)]
         let runtime_path_prepends = {
             let mut runtime_path_prepends = RuntimePathPrepends::default();
@@ -551,9 +541,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         } else {
             command
         };
-        let sidecar_permissions = metrics_sidecar
-            .as_ref()
-            .map(PluginMetricsSidecar::additional_permissions);
+
         let snapshot_permissions = shell_snapshot_location
             .as_ref()
             .filter(|_| {
@@ -569,11 +557,10 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
                     attempt.sandbox_cwd,
                 )
             });
-        let internal_permissions =
-            merge_permission_profiles(sidecar_permissions.as_ref(), snapshot_permissions.as_ref());
+
         let additional_permissions = merge_permission_profiles(
             prepared.permissions.additional_permissions.as_ref(),
-            internal_permissions.as_ref(),
+            snapshot_permissions.as_ref(),
         );
         let executor_managed = self.uses_executor_managed_process_sandbox(req);
         let permissions = TerminalPermissions::for_launch(
@@ -590,7 +577,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
                 SandboxPermissions::UseDefault
             },
             prepared.permissions.additional_permissions.as_ref(),
-            internal_permissions.as_ref(),
+            snapshot_permissions.as_ref(),
         );
         let baseline_file_system = prepared
             .turn_environment
@@ -659,7 +646,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         process._shell_snapshot = shell_snapshot;
         Ok(UnifiedExecAttempt {
             process,
-            metrics_sidecar,
+
             permissions,
         })
     }

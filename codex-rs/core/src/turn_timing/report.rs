@@ -2,11 +2,11 @@
 
 use super::TurnProfileState;
 use super::duration_to_u64_ms;
-use codex_analytics::TurnCriticalPath;
-use codex_analytics::TurnCriticalPathDurations;
 use codex_otel::TURN_CRITICAL_PATH_CAPTURE_METRIC;
 use codex_otel::TURN_CRITICAL_PATH_COMPONENT_METRIC;
 use codex_otel::TURN_CRITICAL_PATH_DURATION_METRIC;
+use codex_protocol::turn_timing::TurnCriticalPath;
+use codex_protocol::turn_timing::TurnCriticalPathDurations;
 use std::time::Instant;
 
 pub(super) fn completed_critical_path(state: &TurnProfileState, end: Instant) -> TurnCriticalPath {
@@ -33,7 +33,7 @@ pub(super) fn completed_critical_path(state: &TurnProfileState, end: Instant) ->
 
 pub(super) fn record_turn_profile_metrics(
     turn: &super::TurnContext,
-    profile: &codex_analytics::TurnProfile,
+    profile: &codex_protocol::turn_timing::TurnProfile,
 ) {
     let telemetry = &turn.session_telemetry;
     let sku = codex_otel::bounded_product_sku(turn.config.apps_mcp_product_sku.as_deref())

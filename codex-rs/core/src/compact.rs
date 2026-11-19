@@ -26,14 +26,6 @@ use crate::session::step_context::StepContext;
 use crate::session::turn::get_last_assistant_message_from_turn;
 use crate::session::turn_context::TurnContext;
 use crate::state::AutoCompactWindowIds;
-use codex_analytics::CodexCompactionEvent;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionStatus;
-use codex_analytics::CompactionStrategy;
-use codex_analytics::CompactionTrigger;
-use codex_analytics::now_unix_seconds;
 use codex_context_fragments::AnnotatedContent;
 use codex_context_fragments::set_annotated_content;
 use codex_context_fragments::truncate_annotated_text;
@@ -41,6 +33,12 @@ use codex_history::CodexHarnessMetadata;
 use codex_history::ResponseItemEnvelope;
 use codex_http_client::RetryAfter;
 use codex_protocol::ResponseItemId;
+use codex_protocol::compaction::CompactionImplementation;
+use codex_protocol::compaction::CompactionPhase;
+use codex_protocol::compaction::CompactionReason;
+
+use codex_protocol::compaction::CompactionStrategy;
+use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
@@ -53,6 +51,7 @@ use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::time::now_unix_seconds;
 use codex_protocol::user_input::UserInput;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_utils_output_truncation::approx_token_count;
@@ -184,30 +183,15 @@ async fn run_compact_task_inner(
     compaction_metadata: CompactionTurnMetadata,
 ) -> CodexResult<()> {
     let trigger = compaction_metadata.trigger();
-    let reason = compaction_metadata.reason();
+
     let phase = compaction_metadata.phase();
-    let attempt = CompactionAnalyticsAttempt::begin(
-        sess.as_ref(),
-        turn_context.as_ref(),
-        trigger,
-        reason,
-        CompactionImplementation::Responses,
-        phase,
-    )
-    .await;
+
     let pre_compact_outcome = run_pre_compact_hooks(&sess, &turn_context, trigger).await;
     match pre_compact_outcome {
         PreCompactHookOutcome::Continue => {}
         PreCompactHookOutcome::Stopped => {
             let error = CodexErr::TurnAborted;
-            attempt
-                .track(
-                    sess.as_ref(),
-                    CompactionStatus::Interrupted,
-                    Some(&error),
-                    CompactionAnalyticsDetails::default(),
-                )
-                .await;
+
             return Err(error);
         }
     }
@@ -220,30 +204,14 @@ async fn run_compact_task_inner(
         compaction_metadata,
     )
     .await;
-    let status = compaction_status_from_result(&result);
-    let codex_error = result.as_ref().err();
+
     if result.is_ok() {
         let post_compact_outcome = run_post_compact_hooks(&sess, &turn_context, trigger).await;
         if let PostCompactHookOutcome::Stopped = post_compact_outcome {
-            attempt
-                .track(
-                    sess.as_ref(),
-                    status,
-                    codex_error,
-                    CompactionAnalyticsDetails::default(),
-                )
-                .await;
             return Err(CodexErr::TurnAborted);
         }
     }
-    attempt
-        .track(
-            sess.as_ref(),
-            status,
-            codex_error,
-            CompactionAnalyticsDetails::default(),
-        )
-        .await;
+
     if let Err(err) = &result
         && !matches!(phase, CompactionPhase::PostTurn)
         && !matches!(
@@ -251,7 +219,6 @@ async fn run_compact_task_inner(
             CodexErrorDetails::Interrupted | CodexErrorDetails::TurnAborted
         )
     {
-        sess.track_turn_codex_error(turn_context.as_ref(), err);
         // Pre-turn failures are reported after preserving the incoming prompt.
         if !matches!(phase, CompactionPhase::PreTurn) {
             let event = EventMsg::Error(err.to_error_event(/*message_prefix*/ None));
@@ -458,115 +425,6 @@ async fn run_compact_task_inner_impl(
     sess.emit_turn_item_completed(&turn_context, compaction_item)
         .await;
     Ok(summary_suffix)
-}
-
-pub(crate) struct CompactionAnalyticsAttempt {
-    thread_id: String,
-    turn_id: String,
-    trigger: CompactionTrigger,
-    reason: CompactionReason,
-    implementation: CompactionImplementation,
-    phase: CompactionPhase,
-    active_context_tokens_before: i64,
-    started_at: u64,
-    start_instant: Instant,
-}
-
-#[derive(Clone, Copy, Default)]
-pub(crate) struct CompactionAnalyticsDetails {
-    pub(crate) active_context_tokens_before: Option<i64>,
-    pub(crate) retained_image_count: Option<usize>,
-    pub(crate) compaction_summary_tokens: Option<i64>,
-    pub(crate) cached_input_tokens: Option<i64>,
-    pub(crate) cache_write_input_tokens: Option<i64>,
-}
-
-impl CompactionAnalyticsAttempt {
-    pub(crate) async fn begin(
-        sess: &Session,
-        turn_context: &TurnContext,
-        trigger: CompactionTrigger,
-        reason: CompactionReason,
-        implementation: CompactionImplementation,
-        phase: CompactionPhase,
-    ) -> Self {
-        let active_context_tokens_before = sess.get_total_token_usage().await;
-        Self {
-            thread_id: sess.thread_id.to_string(),
-            turn_id: turn_context.sub_id.clone(),
-            trigger,
-            reason,
-            implementation,
-            phase,
-            active_context_tokens_before,
-            started_at: now_unix_seconds(),
-            start_instant: Instant::now(),
-        }
-    }
-
-    pub(crate) async fn track(
-        self,
-        sess: &Session,
-        status: CompactionStatus,
-        codex_error: Option<&CodexErr>,
-        details: CompactionAnalyticsDetails,
-    ) {
-        let CompactionAnalyticsDetails {
-            active_context_tokens_before,
-            retained_image_count,
-            compaction_summary_tokens,
-            cached_input_tokens,
-            cache_write_input_tokens,
-        } = details;
-        let active_context_tokens_before =
-            active_context_tokens_before.unwrap_or(self.active_context_tokens_before);
-        let active_context_tokens_after = sess.get_total_token_usage().await;
-        sess.services
-            .analytics_events_client
-            .track_compaction(CodexCompactionEvent {
-                thread_id: self.thread_id,
-                turn_id: self.turn_id,
-                trigger: self.trigger,
-                reason: self.reason,
-                implementation: self.implementation,
-                phase: self.phase,
-                strategy: CompactionStrategy::Memento,
-                status,
-                codex_error_kind: codex_error.map(Into::into),
-                codex_error_http_status_code: codex_error
-                    .and_then(CodexErr::http_status_code_value),
-                usage_limit_window_minutes: codex_error.and_then(|error| match error.details() {
-                    CodexErrorDetails::UsageLimitReached(error) => error.limit_window_minutes,
-                    _ => None,
-                }),
-                active_context_tokens_before,
-                active_context_tokens_after,
-                retained_image_count,
-                compaction_summary_tokens,
-                cached_input_tokens,
-                cache_write_input_tokens,
-                started_at: self.started_at,
-                completed_at: now_unix_seconds(),
-                duration_ms: Some(
-                    u64::try_from(self.start_instant.elapsed().as_millis()).unwrap_or(u64::MAX),
-                ),
-            });
-    }
-}
-
-pub(crate) fn compaction_status_from_result<T>(result: &CodexResult<T>) -> CompactionStatus {
-    match result {
-        Ok(_) => CompactionStatus::Completed,
-        Err(err)
-            if matches!(
-                err.details(),
-                CodexErrorDetails::Interrupted | CodexErrorDetails::TurnAborted
-            ) =>
-        {
-            CompactionStatus::Interrupted
-        }
-        Err(_) => CompactionStatus::Failed,
-    }
 }
 
 pub fn content_items_to_text(content: &[ContentItem]) -> Option<String> {

@@ -8,15 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewTrackContext;
-use codex_analytics::GuardianReviewedAction;
 use codex_extension_api::ExtensionData;
 use codex_otel::SessionTelemetry;
 use codex_protocol::approvals::GuardianAssessmentAction;
 use codex_protocol::approvals::GuardianReviewReason;
+use codex_protocol::guardian::GuardianApprovalRequestSource;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewedAction;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::GuardianAssessmentDecisionSource;
@@ -51,7 +49,7 @@ pub struct ReviewMetadata {
 pub struct ReviewReport {
     started: Option<GuardianAssessmentEvent>,
     started_instant: Instant,
-    tracking: GuardianReviewTrackContext,
+
     approval_request_source: GuardianApprovalRequestSource,
     reviewed_action: GuardianReviewedAction,
 }
@@ -59,17 +57,7 @@ pub struct ReviewReport {
 impl ReviewReport {
     pub fn new(metadata: ReviewMetadata) -> Self {
         let started_instant = Instant::now();
-        let tracking = GuardianReviewTrackContext::new(
-            metadata.thread_id,
-            metadata.turn_id.clone(),
-            metadata.review_id.clone(),
-            metadata.target_item_id.clone(),
-            metadata.approval_request_source,
-            metadata.reviewed_action.clone(),
-            metadata
-                .timeout
-                .map_or(0, |timeout| timeout.as_millis() as u64),
-        );
+
         let started = metadata.action.map(|action| GuardianAssessmentEvent {
             review_reason: Some(metadata.review_reason),
             model_context: Some(metadata.model_context),
@@ -78,7 +66,9 @@ impl ReviewReport {
             plugin_id: metadata.plugin_id,
             script_path: metadata.script_path,
             turn_id: metadata.turn_id,
-            started_at_ms: tracking.started_at_ms.try_into().unwrap_or_default(),
+            started_at_ms: codex_protocol::time::now_unix_millis()
+                .try_into()
+                .unwrap_or_default(),
             completed_at_ms: None,
             status: GuardianAssessmentStatus::InProgress,
             risk_level: None,
@@ -90,7 +80,7 @@ impl ReviewReport {
         Self {
             started,
             started_instant,
-            tracking,
+
             approval_request_source: metadata.approval_request_source,
             reviewed_action: metadata.reviewed_action,
         }
@@ -124,7 +114,7 @@ impl ReviewReport {
     pub fn track(
         &self,
         telemetry: &SessionTelemetry,
-        analytics: &AnalyticsEventsClient,
+
         result: GuardianReviewAnalyticsResult,
         completed_at_ms: u64,
         elapsed: Duration,
@@ -136,7 +126,6 @@ impl ReviewReport {
             &self.reviewed_action,
             elapsed,
         );
-        analytics.track_guardian_review(&self.tracking, result, completed_at_ms, elapsed);
     }
 }
 

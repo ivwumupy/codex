@@ -71,10 +71,8 @@ fn review_completion_uses_one_monotonic_duration(
             reasoning_effort: None,
         },
     });
-    report.tracking.started_at_ms = 1_654_073_807_000;
     if let Some(event) = &mut report.started {
-        event.started_at_ms =
-            i64::try_from(report.tracking.started_at_ms).expect("start timestamp");
+        event.started_at_ms = 1_654_073_807_000;
     }
     assert_eq!(report.started_event().is_some(), has_client_event);
     report.started_instant = Instant::now() - Duration::from_millis(456);
@@ -123,7 +121,6 @@ fn review_completion_uses_one_monotonic_duration(
     report.started_instant -= Duration::from_secs(1);
     report.track(
         &telemetry,
-        &AnalyticsEventsClient::disabled(),
         completed.analytics,
         /*completed_at_ms*/ 1_792_141_011_000,
         elapsed,

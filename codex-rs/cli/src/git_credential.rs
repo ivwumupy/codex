@@ -5,8 +5,6 @@ use anyhow::ensure;
 use chrono::Utc;
 use clap::Args;
 use clap::ValueEnum;
-use codex_app_server::in_process::EmbeddedNetworkPolicy;
-use codex_cloud_config::managed_config_bundle_loader_for_auth;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
@@ -132,45 +130,9 @@ async fn git_token_for_origin(
     if !unexpired() || !token.bytes().all(|byte| (0x21..=0x7e).contains(&byte)) {
         return Ok(None);
     }
-    let requirements = config.config_layer_stack.requirements_toml();
-    // Config-server OAuth uses the OS keyring, which Git must never open.
     ensure!(
-        requirements
-            .config_server
-            .as_ref()
-            .is_none_or(|server| server.oauth.is_none()),
-        "Git cannot verify Codex workspace policy using a protected login"
-    );
-    let login_changes = manager.auth_change_receiver();
-    let network = EmbeddedNetworkPolicy::load(&Default::default()).await;
-    let bundle = managed_config_bundle_loader_for_auth(
-        network.bind_bootstrap_auth(config.auth_config()),
-        &auth,
-        requirements,
-    )
-    .await
-    .map_err(config_unavailable)?;
-    let effective = builder
-        .cloud_config_bundle(bundle)
-        .build()
-        .await
-        .map_err(config_unavailable)?;
-    effective
-        .config_layer_stack
-        .ensure_config_server_applied()
-        .map_err(config_unavailable)?;
-    ensure!(
-        matches_origin_and_store(&effective) && effective.auth_config().allows_auth(&auth),
+        config.auth_config().allows_auth(&auth),
         "Codex workspace policy does not permit this Git login"
-    );
-    // The host can sign out or rotate the saved login while Git waits for policy.
-    manager
-        .reload_with_cached_auth()
-        .await
-        .map_err(config_unavailable)?;
-    ensure!(
-        !login_changes.has_changed()? && unexpired(),
-        "Codex login changed or expired while checking Git access"
     );
     Ok(Some(token))
 }

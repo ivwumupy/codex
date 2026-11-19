@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::time::SystemTime;
 
-use codex_analytics::AnalyticsEventsClient;
 use codex_core::context::GuardianContextMode;
 use codex_core::context::GuardianReviewEvidence;
 use codex_core::context::NodeReplReviewEvidence;
@@ -161,7 +160,7 @@ impl GuardianV2Extension {
         }
         let metrics = score_progress.metrics.clone();
         let context_mode = GuardianContextMode::from_history(input.conversation_history.as_ref());
-        let analytics = input.session_store.get::<AnalyticsEventsClient>();
+
         let sampled_at = SystemTime::now();
         let Some(conversation) = input.thread_store.get::<ConversationBackend>() else {
             let index = score_progress.observe(&input);
@@ -414,7 +413,7 @@ impl GuardianV2Extension {
             score_progress,
             parent_model,
             metrics,
-            analytics,
+
             sampled_at,
             tool_call_index,
             event_sink,

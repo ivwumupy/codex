@@ -9,7 +9,7 @@ use crate::model_catalog::ModelCatalog;
 use crate::otel_config::map_otel_requirements_to_api;
 use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
-use codex_analytics::AnalyticsEventsClient;
+
 use codex_app_server_protocol::AllowDenyRequirement;
 use codex_app_server_protocol::AutoReviewRequirements;
 use codex_app_server_protocol::BrowserUseAccessApprovalLifetime;
@@ -90,7 +90,6 @@ pub(crate) struct ConfigRequestProcessor {
     config_manager: ConfigManager,
     thread_manager: Arc<ThreadManager>,
     model_catalog: Arc<ModelCatalog>,
-    analytics_events_client: AnalyticsEventsClient,
 }
 
 impl ConfigRequestProcessor {
@@ -99,14 +98,12 @@ impl ConfigRequestProcessor {
         config_manager: ConfigManager,
         thread_manager: Arc<ThreadManager>,
         model_catalog: Arc<ModelCatalog>,
-        analytics_events_client: AnalyticsEventsClient,
     ) -> Self {
         Self {
             outgoing,
             config_manager,
             thread_manager,
             model_catalog,
-            analytics_events_client,
         }
     }
 
@@ -382,9 +379,7 @@ impl ConfigRequestProcessor {
                 .telemetry_metadata_for_installed_plugin(&plugin_id)
                 .await;
             if enabled {
-                self.analytics_events_client.track_plugin_enabled(metadata);
             } else {
-                self.analytics_events_client.track_plugin_disabled(metadata);
             }
         }
     }

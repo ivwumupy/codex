@@ -3818,7 +3818,6 @@ async fn spawn_agent_full_fork_legacy_compaction_rebuilds_child_instructions_onc
             Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
             empty_extension_registry(),
             Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-            /*analytics_events_client*/ None,
             crate::thread_manager::passthrough_image_store(),
             crate::ThreadStoreBuilder::from_config(&parent_config, harness.state_db.clone())
                 .build(),
@@ -4979,7 +4978,6 @@ async fn resume_thread_subagent_restores_stored_metadata() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         crate::thread_manager::passthrough_image_store(),
         thread_store.clone(),
         /*agent_graph_store*/ None,

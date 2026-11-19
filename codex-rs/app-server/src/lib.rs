@@ -23,7 +23,6 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 
-use crate::analytics_utils::analytics_events_client_from_config;
 use crate::config_manager::ConfigManager;
 use crate::connection_cleanup::ConnectionCleanupTasks;
 use crate::message_processor::MessageProcessor;
@@ -48,7 +47,7 @@ use crate::transport::start_control_socket_acceptor;
 use crate::transport::start_remote_control;
 use crate::transport::start_stdio_connection;
 use crate::transport::start_websocket_acceptor;
-use codex_analytics::AppServerRpcTransport;
+
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::JSONRPCMessage;
 use codex_app_server_protocol::ServerNotification;
@@ -97,7 +96,6 @@ fn is_unsupported_config_error(err: &std::io::Error) -> bool {
 pub use codex_agent_message_board_host::delete_agent_message_boards;
 pub use codex_agent_message_board_host::install_agent_message_board;
 
-mod analytics_utils;
 mod app_info;
 mod app_server_tracing;
 mod attestation;
@@ -569,7 +567,6 @@ pub async fn run_main_with_transport_options(
         AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)
             .await
             .map_err(std::io::Error::other)?;
-    config_manager.update_managed_config_loader(auth_manager.clone(), &config);
     config_manager
         .sync_default_client_residency_requirement()
         .await;
@@ -683,15 +680,8 @@ pub async fn run_main_with_transport_options(
         .features
         .enabled(Feature::RuntimeAgentInstances)
         .then(codex_runtime_agent_instance::RuntimeAuthSlot::default);
-    let analytics_events_client = analytics_events_client_from_config(
-        Arc::clone(&auth_manager),
-        &config,
-        runtime_auth_slot.clone(),
-    );
-    let outgoing_message_sender = Arc::new(OutgoingMessageSender::new(
-        outgoing_tx,
-        analytics_events_client.clone(),
-    ));
+
+    let outgoing_message_sender = Arc::new(OutgoingMessageSender::new(outgoing_tx));
     let feedback = CodexFeedback::new();
 
     // Install a simple subscriber so `tracing` output is visible. Users can
@@ -991,7 +981,7 @@ pub async fn run_main_with_transport_options(
         let mut processor = MessageProcessor::new(MessageProcessorArgs {
             cloud_skill_provider,
             outgoing: outgoing_message_sender,
-            analytics_events_client,
+
             arg0_paths,
             config: Arc::new(config),
             startup_cwd,
@@ -1010,7 +1000,7 @@ pub async fn run_main_with_transport_options(
             runtime_auth_slot,
             installation_id,
             code_mode_session_provider,
-            rpc_transport: analytics_rpc_transport(&transport),
+
             remote_control_handle: Some(remote_control_handle.clone()),
             plugin_startup_tasks: matches!(
                 runtime_options.plugin_startup_tasks,
@@ -1548,15 +1538,6 @@ fn loader_overrides_with_test_user_config_file(
     let _ = test_user_config_file;
 
     Ok(loader_overrides)
-}
-
-fn analytics_rpc_transport(transport: &AppServerTransport) -> AppServerRpcTransport {
-    match transport {
-        AppServerTransport::Stdio => AppServerRpcTransport::Stdio,
-        AppServerTransport::UnixSocket { .. }
-        | AppServerTransport::WebSocket { .. }
-        | AppServerTransport::Off => AppServerRpcTransport::Websocket,
-    }
 }
 
 #[cfg(test)]

@@ -5,9 +5,9 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use codex_analytics::GuardianReviewSessionKind;
 use codex_history::InitialHistory;
 use codex_history::RolloutItem;
+use codex_protocol::guardian::GuardianReviewSessionKind;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::Event;

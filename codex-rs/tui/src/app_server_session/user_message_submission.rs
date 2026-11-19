@@ -84,19 +84,13 @@ pub(crate) struct CloudModelSelection {
 }
 
 impl AppServerSession {
-    fn cloud_model_catalog_is_current(&self) -> bool {
-        matches!(&self.request_handle,
-            AppServerRequestHandle::Cloud(handle) if handle.model_catalog_is_current()
-        )
-    }
-
     pub(crate) fn stage_cloud_model_selection(
         &mut self,
         thread_id: ThreadId,
         model: String,
         effort: Option<ReasoningEffort>,
     ) -> bool {
-        if !self.cloud_model_catalog_is_current() {
+        if !matches!(&self.request_handle, AppServerRequestHandle::Cloud(_)) {
             return false;
         }
         self.cloud_model_selections
@@ -184,22 +178,13 @@ impl AppServerSession {
             } else {
                 None
             };
-        if selection.is_some() && !self.cloud_model_catalog_is_current() {
-            self.cloud_model_selections.remove(&thread_id);
-            return Err(UserMessageSubmissionFailure::Preflight(
-                "The Cloud account changed. Reopen the conversation before sending.".into(),
-            ));
-        }
         let selected_model = selection
             .as_ref()
             .map_or(model.as_str(), |selection| selection.model.as_str());
         let program = preflight(selected_model).map_err(UserMessageSubmissionFailure::Preflight)?;
         let take_selection = |session: &mut Self| {
             selection.as_ref()?;
-            session
-                .cloud_model_selections
-                .remove(&thread_id)
-                .filter(|_| session.cloud_model_catalog_is_current())
+            session.cloud_model_selections.remove(&thread_id)
         };
         if cloud
             && intent == CloudSubmissionIntent::StartOrSteer

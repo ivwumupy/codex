@@ -52,7 +52,6 @@ fn test_thread_manager(
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         codex_extension_api::empty_extension_registry(),
         Arc::new(codex_core::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         codex_core::passthrough_image_store(),
         codex_core::ThreadStoreBuilder::from_config(config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -143,22 +142,22 @@ async fn refreshes_immediately_periodically_and_stops_when_dropped() {
     work_endpoint.release_second_fetch.notify_one();
     Arc::get_mut(&mut endpoint).unwrap().originator_endpoint = Some(work_endpoint.clone());
     let requirements_path = codex_home.path().join("requirements.toml");
-    std::fs::write(&requirements_path, "model_provider = 'ollama'").unwrap();
+    std::fs::write(&requirements_path, "model_provider = 'amazon-bedrock'").unwrap();
     let config_manager = crate::config_manager::ConfigManager::new_for_tests(
         codex_home.path().to_path_buf(),
-        vec![("model_provider".to_string(), "ollama".into())],
+        vec![("model_provider".to_string(), "amazon-bedrock".into())],
         LoaderOverrides::with_managed_config_path_for_tests(
             codex_home.path().join("managed_config.toml"),
         ),
         CloudConfigBundleLoader::default(),
     );
-    // The TUI forwards its typed --oss selection through the raw CLI overrides too.
+
     let config = Arc::new(
         ConfigBuilder::default()
             .codex_home(codex_home.path().to_path_buf())
             .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .harness_overrides(ConfigOverrides {
-                model_provider: Some("ollama".to_string()),
+                model_provider: Some("amazon-bedrock".to_string()),
                 ..Default::default()
             })
             .build()
@@ -196,11 +195,11 @@ async fn refreshes_immediately_periodically_and_stops_when_dropped() {
     assert_eq!(endpoint.fetch_count.load(Ordering::SeqCst), 2);
     assert_eq!(work_endpoint.fetch_count.load(Ordering::SeqCst), 2);
 
-    // Reloading after login preserves an embedded caller's typed --oss override.
+    // Reloading after login preserves an embedded caller's model provider override.
     catalog.invalidate().await;
     assert_eq!(
         catalog.current().await.unwrap().0.model_provider_id,
-        "ollama"
+        "amazon-bedrock"
     );
 
     assert!(Arc::ptr_eq(
@@ -220,7 +219,7 @@ async fn refreshes_immediately_periodically_and_stops_when_dropped() {
     catalog.invalidate().await;
     assert_eq!(
         catalog.current().await.unwrap().0.model_provider_id,
-        "ollama"
+        "amazon-bedrock"
     );
     assert_eq!(endpoint.fetch_count.load(Ordering::SeqCst), 2);
 }
@@ -332,8 +331,10 @@ async fn catalog_reload_recovers_after_cloud_failure() -> anyhow::Result<()> {
                 ))
             } else {
                 Ok(Some(
-                    CloudConfigBundleFixture::enterprise_requirement("model_provider = 'ollama'")
-                        .into_bundle(),
+                    CloudConfigBundleFixture::enterprise_requirement(
+                        "model_provider = 'amazon-bedrock'",
+                    )
+                    .into_bundle(),
                 ))
             }
         }
@@ -363,7 +364,10 @@ async fn catalog_reload_recovers_after_cloud_failure() -> anyhow::Result<()> {
     failed.store(false, Ordering::SeqCst);
     // Exercise the same online request used by the periodic background worker.
     catalog.list_models(RefreshStrategy::Online).await?;
-    assert_eq!(catalog.current().await?.0.model_provider_id, "ollama");
+    assert_eq!(
+        catalog.current().await?.0.model_provider_id,
+        "amazon-bedrock"
+    );
     assert!(
         !catalog
             .list_models(RefreshStrategy::Offline)

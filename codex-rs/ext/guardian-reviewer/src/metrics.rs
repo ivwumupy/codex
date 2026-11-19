@@ -3,13 +3,6 @@
 
 use std::time::Duration;
 
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewDecision;
-use codex_analytics::GuardianReviewFailureReason;
-use codex_analytics::GuardianReviewSessionKind;
-use codex_analytics::GuardianReviewTerminalStatus;
-use codex_analytics::GuardianReviewedAction;
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_otel::GUARDIAN_REVIEW_COUNT_METRIC;
 use codex_otel::GUARDIAN_REVIEW_DURATION_METRIC;
@@ -17,6 +10,13 @@ use codex_otel::GUARDIAN_REVIEW_TOKEN_USAGE_METRIC;
 use codex_otel::GUARDIAN_REVIEW_TTFT_DURATION_METRIC;
 use codex_otel::SessionTelemetry;
 use codex_otel::sanitize_metric_tag_value;
+use codex_protocol::guardian::GuardianApprovalRequestSource;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewDecision;
+use codex_protocol::guardian::GuardianReviewFailureReason;
+use codex_protocol::guardian::GuardianReviewSessionKind;
+use codex_protocol::guardian::GuardianReviewTerminalStatus;
+use codex_protocol::guardian::GuardianReviewedAction;
 use codex_protocol::protocol::GuardianAssessmentOutcome;
 use codex_protocol::protocol::GuardianRiskLevel;
 use codex_protocol::protocol::GuardianUserAuthorization;

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use codex_analytics::AnalyticsEventsClient;
 use codex_core::TurnInputRequest;
 use codex_core::config::AgentRoleConfig;
 use codex_features::Feature;
@@ -279,7 +278,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     });
     let initial = initial_builder.build_with_auto_env(&server).await?;
     let root_thread_id = initial.session_configured.thread_id;
-    let root_session_id = initial.session_configured.session_id;
     initial
         .codex
         .start_or_steer_turn(
@@ -400,16 +398,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     sibling_thread.flush_rollout().await?;
     worker_thread.flush_rollout().await?;
     initial.codex.flush_rollout().await?;
-    let worker_created_at = initial
-        .thread_store
-        .read_thread(ReadThreadParams {
-            thread_id: worker_thread_id,
-            include_archived: true,
-            include_history: false,
-        })
-        .await?
-        .created_at
-        .timestamp();
     sibling_thread.shutdown_and_wait().await?;
     worker_thread.shutdown_and_wait().await?;
     drop(sibling_thread);
@@ -463,25 +451,10 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     )
     .await;
 
-    Mock::given(method("POST"))
-        .and(path("/codex/analytics-events/events"))
-        .respond_with(ResponseTemplate::new(/* status */ 200))
-        .mount(&server)
-        .await;
-    let analytics_client = AnalyticsEventsClient::new(
-        codex_core::test_support::auth_manager_from_auth(
-            CodexAuth::create_dummy_chatgpt_auth_for_testing(),
-        ),
-        server.uri(),
-        /* analytics_enabled */ Some(true),
-    );
     let resumed_model_provider_base_url = format!("{}/v1", server.uri());
-    let mut resume_builder = test_codex()
-        .with_analytics_events_client(analytics_client.clone())
-        .with_config(move |config| {
-            configure_multi_agent_v2_with_role(config, &resumed_model_provider_base_url);
-            config.analytics_enabled = Some(true);
-        });
+    let mut resume_builder = test_codex().with_config(move |config| {
+        configure_multi_agent_v2_with_role(config, &resumed_model_provider_base_url);
+    });
     let resumed = resume_builder.restart(&server, &initial).await?;
     resumed
         .codex
@@ -574,44 +547,6 @@ openai_base_url = "{redirected_base_url}"
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
-    tokio::time::timeout(Duration::from_secs(10), analytics_client.flush()).await?;
-    let mut worker_initializations = Vec::new();
-    for request in server.received_requests().await.unwrap_or_default() {
-        if request.url.path() != "/codex/analytics-events/events" {
-            continue;
-        }
-        let payload: Value = serde_json::from_slice(&request.body)?;
-        worker_initializations.extend(
-            payload["events"]
-                .as_array()
-                .expect("analytics events")
-                .iter()
-                .filter(|event| {
-                    event["event_type"] == "codex_thread_initialized"
-                        && event["event_params"]["thread_id"] == worker_thread_id.to_string()
-                })
-                .map(|event| {
-                    let params = &event["event_params"];
-                    json!({
-                        "session_id": params["session_id"],
-                        "parent_thread_id": params["parent_thread_id"],
-                        "subagent_source": params["subagent_source"],
-                        "initialization_mode": params["initialization_mode"],
-                        "created_at": params["created_at"],
-                    })
-                }),
-        );
-    }
-    assert_eq!(
-        worker_initializations,
-        vec![json!({
-            "session_id": root_session_id.to_string(),
-            "parent_thread_id": root_thread_id.to_string(),
-            "subagent_source": "thread_spawn",
-            "initialization_mode": "resumed",
-            "created_at": worker_created_at,
-        })]
-    );
     assert!(followup_child_request.requests().iter().any(|request| {
         request.body_contains_text(FOLLOWUP_TASK)
             && request.body_contains_text(ROLE_DEVELOPER_INSTRUCTIONS)

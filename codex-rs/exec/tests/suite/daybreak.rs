@@ -83,9 +83,10 @@ async fn exec_rejects_daybreak_for_non_openai_provider() -> anyhow::Result<()> {
     test.cmd_with_server(&server)
         .env_remove("CODEX_ACCESS_TOKEN")
         .args([
-            "--oss",
-            "--local-provider",
-            "ollama",
+            "-c",
+            "model_provider='custom'",
+            "-c",
+            "model_providers.custom={name='Custom',base_url='http://localhost:1/v1'}",
             "--skip-git-repo-check",
             "hello",
         ])

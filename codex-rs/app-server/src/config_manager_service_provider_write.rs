@@ -26,7 +26,7 @@ use codex_config::LoaderOverrides;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use codex_model_provider_info::GCP_PROVIDER_ID;
-use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::built_in_model_providers;
 use std::collections::HashMap;
@@ -87,9 +87,7 @@ fn provider_edits(
     let (provider_id, mut fields) = match &params.settings {
         ProviderSettingsPatch::CustomGateway(patch) => {
             let target = patch.provider_id.as_deref();
-            if target
-                .is_some_and(|id| builtins.contains_key(id) || id == LEGACY_OLLAMA_CHAT_PROVIDER_ID)
-            {
+            if target.is_some_and(|id| builtins.contains_key(id)) {
                 return Err(invalid(
                     "A custom provider or gateway cannot use a built-in provider ID.",
                 ));
@@ -279,7 +277,7 @@ fn allocate_custom_id(name: &str, is_taken: impl Fn(&str) -> bool) -> String {
     let stem = if slug.is_empty() { "custom" } else { &slug };
     let mut id = stem.to_owned();
     let mut suffix = 2;
-    while id == LEGACY_OLLAMA_CHAT_PROVIDER_ID || is_taken(&id) {
+    while is_taken(&id) {
         id = format!("{stem}-{suffix}");
         suffix += 1;
     }

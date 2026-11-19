@@ -64,12 +64,7 @@ use async_channel::Sender;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::ImagePreparationFact;
-use codex_analytics::ImagePreparationMetadata;
-use codex_analytics::SubAgentThreadStartedInput;
-use codex_analytics::ThreadInitializationMode;
-use codex_analytics::TurnCodexErrorFact;
+
 use codex_async_utils::OrCancelExt;
 use codex_attachment_store::AttachmentStore;
 use codex_attachment_store::InlineAttachmentStore;
@@ -123,6 +118,7 @@ use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
+use codex_protocol::image_preparation::ImagePreparationMetadata;
 use codex_protocol::items::EnteredReviewModeItem;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::items::TurnItem;
@@ -550,7 +546,7 @@ pub(crate) struct SessionSpawnArgs {
     pub(crate) turn_extension_init: ExtensionDataInit,
     pub(crate) client_mcp_extensions: ClientMcpExtensions,
     pub(crate) reserved_thread_id: Option<ThreadId>,
-    pub(crate) analytics_events_client: Option<AnalyticsEventsClient>,
+
     pub(crate) image_store: Arc<dyn AttachmentStore>,
     pub(crate) thread_store: Arc<dyn ThreadStore>,
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
@@ -716,7 +712,7 @@ impl Session {
             turn_extension_init,
             client_mcp_extensions,
             reserved_thread_id,
-            analytics_events_client,
+
             image_store,
             thread_store,
             attestation_provider,
@@ -1039,7 +1035,6 @@ impl Session {
             reserved_thread_id,
             environment_manager,
             inherited_environments,
-            analytics_events_client,
             image_store,
             thread_store,
             resume_preparation,
@@ -2607,15 +2602,6 @@ impl Session {
     }
 
     /// Record a terminal CodexErr before the app-server completion notification is reduced.
-    pub(crate) fn track_turn_codex_error(&self, turn_context: &TurnContext, error: &CodexErr) {
-        self.services
-            .analytics_events_client
-            .track_turn_codex_error(TurnCodexErrorFact::from_codex_err(
-                self.thread_id.to_string(),
-                turn_context.sub_id.clone(),
-                error,
-            ));
-    }
 
     /// Returns the reviewer pool installed by the Guardian extension.
     pub(crate) fn guardian_review_session(&self) -> Option<Arc<GuardianReviewSessionManager>> {
@@ -2700,23 +2686,7 @@ impl Session {
             msg,
         };
         // Private reviewers have no app-server listener; publicly resumed Guardian threads do.
-        if matches!(
-            &turn_context.session_source,
-            SessionSource::SubAgent(SubAgentSource::Other(name))
-                if name == crate::guardian::GUARDIAN_REVIEWER_NAME
-        ) && self.services.analytics_events_client.is_enabled()
-            && turn_context.parent_thread_id.is_some()
-            && self
-                .state
-                .lock()
-                .await
-                .session_configuration
-                .trusted_guardian_reviewer
-        {
-            self.services
-                .analytics_events_client
-                .track_guardian_session_event(self.thread_id, &event);
-        }
+
         self.send_event_raw(event).await;
         self.maybe_publish_terminal_agent_result(turn_context, &legacy_source)
             .await;
@@ -4031,14 +4001,7 @@ impl Session {
                 .history
                 .record_annotated_items(&mut items, model_info.truncation_policy.into());
         }
-        for image in image_preparations {
-            self.services
-                .analytics_events_client
-                .track_image_preparation(ImagePreparationFact {
-                    turn_id: turn_context.sub_id.clone(),
-                    metadata: image,
-                });
-        }
+        for image in image_preparations {}
         let settings_guard =
             if force_mcp_checkpoint && self.reference_context_item().await.is_none() {
                 Some(thread_settings::acquire_persistence_lock(self).await)
@@ -5976,54 +5939,6 @@ fn apply_prepared_image_file_ids(
             }
         }
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_subagent_session_started(
-    analytics_events_client: &AnalyticsEventsClient,
-    client_metadata: AppServerClientMetadata,
-    session_id: SessionId,
-    thread_id: ThreadId,
-    parent_thread_id: Option<ThreadId>,
-    thread_config: ThreadConfigSnapshot,
-    subagent_source: SubAgentSource,
-    resumed_created_at: Option<DateTime<Utc>>,
-) {
-    let initialization_mode = if resumed_created_at.is_some() {
-        ThreadInitializationMode::Resumed
-    } else {
-        ThreadInitializationMode::New
-    };
-    let created_at =
-        u64::try_from(resumed_created_at.unwrap_or_else(Utc::now).timestamp()).unwrap_or_default();
-    let AppServerClientMetadata {
-        client_name,
-        client_version,
-    } = client_metadata;
-    if (client_name.is_none() || client_version.is_none())
-        && subagent_source.kind() != crate::guardian::GUARDIAN_REVIEWER_NAME
-    {
-        tracing::warn!("skipping subagent thread analytics: missing inherited client metadata");
-        return;
-    }
-    let input = SubAgentThreadStartedInput {
-        session_id: session_id.to_string(),
-        thread_id: thread_id.to_string(),
-        parent_thread_id: parent_thread_id.map(|thread_id| thread_id.to_string()),
-        forked_from_thread_id: thread_config
-            .forked_from_thread_id
-            .map(|thread_id| thread_id.to_string()),
-        product_client_id: thread_config.originator.clone(),
-        client_name,
-        client_version,
-        model: thread_config.model,
-        ephemeral: thread_config.ephemeral,
-        thread_source: thread_config.thread_source,
-        subagent_source,
-        initialization_mode,
-        created_at,
-    };
-    analytics_events_client.track_subagent_thread_started(input);
 }
 
 /// Builds hook configuration for one config snapshot, including any enabled plugin hooks.

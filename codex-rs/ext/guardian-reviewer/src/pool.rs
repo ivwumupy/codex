@@ -10,9 +10,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewSessionKind;
 use codex_extension_api::ExtensionFuture;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewSessionKind;
 use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;

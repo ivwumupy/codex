@@ -26,11 +26,6 @@ use crate::tools::lifecycle::process_mcp_tool_result;
 use crate::tools::sandboxing::ApprovalAction;
 use crate::tools::sandboxing::ToolError;
 use crate::turn_metadata::ExecutionMetadata;
-use codex_analytics::AppInvocation;
-use codex_analytics::ElicitationType;
-use codex_analytics::InvocationType;
-use codex_analytics::McpToolCallElicitation;
-use codex_analytics::build_track_events_context;
 use codex_api::HostedFileUploadContext;
 use codex_config::ConfigLayerSource;
 use codex_config::types::AppToolApproval;
@@ -91,6 +86,7 @@ use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::request_user_input::RequestUserInputQuestionOption;
 use codex_protocol::request_user_input::RequestUserInputResponse;
+use codex_protocol::skill_invocation::InvocationType;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use codex_rollout::state_db;
@@ -519,7 +515,6 @@ async fn handle_approved_mcp_tool_call(
             tool_input,
         };
     }
-    let mut elicitation_type = None;
     let mut request_error_code = None;
     let result = async {
         let result = async {
@@ -692,8 +687,6 @@ async fn handle_approved_mcp_tool_call(
                 &tool_input,
                 &result,
             );
-            // Capture trusted server metadata before result callbacks or model-facing rewrites.
-            elicitation_type = mcp_tool_call_auth_elicitation_type(&server, connector_id, &result);
             let mcp_tool = McpToolContext::from_prepared_call(
                 &prepared_call,
                 turn_context.config.mcp_servers.get().get(&server),
@@ -743,9 +736,6 @@ async fn handle_approved_mcp_tool_call(
         tracing::warn!("MCP tool call error: {error:?}");
     }
     let duration = start.elapsed();
-    if let Some(elicitation_type) = elicitation_type {
-        track_mcp_tool_call_elicitation(sess, turn_context, call_id, elicitation_type);
-    }
     // Direct and Code Mode calls share this boundary. Once an approved call enters
     // it, conservatively attribute returned errors too: they may contain peer data.
     let source_connector_id = prepared_call
@@ -771,7 +761,6 @@ async fn handle_approved_mcp_tool_call(
         truncate_mcp_tool_result_for_event(&result),
     )
     .await;
-    maybe_track_codex_app_used(sess, step_context, &server, &metadata, elicitation_type).await;
 
     let outcome = mcp_call_metric_outcome(&result).with_request_error_code(request_error_code);
     emit_mcp_call_metrics(
@@ -1200,74 +1189,6 @@ async fn notify_mcp_tool_call_completed(
         duration: Some(duration),
     });
     sess.emit_turn_item_completed(turn_context, item).await;
-}
-
-async fn maybe_track_codex_app_used(
-    sess: &Session,
-    step_context: &StepContext,
-    server: &str,
-    metadata: &McpToolApprovalMetadata,
-    elicitation_type: Option<ElicitationType>,
-) {
-    if server != CODEX_APPS_MCP_SERVER_NAME {
-        return;
-    }
-    let connector_id = metadata.connector_id.clone();
-    let app_name = metadata.connector_name.clone();
-    let invocation_type = if let Some(connector_id) = connector_id.as_deref() {
-        let mentioned_connector_ids = sess.get_connector_selection().await;
-        if mentioned_connector_ids.contains(connector_id) {
-            InvocationType::Explicit
-        } else {
-            InvocationType::Implicit
-        }
-    } else {
-        InvocationType::Implicit
-    };
-
-    let turn_context = &step_context.turn;
-    let tracking = build_track_events_context(
-        step_context.settings.model_info.slug.clone(),
-        sess.thread_id.to_string(),
-        turn_context.sub_id.clone(),
-        turn_context.originator.clone(),
-        Some(turn_context.turn_metadata_state.clone()),
-    );
-    sess.services.analytics_events_client.track_app_used(
-        tracking,
-        AppInvocation {
-            connector_id,
-            app_name,
-            invocation_type: Some(invocation_type),
-        },
-        elicitation_type,
-    );
-}
-
-fn track_mcp_tool_call_elicitation(
-    sess: &Session,
-    turn_context: &TurnContext,
-    call_id: &str,
-    elicitation_type: ElicitationType,
-) {
-    sess.services
-        .analytics_events_client
-        .track_mcp_tool_call_elicitation(McpToolCallElicitation {
-            thread_id: sess.thread_id.to_string(),
-            turn_id: turn_context.sub_id.clone(),
-            item_id: call_id.to_string(),
-            elicitation_type,
-        });
-}
-
-fn mcp_tool_call_auth_elicitation_type(
-    server: &str,
-    connector_id: Option<&str>,
-    result: &CallToolResult,
-) -> Option<ElicitationType> {
-    (server == CODEX_APPS_MCP_SERVER_NAME
-        && is_connector_auth_failure_from_tool_result(result, connector_id))
-    .then_some(ElicitationType::AuthOrLink)
 }
 
 #[derive(Clone, Copy)]
@@ -1968,9 +1889,7 @@ pub(crate) async fn request_mcp_tool_user_approval(
     if matches!(
         decision,
         ReviewDecision::Denied { .. } | ReviewDecision::TimedOut | ReviewDecision::Abort
-    ) {
-        track_mcp_tool_call_elicitation(sess, turn_context, call_id, ElicitationType::Approval);
-    }
+    ) {}
     ApprovalResolution {
         cancellation_reason: if decision == ReviewDecision::Abort {
             cancellation_reason

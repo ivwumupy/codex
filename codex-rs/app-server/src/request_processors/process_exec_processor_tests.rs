@@ -4,7 +4,7 @@
 use super::*;
 use crate::outgoing_message::OutgoingEnvelope;
 use crate::outgoing_message::OutgoingMessage;
-use codex_analytics::AnalyticsEventsClient;
+
 use pretty_assertions::assert_eq;
 
 fn start_collector(
@@ -22,10 +22,7 @@ fn start_collector(
         output_rx,
         reader: None,
         process_exited,
-        outgoing: Arc::new(OutgoingMessageSender::new(
-            tx,
-            AnalyticsEventsClient::disabled(),
-        )),
+        outgoing: Arc::new(OutgoingMessageSender::new(tx)),
         stream: ProcessOutputStream::Stdout,
         stream_output: true,
         output_bytes_cap: None,
@@ -128,10 +125,7 @@ async fn timed_out_stderr_closes_while_stdout_is_still_open() {
         output_rx: child.stderr_rx,
         reader: child.session.stderr_reader(),
         process_exited: process_exited.clone(),
-        outgoing: Arc::new(OutgoingMessageSender::new(
-            tx,
-            AnalyticsEventsClient::disabled(),
-        )),
+        outgoing: Arc::new(OutgoingMessageSender::new(tx)),
         stream: ProcessOutputStream::Stderr,
         stream_output: false,
         output_bytes_cap: Some(3),
@@ -189,10 +183,7 @@ async fn windows_terminal_reports_exit_before_closing_the_console() {
     let (_control_tx, control_rx) = mpsc::channel(1);
     let (tx, mut notifications) = mpsc::channel(1);
     let process = tokio::spawn(run_process(RunProcessParams {
-        outgoing: Arc::new(OutgoingMessageSender::new(
-            tx,
-            AnalyticsEventsClient::disabled(),
-        )),
+        outgoing: Arc::new(OutgoingMessageSender::new(tx)),
         request_id: ConnectionRequestId {
             connection_id: ConnectionId(1),
             request_id: codex_app_server_protocol::RequestId::Integer(1),

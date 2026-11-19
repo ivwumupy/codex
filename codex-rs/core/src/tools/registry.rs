@@ -19,7 +19,7 @@ use crate::tools::context::ToolEnvironments;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
-use crate::tools::control_tool_analytics::ControlToolCallGuard;
+
 use crate::tools::flat_tool_name;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use crate::tools::hook_names::HookToolName;
@@ -28,7 +28,7 @@ use crate::tools::lifecycle::notify_tool_start;
 use crate::tools::router::tool_log_payload;
 use crate::tools::tool_dispatch_trace::ToolDispatchTrace;
 use crate::util::error_or_panic;
-use codex_analytics::ControlToolCallStatus;
+
 use codex_extension_api::ToolCallOutcome;
 use codex_extension_api::ToolPolicy;
 use codex_history::CodexHarnessMetadata;
@@ -834,10 +834,7 @@ impl ToolRegistry {
                 &tool_result_tags,
                 &extra_trace_fields,
             );
-            if tool.is_builtin_control_tool() {
-                let mut analytics = ControlToolCallGuard::new(invocation);
-                analytics.finish(ControlToolCallStatus::Failed);
-            }
+
             dispatch_trace.record_failed(&err);
             notify_tool_finish_if_unclaimed(
                 invocation,
@@ -860,10 +857,6 @@ impl ToolRegistry {
         match apply_pre_tool_use(tool.as_ref(), &mut invocation).await {
             Ok(()) => {}
             Err(PreToolUseError::Blocked(message)) => {
-                if tool.is_builtin_control_tool() {
-                    let mut analytics = ControlToolCallGuard::new(&invocation);
-                    analytics.finish(ControlToolCallStatus::Rejected);
-                }
                 let err = FunctionCallError::RespondToModel(message);
                 dispatch_trace.record_failed(&err);
                 notify_tool_finish_if_unclaimed(
@@ -902,9 +895,6 @@ impl ToolRegistry {
                 .or_cancel_tool(&cancellation_token)
                 .await?;
         }
-        let mut control_tool_analytics = tool
-            .is_builtin_control_tool()
-            .then(|| ControlToolCallGuard::new(&invocation));
 
         if let Some(command) = shell_script_for_invocation(&invocation) {
             let parsed = parse_shell_script(&command);
@@ -944,13 +934,7 @@ impl ToolRegistry {
             Ok(result) => result.result.success_for_logging(),
             Err(_) => false,
         };
-        if let Some(analytics) = control_tool_analytics.as_mut() {
-            analytics.finish(if success {
-                ControlToolCallStatus::Completed
-            } else {
-                ControlToolCallStatus::Failed
-            });
-        }
+
         emit_metric_for_tool_read(&invocation, success);
         let post_tool_use_payload = if success {
             result

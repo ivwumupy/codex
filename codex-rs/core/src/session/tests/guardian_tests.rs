@@ -41,6 +41,7 @@ use codex_network_proxy::NetworkPolicyRequest;
 use codex_network_proxy::NetworkProtocol;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::error::SandboxErr;
+use codex_protocol::protocol::NetworkApprovalProtocol;
 use codex_protocol::models::AdditionalPermissionProfile as PermissionProfile;
 use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ImageReference;

@@ -109,7 +109,6 @@ impl CodeModeWaitHandler {
         let mut telemetry = CodeModeToolCallGuard::new(
             &session,
             turn.sub_id.clone(),
-            turn.turn_metadata_state.clone(),
             call_id.clone(),
             WAIT_TOOL_NAME,
             handler_span,
@@ -186,16 +185,6 @@ impl CodeModeWaitHandler {
                             .services
                             .code_mode_service
                             .finish_cell_dispatch(runtime_cell_id);
-                        exec.session
-                            .services
-                            .analytics_events_client
-                            .track_code_mode_tool_call(
-                                codex_analytics::CodeModeToolCallFact::CellClosed {
-                                    thread_id: exec.session.thread_id.to_string(),
-                                    turn_id: exec.turn.sub_id.clone(),
-                                    cell_id: runtime_cell_id.to_string(),
-                                },
-                            );
                     }
                 } else {
                     telemetry.record_cell_timing(&cell_id, CodeModeCellTiming::CellUnavailable);

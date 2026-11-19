@@ -7,7 +7,7 @@ use crate::hook_runtime::run_post_compact_hooks;
 use crate::hook_runtime::run_pre_compact_hooks;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
-use codex_analytics::CompactionTrigger;
+use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::items::ContextCompactionItem;

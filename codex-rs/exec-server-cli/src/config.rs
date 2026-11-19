@@ -2,19 +2,12 @@
 
 use anyhow::Context;
 use codex_app_server::in_process::EmbeddedNetworkPolicy;
-use codex_cloud_config::chatgpt_config_bundle_loader;
-use codex_cloud_config::managed_config_bundle_loader_for_auth;
-use codex_config::LoaderOverrides;
 use codex_core::config::ConfigBuilder;
-use codex_core::config::ConfigLoadOptions;
-use codex_core::config::bootstrap_auth_config;
-use codex_core::config::find_codex_home;
 use codex_core::config::load_config_toml_with_layer_stack;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::read_codex_access_token_from_env;
 use codex_protocol::auth::AuthMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_cli::CliConfigOverrides;
 use std::io::BufRead;
 use std::io::Read;
@@ -178,69 +171,21 @@ pub(super) fn validate_api_key_remote_host(base_url: &str) -> anyhow::Result<()>
 pub(super) async fn load_exec_server_config(
     root_config_overrides: &CliConfigOverrides,
     strict_config: bool,
-    enable_cloud_config: bool,
     stdin_auth: Option<&CodexAuth>,
 ) -> anyhow::Result<codex_core::config::Config> {
     let cli_kv_overrides = root_config_overrides
         .parse_overrides()
         .map_err(anyhow::Error::msg)?;
-    let bootstrap_cli_overrides = cli_kv_overrides.clone();
-    let mut builder = ConfigBuilder::default()
+    let mut config = ConfigBuilder::default()
         .cli_overrides(cli_kv_overrides)
-        .strict_config(strict_config);
-    if enable_cloud_config {
-        let codex_home = find_codex_home()?;
-        let loader_overrides = LoaderOverrides::default();
-        let network_policy = EmbeddedNetworkPolicy::load(&loader_overrides).await;
-        let bootstrap_cwd = AbsolutePathBuf::current_dir()?;
-        let bootstrap_config = load_config_toml_with_layer_stack(
-            &codex_home,
-            Some(&bootstrap_cwd),
-            bootstrap_cli_overrides,
-            ConfigLoadOptions {
-                loader_overrides,
-                strict_config,
-                cloud_config_bundle: Default::default(),
-            },
-        )
+        .strict_config(strict_config)
+        .build()
         .await?;
-        let bootstrap_auth_config = network_policy
-            .bind_bootstrap_auth(bootstrap_auth_config(&codex_home, &bootstrap_config)?);
-        let cloud_config_bundle = if let Some(auth) = stdin_auth {
-            anyhow::ensure!(
-                bootstrap_auth_config.allows_auth(auth),
-                "ChatGPT authentication is not permitted for this account"
-            );
-            managed_config_bundle_loader_for_auth(
-                bootstrap_auth_config,
-                auth,
-                bootstrap_config.config_layer_stack.requirements_toml(),
-            )
-            .await?
-        } else {
-            let auth_manager = AuthManager::shared_from_auth_config_with_auth_modes(
-                bootstrap_auth_config.clone(),
-                /*enable_codex_api_key_env*/ true,
-                REMOTE_AUTH_MODES.to_vec(),
-            )
-            .await?;
-            chatgpt_config_bundle_loader(
-                auth_manager,
-                bootstrap_auth_config
-                    .chatgpt_base_url
-                    .unwrap_or_else(|| "https://chatgpt.com/backend-api/".to_string()),
-                bootstrap_auth_config.codex_home,
-                bootstrap_auth_config
-                    .auth_route_config
-                    .http_client_factory()
-                    .clone(),
-            )
-        };
-        builder = builder.cloud_config_bundle(cloud_config_bundle);
-    }
-    let mut config = builder.build().await?;
-    if stdin_auth.is_some() {
-        config.config_layer_stack.ensure_config_server_applied()?;
+    if let Some(auth) = stdin_auth {
+        anyhow::ensure!(
+            config.auth_config().allows_auth(auth),
+            "ChatGPT authentication is not permitted for this account"
+        );
     }
     EmbeddedNetworkPolicy::default().activate(&mut config);
     Ok(config)

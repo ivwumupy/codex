@@ -157,10 +157,7 @@ pub(super) async fn create_spawn(
         SpawnOwner::Host,
     );
     child.thread.emit_thread_ready_lifecycle().await;
-    child
-        .thread
-        .emit_subagent_session_started(client_metadata, /*resumed_created_at*/ None)
-        .await;
+
     if child.session_configured.forked_from_id.is_some() {
         child.thread.ensure_rollout_materialized().await;
     }

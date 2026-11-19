@@ -2,14 +2,14 @@
 
 use super::*;
 use crate::ReviewMetadata;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewedAction;
+
 use codex_extension_api::ExtensionData;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::GuardianAssessmentAction;
 use codex_protocol::config_types::ApprovalsReviewer;
+use codex_protocol::guardian::GuardianApprovalRequestSource;
+use codex_protocol::guardian::GuardianReviewedAction;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::openai_models::GuardianScope;
 use codex_protocol::protocol::AskForApproval;
@@ -157,7 +157,7 @@ async fn async_approval_revalidates_without_waiting_for_tracked_cleanup(state: A
         "test".into(),
         SessionSource::Exec,
     );
-    let analytics = AnalyticsEventsClient::disabled();
+
     let action = json!({});
     let request = ReviewRequest {
         serving_assessment: None,
@@ -183,7 +183,7 @@ async fn async_approval_revalidates_without_waiting_for_tracked_cleanup(state: A
         model: &model,
         telemetry: &telemetry,
         log_assessments: false,
-        analytics: &analytics,
+
         metrics: None,
     };
     let decision = request.review(

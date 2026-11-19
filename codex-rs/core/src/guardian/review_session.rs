@@ -24,9 +24,6 @@ use std::sync::atomic::Ordering;
 #[cfg(test)]
 use std::time::Duration;
 
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewSessionAnalyticsParams;
-use codex_analytics::GuardianReviewSessionKind;
 use codex_extension_api::Instructions;
 #[cfg(test)]
 use codex_guardian_reviewer::ConversationState;
@@ -44,6 +41,9 @@ use codex_history::RolloutItem;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewSessionAnalyticsParams;
+use codex_protocol::guardian::GuardianReviewSessionKind;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::GuardianScope;

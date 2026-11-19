@@ -86,7 +86,8 @@ async fn decision_binds_before_scheduling_and_does_not_follow_reused_ids(
         crate::guardian::GuardianReviewOptions {
             require_guardian: true,
             plugin_attribution_override: None,
-            approval_request_source: codex_analytics::GuardianApprovalRequestSource::MainTurn,
+            approval_request_source:
+                codex_protocol::guardian::GuardianApprovalRequestSource::MainTurn,
             external_cancel: Some(cancellation),
             require_synchronous_review: false,
         },
@@ -200,7 +201,8 @@ async fn network_review_timing_uses_trigger_owner(owned: bool) {
         super::GuardianReviewOptions {
             require_guardian: true,
             plugin_attribution_override: None,
-            approval_request_source: codex_analytics::GuardianApprovalRequestSource::MainTurn,
+            approval_request_source:
+                codex_protocol::guardian::GuardianApprovalRequestSource::MainTurn,
             external_cancel: None,
             require_synchronous_review: false,
         },

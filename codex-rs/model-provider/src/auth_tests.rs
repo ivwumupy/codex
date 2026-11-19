@@ -7,7 +7,7 @@ use codex_login::auth::AgentIdentityAuthRecord;
 use codex_login::auth::BedrockApiKeyAuth;
 use codex_login::auth::login_with_chatgpt_auth_tokens;
 use codex_model_provider_info::WireApi;
-use codex_model_provider_info::create_oss_provider_with_base_url;
+use codex_model_provider_info::custom_provider_with_base_url;
 use codex_protocol::account::PlanType;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErrorDetails;
@@ -129,8 +129,7 @@ async fn mount_transient_agent_registration(
 
 #[test]
 fn unauthenticated_auth_provider_adds_no_headers() {
-    let provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
+    let provider = custom_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
     let auth = resolve_provider_auth(/*auth*/ None, &provider).expect("auth should resolve");
 
     assert!(auth.to_auth_headers().unwrap().is_empty());
@@ -138,8 +137,7 @@ fn unauthenticated_auth_provider_adds_no_headers() {
 
 #[test]
 fn custom_provider_does_not_inherit_ambient_auth_headers() {
-    let provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
+    let provider = custom_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
     let mut ambient_headers = HeaderMap::new();
     ambient_headers.insert(
         AUTHORIZATION,
@@ -161,8 +159,7 @@ fn custom_provider_does_not_inherit_ambient_auth_headers() {
 
 #[test]
 fn custom_provider_does_not_inherit_ambient_bedrock_auth() {
-    let provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
+    let provider = custom_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
     let ambient_auth = CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
         api_key: "bedrock-api-key-test".to_string(),
         region: "us-east-1".to_string(),
@@ -176,7 +173,7 @@ fn custom_provider_does_not_inherit_ambient_bedrock_auth() {
 #[test]
 fn custom_provider_uses_explicit_bearer_instead_of_ambient_auth() {
     let mut provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
+        custom_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
     provider.experimental_bearer_token = Some("provider-token".into());
     let ambient_auth = CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
         api_key: "bedrock-api-key-test".to_string(),
@@ -233,7 +230,7 @@ fn api_key_fedramp_routing_follows_the_selected_provider_credential() {
 #[test]
 fn custom_provider_uses_command_resolved_auth() {
     let mut provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
+        custom_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
     provider.auth = Some(ModelProviderAuthInfo {
         command: "print-token".to_string(),
         args: Vec::new(),

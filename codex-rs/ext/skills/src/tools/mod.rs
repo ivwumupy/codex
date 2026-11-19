@@ -3,9 +3,6 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::InvocationType;
-use codex_analytics::build_track_events_context;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::ExtensionMetrics;
 use codex_extension_api::FunctionCallError;
@@ -24,6 +21,7 @@ use codex_otel::SessionTelemetry;
 use codex_otel::SkillInvocationEvent;
 use codex_otel::SkillInvocationType;
 use codex_otel::sanitize_metric_tag_value;
+use codex_protocol::skill_invocation::InvocationType;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::default_namespace_description;
@@ -104,7 +102,6 @@ pub(crate) fn skill_tools(
 
 #[derive(Clone)]
 pub(crate) struct SkillAnalytics {
-    client: AnalyticsEventsClient,
     telemetry: Option<Arc<SessionTelemetry>>,
     metrics: Option<Arc<dyn ExtensionMetrics>>,
     turn_metrics: Option<Arc<SkillTurnMetrics>>,
@@ -117,11 +114,9 @@ impl SkillAnalytics {
         session_store: &ExtensionData,
         thread_store: &ExtensionData,
     ) -> Option<Self> {
-        let client = session_store.get::<AnalyticsEventsClient>()?;
         let originator = thread_store.get::<ThreadOriginator>()?;
 
         Some(Self {
-            client: client.as_ref().clone(),
             telemetry: session_store.get::<SessionTelemetry>(),
             metrics: session_store
                 .get::<SkillsSessionState>()
@@ -197,16 +192,6 @@ impl SkillAnalytics {
                 ],
             );
         }
-        self.client.track_skill_invocations(
-            build_track_events_context(
-                model,
-                self.thread_id.clone(),
-                turn_id,
-                self.product_client_id.clone(),
-                turn_metrics.and_then(|turn| turn.turn_metadata.clone()),
-            ),
-            vec![invocation],
-        );
     }
 }
 

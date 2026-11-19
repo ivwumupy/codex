@@ -1,10 +1,10 @@
 use super::ToolBatchTiming;
-use codex_analytics::TurnProfile;
 use codex_protocol::items::AgentMessageItem;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::turn_timing::TurnProfile;
 use codex_utils_critical_path::CriticalPath;
 use codex_utils_critical_path::PathDurations;
 use codex_utils_critical_path::WorkKind;
@@ -247,7 +247,7 @@ fn turn_profile_breaks_down_sampling_blocking_and_retry_overhead() {
     assert_eq!(
         state.complete(started_at + Duration::from_millis(1_300)),
         TurnProfile {
-            critical_path: codex_analytics::TurnCriticalPath::Disabled,
+            critical_path: codex_protocol::turn_timing::TurnCriticalPath::Disabled,
             before_first_sampling_ms: 100,
             sampling_ms: 700,
             compaction_ms: 0,
@@ -286,8 +286,8 @@ fn turn_profile_counts_compaction_as_an_exclusive_phase() {
     assert_eq!(
         state.complete(started_at + Duration::from_millis(1_100)),
         TurnProfile {
-            critical_path: codex_analytics::TurnCriticalPath::Complete(
-                codex_analytics::TurnCriticalPathDurations {
+            critical_path: codex_protocol::turn_timing::TurnCriticalPath::Complete(
+                codex_protocol::turn_timing::TurnCriticalPathDurations {
                     duration_ms: 1100,
                     inference_ms: 800,
                     sampling_ms: 300,
@@ -335,18 +335,20 @@ async fn turn_profile_and_duration_share_a_completion_instant() {
     let (_, duration_ms, profile) = result;
     assert_eq!(
         profile.critical_path,
-        codex_analytics::TurnCriticalPath::Complete(codex_analytics::TurnCriticalPathDurations {
-            duration_ms: duration_ms.unwrap() as u64,
-            inference_ms: 0,
-            sampling_ms: 0,
-            compaction_ms: 0,
-            auto_review_ms: 0,
-            auto_review_overhead_ms: Some(0),
-            user_wait_ms: 0,
-            tools_ms: 0,
-            overhead_ms: duration_ms.unwrap() as u64,
-            unknown_ms: 0,
-        })
+        codex_protocol::turn_timing::TurnCriticalPath::Complete(
+            codex_protocol::turn_timing::TurnCriticalPathDurations {
+                duration_ms: duration_ms.unwrap() as u64,
+                inference_ms: 0,
+                sampling_ms: 0,
+                compaction_ms: 0,
+                auto_review_ms: 0,
+                auto_review_overhead_ms: Some(0),
+                user_wait_ms: 0,
+                tools_ms: 0,
+                overhead_ms: duration_ms.unwrap() as u64,
+                unknown_ms: 0,
+            }
+        )
     );
     let classified_ms = profile.before_first_sampling_ms
         + profile.sampling_ms
@@ -391,18 +393,20 @@ fn capture_preserves_phases_and_freezes_missing_dependencies() {
     );
     assert_eq!(
         profile.critical_path,
-        codex_analytics::TurnCriticalPath::Complete(codex_analytics::TurnCriticalPathDurations {
-            duration_ms: 60,
-            inference_ms: 10,
-            sampling_ms: 10,
-            compaction_ms: 0,
-            auto_review_ms: 0,
-            auto_review_overhead_ms: None,
-            user_wait_ms: 0,
-            tools_ms: 0,
-            overhead_ms: 20,
-            unknown_ms: 30,
-        })
+        codex_protocol::turn_timing::TurnCriticalPath::Complete(
+            codex_protocol::turn_timing::TurnCriticalPathDurations {
+                duration_ms: 60,
+                inference_ms: 10,
+                sampling_ms: 10,
+                compaction_ms: 0,
+                auto_review_ms: 0,
+                auto_review_overhead_ms: None,
+                user_wait_ms: 0,
+                tools_ms: 0,
+                overhead_ms: 20,
+                unknown_ms: 30,
+            }
+        )
     );
     let frozen_path = state.path.clone();
     state.end_phase(time_after_turn_start(70), TurnProfilePhase::ToolBlocking);
@@ -420,7 +424,7 @@ async fn invalidation_and_late_guard_drop_cannot_restore_a_frozen_path() {
     let (_, _, profile) = timing.complete_profile_and_duration_ms().await;
     assert_eq!(
         profile.critical_path,
-        codex_analytics::TurnCriticalPath::Incomplete
+        codex_protocol::turn_timing::TurnCriticalPath::Incomplete
     );
     timing.enable_critical_path();
     drop(guard);
@@ -489,18 +493,20 @@ fn critical_path_report_retains_fractional_millisecond_rounding_and_compaction()
     let profile = state.complete(end);
     assert_eq!(
         profile.critical_path,
-        codex_analytics::TurnCriticalPath::Complete(codex_analytics::TurnCriticalPathDurations {
-            duration_ms: 1,
-            inference_ms: 1,
-            sampling_ms: 0,
-            compaction_ms: 1,
-            auto_review_ms: 0,
-            auto_review_overhead_ms: Some(0),
-            user_wait_ms: 0,
-            tools_ms: 0,
-            overhead_ms: 0,
-            unknown_ms: 0,
-        })
+        codex_protocol::turn_timing::TurnCriticalPath::Complete(
+            codex_protocol::turn_timing::TurnCriticalPathDurations {
+                duration_ms: 1,
+                inference_ms: 1,
+                sampling_ms: 0,
+                compaction_ms: 1,
+                auto_review_ms: 0,
+                auto_review_overhead_ms: Some(0),
+                user_wait_ms: 0,
+                tools_ms: 0,
+                overhead_ms: 0,
+                unknown_ms: 0,
+            }
+        )
     );
 }
 

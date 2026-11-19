@@ -26,7 +26,6 @@ use crate::shell_snapshot::ShellSnapshot;
 use crate::shell_snapshot::SnapshotCredentialBrokerState;
 use crate::state::ActiveTurn;
 use crate::turn_metadata::ExecutionMetadata;
-use codex_analytics::ThreadProductUpdate;
 use codex_attachment_store::AttachmentStore;
 use codex_extension_api::ExtensionDataInit;
 use codex_http_client::ClientRouteClass;
@@ -880,7 +879,7 @@ impl Session {
             window_number: Some(window_number),
             context_window_id: Some(context_window_id),
             mcp_attribution: Some(self.services.executed_tool_calls.mcp_attribution_snapshot()),
-            analytics_enabled: Some(self.services.analytics_events_client.is_enabled()),
+            analytics_enabled: Some(false),
             history_ingest_requested: turn_context
                 .config
                 .token_budget
@@ -928,7 +927,7 @@ impl Session {
         reserved_thread_id: Option<ThreadId>,
         environment_manager: Arc<EnvironmentManager>,
         inherited_environments: Option<TurnEnvironmentSnapshot>,
-        analytics_events_client: Option<AnalyticsEventsClient>,
+
         image_store: Arc<dyn AttachmentStore>,
         thread_store: Arc<dyn ThreadStore>,
         resume_preparation: Option<ThreadStoreResumePreparation>,
@@ -1753,7 +1752,9 @@ impl Session {
                     config.permissions.permission_profile(),
                     config.effective_local_windows_sandbox_type(),
                     network_policy_decider.as_ref().map(Arc::clone),
-                    Some(build_blocked_request_observer(Arc::clone(&network_approval))),
+                    Some(build_blocked_request_observer(Arc::clone(
+                        &network_approval,
+                    ))),
                     managed_network_requirements_configured,
                     network_proxy_audit_metadata.clone(),
                 )
@@ -1808,45 +1809,6 @@ impl Session {
                 });
             }
 
-            let analytics_events_client = if config.analytics_enabled == Some(false) {
-                if let Some(client) = &analytics_events_client {
-                    client.update_thread_product_sku(thread_id, ThreadProductUpdate::Clear);
-                }
-                AnalyticsEventsClient::disabled()
-            } else {
-                analytics_events_client.unwrap_or_else(|| {
-                    let api_key_headers = if codex_model_provider::provider_uses_first_party_auth_path(
-                        &config.model_provider,
-                    ) {
-                        match config.model_provider.build_header_map() {
-                            Ok(headers) => headers,
-                            Err(error) => {
-                                tracing::warn!(%error, "failed to resolve analytics resource selectors");
-                                return AnalyticsEventsClient::disabled();
-                            }
-                        }
-                    } else {
-                        Default::default()
-                    };
-                    AnalyticsEventsClient::new_with_runtime(
-                        Arc::clone(&auth_manager),
-                        config.chatgpt_backend_url(),
-                        config.analytics_enabled,
-                        config
-                            .features
-                            .enabled(Feature::RuntimeAgentInstances)
-                            .then(|| (Arc::clone(&runtime_auth), config.runtime_auth_mode)),
-                        api_key_headers,
-                    )
-                })
-            };
-            analytics_events_client.update_thread_product_sku(
-                thread_id,
-                match &config.apps_mcp_product_sku {
-                    Some(product) => ThreadProductUpdate::Set(product.clone()),
-                    None => ThreadProductUpdate::Clear,
-                },
-            );
             for item in initial_history.get_rollout_items() {
                 match item {
                     RolloutItem::Compacted(compacted) => {
@@ -1870,7 +1832,7 @@ impl Session {
             }
             let session_extension_data =
                 codex_extension_api::ExtensionData::new(session_id.to_string());
-            session_extension_data.insert(analytics_events_client.clone());
+
             session_extension_data.insert(session_telemetry.clone());
             let mcp_resource_client = Arc::new(McpResourceClient::new(Arc::clone(&mcp_runtime)));
             let extension_metrics =
@@ -1999,7 +1961,7 @@ impl Session {
                     config.background_terminal_max_timeout,
                 ),
                 elicitations: crate::elicitation::ElicitationService::new(),
-                analytics_events_client,
+
                 hooks: arc_swap::ArcSwap::from_pointee(hooks),
                 rollout_thread_trace,
                 user_shell: Arc::new(default_shell),

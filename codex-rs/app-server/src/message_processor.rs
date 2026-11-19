@@ -62,8 +62,7 @@ use crate::thread_state::ThreadStateManager;
 use crate::transport::AppServerTransport;
 use crate::transport::RemoteControlHandle;
 use crate::turn_cost_worker::TurnCostWorker;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::AppServerRpcTransport;
+
 use codex_app_server_protocol::ClientNotification;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ClientResponsePayload;
@@ -262,7 +261,7 @@ impl ConnectionSessionState {
 pub(crate) struct MessageProcessorArgs {
     pub(crate) cloud_skill_provider: Option<Arc<dyn codex_skills_extension::SkillProvider>>,
     pub(crate) outgoing: Arc<OutgoingMessageSender>,
-    pub(crate) analytics_events_client: AnalyticsEventsClient,
+
     pub(crate) arg0_paths: Arg0DispatchPaths,
     pub(crate) config: Arc<Config>,
     /// Original project context, retained even when startup falls back to defaults.
@@ -280,7 +279,7 @@ pub(crate) struct MessageProcessorArgs {
     pub(crate) user_verification: Arc<crate::user_verification::Service>,
     pub(crate) installation_id: String,
     pub(crate) code_mode_session_provider: Option<Arc<dyn CodeModeSessionProvider>>,
-    pub(crate) rpc_transport: AppServerRpcTransport,
+
     pub(crate) remote_control_handle: Option<RemoteControlHandle>,
     /// `None` skips startup tasks; otherwise preserve the initial config-loading path.
     pub(crate) plugin_startup_tasks: Option<PluginStartupConfig>,
@@ -293,7 +292,7 @@ impl MessageProcessor {
         let MessageProcessorArgs {
             cloud_skill_provider,
             outgoing,
-            analytics_events_client,
+
             arg0_paths,
             config,
             startup_cwd,
@@ -310,7 +309,7 @@ impl MessageProcessor {
             user_verification,
             installation_id,
             code_mode_session_provider,
-            rpc_transport,
+
             remote_control_handle,
             plugin_startup_tasks,
         } = args;
@@ -394,7 +393,7 @@ impl MessageProcessor {
                         event_sink: Arc::clone(&extension_event_sink),
                         auth_manager: auth_manager.clone(),
                         state_db: state_db.clone(),
-                        analytics_events_client: analytics_events_client.clone(),
+
                         thread_manager: thread_manager.clone(),
                         goal_service: Arc::clone(&goal_service),
                         environment_manager: Arc::clone(&environment_manager_for_extensions),
@@ -409,7 +408,6 @@ impl MessageProcessor {
                 Arc::new(CodexHomeUserInstructionsProvider::new(
                     config.codex_home.clone(),
                 )),
-                Some(analytics_events_client.clone()),
                 codex_core::passthrough_image_store(),
                 Arc::clone(&thread_store),
                 codex_core::local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -445,9 +443,7 @@ impl MessageProcessor {
             Arc::clone(&auth_manager),
             runtime_auth.map(|runtime| (runtime, config.runtime_auth_mode)),
         );
-        thread_manager
-            .plugins_manager()
-            .set_analytics_events_client(analytics_events_client.clone());
+
         let skills_watcher = SkillsWatcher::new(
             thread_manager.skills_service(),
             &config.codex_home,
@@ -465,7 +461,6 @@ impl MessageProcessor {
             config_manager.clone(),
             thread_manager.clone(),
             Arc::clone(&model_catalog),
-            analytics_events_client.clone(),
         );
         let on_effective_plugins_changed =
             crate::effective_plugin_change::effective_plugins_changed_callback(
@@ -531,7 +526,6 @@ impl MessageProcessor {
             auth_manager.clone(),
             Arc::clone(&thread_manager),
             outgoing.clone(),
-            analytics_events_client.clone(),
             config_manager.clone(),
             on_effective_plugins_changed,
         );
@@ -581,7 +575,6 @@ impl MessageProcessor {
         let turn_processor = TurnRequestProcessor::new(
             Arc::clone(&thread_manager),
             outgoing.clone(),
-            analytics_events_client.clone(),
             Arc::clone(&config),
             config_manager.clone(),
             pending_thread_unloads,
@@ -613,9 +606,7 @@ impl MessageProcessor {
         let initialize_processor = InitializeRequestProcessor::new(
             gateway_login_control,
             outgoing.clone(),
-            analytics_events_client.clone(),
             Arc::clone(&config),
-            rpc_transport,
             Arc::clone(&user_verification),
         );
         let external_agent_config_processor =
@@ -626,7 +617,7 @@ impl MessageProcessor {
                 config_manager: config_manager.clone(),
                 config_processor: config_processor.clone(),
                 state_db,
-                analytics_events_client,
+
                 arg0_paths,
                 codex_home: config.codex_home.to_path_buf(),
             });
@@ -1045,11 +1036,6 @@ impl MessageProcessor {
             return Err(invalid_request(experimental_required_message(reason)));
         }
         let connection_id = connection_request_id.connection_id;
-        self.initialize_processor.track_initialized_request(
-            connection_id,
-            connection_request_id.request_id.clone(),
-            &codex_request,
-        );
 
         let (turn_admission, recheck_turn_admission) = match &codex_request {
             ClientRequest::ThreadStart { .. }

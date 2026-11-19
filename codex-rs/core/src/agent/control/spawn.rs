@@ -600,15 +600,7 @@ impl LocalAgentControl {
                     runtime.registry.clear_evicted_environments(thread_id);
                     residency_slot.commit(reloaded_thread.thread_id);
                     // Register before listeners can forward events from the resumed thread.
-                    if let Some(client_metadata) = subagent_analytics {
-                        reloaded_thread
-                            .thread
-                            .emit_subagent_session_started(
-                                client_metadata,
-                                Some(stored_thread.created_at),
-                            )
-                            .await;
-                    }
+                    if let Some(client_metadata) = subagent_analytics {}
                     state.notify_thread_created(reloaded_thread.thread_id);
                     Ok(residency_pin)
                 })
@@ -915,10 +907,6 @@ impl LocalAgentControl {
                     }
                 }
             };
-            new_thread
-                .thread
-                .emit_subagent_session_started(client_metadata, /*resumed_created_at*/ None)
-                .await;
         }
 
         let durability_wait_started_at = Instant::now();

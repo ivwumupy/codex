@@ -3,7 +3,6 @@ use super::config_processor::reload_user_config;
 use super::*;
 use crate::error_code::internal_error;
 use crate::error_code::invalid_request;
-use codex_analytics::PluginInstallSource;
 use codex_app_server_protocol::PluginAvailability;
 use codex_app_server_protocol::PluginSharePrincipalRole;
 use codex_app_server_protocol::PluginShareTargetRole;
@@ -63,7 +62,7 @@ pub(crate) struct PluginRequestProcessor {
     auth_manager: Arc<AuthManager>,
     thread_manager: Arc<ThreadManager>,
     outgoing: Arc<OutgoingMessageSender>,
-    analytics_events_client: AnalyticsEventsClient,
+
     config_manager: ConfigManager,
     on_effective_plugins_changed:
         Arc<dyn Fn(codex_core_plugins::EffectivePluginsChange) + Send + Sync>,
@@ -413,7 +412,7 @@ impl PluginRequestProcessor {
         auth_manager: Arc<AuthManager>,
         thread_manager: Arc<ThreadManager>,
         outgoing: Arc<OutgoingMessageSender>,
-        analytics_events_client: AnalyticsEventsClient,
+
         config_manager: ConfigManager,
         on_effective_plugins_changed: Arc<
             dyn Fn(codex_core_plugins::EffectivePluginsChange) + Send + Sync,
@@ -423,7 +422,7 @@ impl PluginRequestProcessor {
             auth_manager,
             thread_manager,
             outgoing,
-            analytics_events_client,
+
             config_manager,
             on_effective_plugins_changed,
         }
@@ -1661,59 +1660,10 @@ impl PluginRequestProcessor {
                 Some(self.effective_plugins_changed_callback()),
             )
             .await
-            .map_err(|err| {
-                let classification = match err.kind.as_ref() {
-                    RemotePluginOperationErrorKind::Catalog { source, .. } => Some((
-                        remote_plugin_catalog_error_type(source),
-                        source.sub_error_type(),
-                    )),
-                    RemotePluginOperationErrorKind::Bundle(source) => Some((
-                        remote_plugin_bundle_install_error_type(source),
-                        source.sub_error_type(),
-                    )),
-                    RemotePluginOperationErrorKind::DisabledByAdmin(_) => Some((
-                        "remote_plugin_not_available",
-                        Some("disabled_by_admin".to_string()),
-                    )),
-                    RemotePluginOperationErrorKind::NotAvailable(_) => Some((
-                        "remote_plugin_not_available",
-                        Some("install_policy_not_available".to_string()),
-                    )),
-                    RemotePluginOperationErrorKind::Sync { .. }
-                    | RemotePluginOperationErrorKind::InvalidRequest(_)
-                    | RemotePluginOperationErrorKind::Internal(_) => None,
-                };
-                if let Some((error_type, sub_error_type)) = classification {
-                    let marketplace = err
-                        .plugin_id
-                        .as_ref()
-                        .map(|id| id.marketplace_name.as_str())
-                        .unwrap_or(&remote_marketplace_name);
-                    self.track_plugin_install_failed_for_remote_plugin(
-                        &remote_plugin_id,
-                        marketplace,
-                        err.plugin_id.as_ref(),
-                        error_type,
-                        sub_error_type,
-                        err.to_string(),
-                    );
-                }
-                remote_plugin_operation_error_to_jsonrpc(err)
-            })?;
+            .map_err(remote_plugin_operation_error_to_jsonrpc)?;
         // Retain the installation outcome through OAuth/app setup: it protects the bundle from pruning.
         let remote_detail = installation.detail;
         let result = installation.installed;
-
-        let plugin_metadata = self
-            .thread_manager
-            .plugins_manager()
-            .telemetry_metadata_for_installed_plugin_with_remote_id(
-                &result.plugin_id,
-                &remote_plugin_id,
-            )
-            .await;
-        self.analytics_events_client
-            .track_plugin_installed(plugin_metadata);
 
         let config = match self.load_latest_config(/*fallback_cwd*/ None).await {
             Ok(mut reloaded_config) => {
@@ -1800,42 +1750,6 @@ impl PluginRequestProcessor {
             auth_policy: remote_detail.summary.auth_policy,
             apps_needing_auth,
         })
-    }
-
-    fn track_plugin_install_failed_for_remote_plugin(
-        &self,
-        remote_plugin_id: &str,
-        marketplace_name: &str,
-        plugin_id: Option<&PluginId>,
-        error_type: &'static str,
-        sub_error_type: Option<String>,
-        error_message: String,
-    ) {
-        tracing::warn!(
-            remote_plugin_id = %remote_plugin_id,
-            marketplace_name = %marketplace_name,
-            error_type = %error_type,
-            sub_error_type = sub_error_type.as_deref(),
-            error = %error_message,
-            "remote plugin install failed"
-        );
-        let plugin = if let Some(plugin_id) = plugin_id {
-            self.thread_manager
-                .plugins_manager()
-                .telemetry_metadata_for_plugin_id_with_remote_id(plugin_id, remote_plugin_id)
-        } else {
-            PluginTelemetryMetadata {
-                plugin_id: None,
-                remote_plugin_id: Some(remote_plugin_id.to_string()),
-                capability_summary: None,
-            }
-        };
-        self.analytics_events_client.track_plugin_install_failed(
-            plugin,
-            PluginInstallSource::Manual,
-            error_type.to_string(),
-            sub_error_type,
-        );
     }
 
     async fn plugin_apps_needing_auth_for_install(
@@ -2178,8 +2092,7 @@ impl PluginRequestProcessor {
             )
             .await
             .map_err(remote_plugin_operation_error_to_jsonrpc)?;
-        self.analytics_events_client
-            .track_plugin_uninstalled(outcome.telemetry);
+
         if outcome.effective_plugins_changed {
             self.on_effective_plugins_changed(McpRefreshReason::RemotePluginUninstalled)
                 .await;

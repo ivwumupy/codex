@@ -8,7 +8,7 @@ use crate::elicitation::ElicitationRegistration;
 use crate::session::SessionIo;
 use crate::session::SessionSettingsUpdate;
 use crate::session::Submission;
-use crate::session::emit_subagent_session_started;
+
 use crate::session::inject::validate_injected_response_item;
 use crate::session::new_submission_id;
 use crate::session::session::AppServerClientMetadata;
@@ -310,7 +310,7 @@ impl CodexThread {
 
     /// Whether analytics is enabled for this thread after configuration and host overrides.
     pub fn analytics_enabled(&self) -> bool {
-        self.session.services.analytics_events_client.is_enabled()
+        false
     }
 
     /// Looks up a live V2 tool invocation on a runtime with [`crate::HostToolInvocationLookup`].
@@ -397,29 +397,6 @@ impl CodexThread {
     /// Wait until the underlying session loop has terminated.
     pub async fn wait_until_terminated(&self) {
         self.io.session_loop_termination.clone().await;
-    }
-
-    pub(crate) async fn emit_subagent_session_started(
-        &self,
-        client_metadata: AppServerClientMetadata,
-        resumed_created_at: Option<DateTime<Utc>>,
-    ) {
-        let SessionSource::SubAgent(source @ SubAgentSource::ThreadSpawn { .. }) =
-            &self.session_source
-        else {
-            return;
-        };
-        let config = self.config_snapshot().await;
-        emit_subagent_session_started(
-            &self.session.services.analytics_events_client,
-            client_metadata,
-            self.session.session_id(),
-            self.session.thread_id(),
-            config.parent_thread_id,
-            config,
-            source.clone(),
-            resumed_created_at,
-        );
     }
 
     pub(crate) async fn emit_thread_ready_lifecycle(&self) {

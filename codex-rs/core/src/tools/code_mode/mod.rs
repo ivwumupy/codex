@@ -403,15 +403,7 @@ fn submit_nested_tool(
         encrypted_function_args: None,
         native_call: None,
     };
-    session
-        .services
-        .analytics_events_client
-        .track_code_mode_tool_call(codex_analytics::CodeModeToolCallFact::ChildStarted {
-            thread_id: session.thread_id.to_string(),
-            turn_id: step_context.turn.sub_id.clone(),
-            call_id: call.call_id.clone(),
-            cell_id: cell_id.to_string(),
-        });
+
     let result = tool_runtime.handle_tool_call_with_source(
         step_context,
         call,

@@ -43,9 +43,6 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-use super::analytics::mount_analytics_capture;
-use super::analytics::wait_for_analytics_event;
-
 const RESULT: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 // Two one-pixel frames, red then blue, with a 200 ms frame duration.
 const ANIMATED_RESULT: &str = "R0lGODlhAQABAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAFAAAACwAAAAAAQABAAAIBAABBAQAIfkEARQAAQAsAAAAAAEAAQCBAAD/AAAAAAAAAAAACAQAAQQEADs=";
@@ -132,7 +129,6 @@ async fn standalone_image_generation_returns_saved_path_hint_to_model(
 
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri(), ImagegenTestMode::Direct)?;
-    mount_analytics_capture(&server, codex_home.path()).await?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -284,21 +280,6 @@ async fn standalone_image_generation_returns_saved_path_hint_to_model(
             .iter()
             .any(|text| text.contains("Generated images are saved to")),
         "standalone image generation should not emit the legacy developer-message hint"
-    );
-
-    let event = wait_for_analytics_event(
-        &server,
-        DEFAULT_READ_TIMEOUT,
-        "codex_image_generation_event",
-    )
-    .await?;
-    assert_eq!(
-        event["event_params"]["imagegen_request_id"],
-        json!("req-imagegen-123")
-    );
-    assert_eq!(
-        event["event_params"]["generation_id"],
-        json!("gen-image-123")
     );
 
     Ok(())
@@ -706,17 +687,6 @@ async fn standalone_image_generation_failure_emits_terminal_item(
         Some(
             "image generation failed: http 500 Internal Server Error: Some(\"image backend failed\")"
         )
-    );
-
-    let event = wait_for_analytics_event(
-        &server,
-        DEFAULT_READ_TIMEOUT,
-        "codex_image_generation_event",
-    )
-    .await?;
-    assert_eq!(
-        event["event_params"]["imagegen_request_id"],
-        json!("req-imagegen-failed-123")
     );
 
     Ok(())

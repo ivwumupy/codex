@@ -5,7 +5,7 @@ mod account_system_proxy;
 mod account_gcp;
 mod account_thread_usage;
 mod agent_message_board;
-mod analytics;
+
 mod app_installed;
 mod app_list;
 mod app_read;
@@ -48,8 +48,7 @@ mod connection_handling_websocket;
 mod connection_handling_websocket_compression;
 #[cfg(unix)]
 mod connection_handling_websocket_unix;
-#[path = "critical_path_analytics_tests.rs"]
-mod critical_path_analytics;
+
 #[cfg(unix)]
 mod curated_mcp_sync;
 mod current_time;

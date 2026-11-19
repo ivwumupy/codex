@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::HostSkillsSnapshot;
 use crate::InjectedHostSkillPrompts;
-use codex_analytics::InvocationType;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ContextContributor;
@@ -30,6 +29,7 @@ use codex_extension_api::WorldStateSectionContribution;
 use codex_mcp::McpResourceClient;
 use codex_otel::MetricsClient;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::skill_invocation::InvocationType;
 
 use crate::SkillsExtensionConfig;
 use crate::catalog::SkillCatalog;

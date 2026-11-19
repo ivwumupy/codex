@@ -1,9 +1,9 @@
 //! Background compaction eligibility and cancellation.
 
 use super::*;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionTrigger;
 use codex_login::CodexAuth;
+use codex_protocol::compaction::CompactionReason;
+use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::models::AudioReference;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;

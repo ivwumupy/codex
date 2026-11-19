@@ -64,3 +64,10 @@ pub mod security_risk;
 pub mod shell_environment;
 pub mod turn_input;
 pub mod user_input;
+
+pub mod compaction;
+pub mod guardian;
+pub mod image_preparation;
+pub mod skill_invocation;
+pub mod time;
+pub mod turn_timing;

@@ -5,7 +5,7 @@
 use crate::GuardianReviewError;
 use crate::GuardianReviewOutcome;
 use crate::ReviewDeadline;
-use codex_analytics::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
 use codex_protocol::protocol::CodexErrorInfo;
 use rand::Rng;
 use std::future::Future;

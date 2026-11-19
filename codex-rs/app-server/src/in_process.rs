@@ -50,7 +50,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use crate::analytics_utils::analytics_events_client_from_config;
 use crate::config_manager::ConfigManager;
 use crate::error_code::OVERLOADED_ERROR_CODE;
 use crate::error_code::internal_error;
@@ -68,7 +67,7 @@ use crate::transport::CHANNEL_CAPACITY;
 use crate::transport::OutboundConnectionState;
 use crate::transport::route_outgoing_envelope;
 pub use bootstrap::EmbeddedNetworkPolicy;
-use codex_analytics::AppServerRpcTransport;
+
 use codex_app_server_protocol::AgentMessageDelivery;
 use codex_app_server_protocol::ClientNotification;
 use codex_app_server_protocol::ClientRequest;
@@ -103,8 +102,8 @@ mod bootstrap;
 
 const IN_PROCESS_CONNECTION_ID: ConnectionId = ConnectionId(0);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-// Covers both bounded runtime drains plus the analytics client's 25-second best-effort flush.
-const SHUTDOWN_ACK_TIMEOUT: Duration = Duration::from_secs(35);
+// The runtime can wait for two bounded drains during shutdown.
+const SHUTDOWN_ACK_TIMEOUT: Duration = SHUTDOWN_TIMEOUT.saturating_mul(2);
 /// Default bounded channel capacity for in-process runtime queues.
 pub const DEFAULT_IN_PROCESS_CHANNEL_CAPACITY: usize = CHANNEL_CAPACITY;
 
@@ -455,17 +454,11 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
             .features
             .enabled(codex_features::Feature::RuntimeAgentInstances)
             .then(codex_runtime_agent_instance::RuntimeAuthSlot::default);
-        let analytics_events_client = analytics_events_client_from_config(
-            Arc::clone(&auth_manager),
-            args.config.as_ref(),
-            runtime_auth_slot.clone(),
-        );
-        let analytics_events_flush_client = analytics_events_client.clone();
+
         // A client can be waiting for process/kill while nobody is polling next_event.
         let (process_reply_tx, mut process_reply_rx) = mpsc::channel(channel_capacity);
         let outgoing_message_sender = Arc::new(
-            OutgoingMessageSender::new(outgoing_tx, analytics_events_client.clone())
-                .with_process_reply_sender(process_reply_tx),
+            OutgoingMessageSender::new(outgoing_tx).with_process_reply_sender(process_reply_tx),
         );
 
         let log_write_warning = crate::log_write_warning::LogWriteWarningReporter::new(
@@ -510,7 +503,7 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
             let processor = Arc::new(MessageProcessor::new(MessageProcessorArgs {
                 cloud_skill_provider: None,
                 outgoing: Arc::clone(&processor_outgoing),
-                analytics_events_client,
+
                 arg0_paths: args.arg0_paths,
                 config: args.config,
                 startup_cwd,
@@ -529,7 +522,7 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                 runtime_auth_slot,
                 installation_id,
                 code_mode_session_provider: None,
-                rpc_transport: AppServerRpcTransport::InProcess,
+
                 remote_control_handle: None,
                 plugin_startup_tasks: Some(PluginStartupConfig::Current),
             }));
@@ -840,8 +833,6 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
             let _ = outbound_handle.await;
         }
 
-        analytics_events_flush_client.flush().await;
-
         if let Some(done_tx) = shutdown_ack {
             let _ = done_tx.send(());
         }
@@ -1093,7 +1084,7 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn in_process_shutdown_waits_for_analytics_flush_budget() {
+    async fn in_process_shutdown_waits_for_both_runtime_drains() {
         let (client_tx, mut client_rx) = mpsc::channel(/*buffer*/ 1);
         let (_event_tx, event_rx) = mpsc::channel(/*buffer*/ 1);
         let completed = Arc::new(AtomicBool::new(false));
@@ -1103,7 +1094,7 @@ mod tests {
                 Some(InProcessClientMessage::Shutdown { done_tx }) => done_tx,
                 _ => panic!("expected in-process shutdown request"),
             };
-            tokio::time::sleep(SHUTDOWN_TIMEOUT + SHUTDOWN_TIMEOUT + Duration::from_secs(24)).await;
+            tokio::time::sleep(SHUTDOWN_ACK_TIMEOUT - Duration::from_millis(1)).await;
             runtime_completed.store(true, Ordering::Release);
             let _ = done_tx.send(());
         });

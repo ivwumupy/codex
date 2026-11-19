@@ -24,7 +24,6 @@ mod npm_source;
 mod plugin_bundle_archive;
 mod plugin_measurement_references;
 mod plugin_metrics;
-mod plugin_metrics_sidecar;
 mod provider;
 mod recommended_plugin_install;
 pub mod remote;
@@ -115,10 +114,7 @@ pub use plugin_measurement_references::RemotePluginMeasurementCache;
 pub use plugin_metrics::PluginMeasurementDefinition;
 pub use plugin_metrics::PluginMetricsOperation;
 pub use plugin_metrics::ResolvedPluginMetricsOperation;
-pub use plugin_metrics_sidecar::PLUGIN_METRICS_OUTPUT_ENV_VAR;
-pub use plugin_metrics_sidecar::PluginMeasurementBatch;
-pub use plugin_metrics_sidecar::PluginMetricsSidecar;
-pub use plugin_metrics_sidecar::strip_output_env;
+
 pub use provider::PluginListQuery;
 pub use provider::PluginProvider;
 pub use provider::PluginProviderError;
@@ -134,3 +130,11 @@ pub use script_attribution::TrustedPluginRoots;
 pub use script_attribution::command_script_arguments;
 
 pub use marketplace_policy::configured_plugins_from_stack;
+pub const PLUGIN_METRICS_OUTPUT_ENV_VAR: &str = "CODEX_PLUGIN_METRICS_OUTPUT";
+pub fn strip_output_env(env: &mut std::collections::HashMap<String, String>) {
+    if cfg!(windows) {
+        env.retain(|key, _| !key.eq_ignore_ascii_case(PLUGIN_METRICS_OUTPUT_ENV_VAR));
+    } else {
+        env.remove(PLUGIN_METRICS_OUTPUT_ENV_VAR);
+    }
+}

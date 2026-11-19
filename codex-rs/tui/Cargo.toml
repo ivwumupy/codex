@@ -35,7 +35,6 @@ codex-app-server-protocol = { workspace = true }
 codex-arg0 = { workspace = true }
 codex-backend-client = { workspace = true }
 codex-install-context = { workspace = true }
-codex-cloud-config = { workspace = true }
 codex-config = { workspace = true }
 codex-context-fragments = { workspace = true }
 codex-connectors = { workspace = true }
@@ -71,7 +70,6 @@ codex-utils-cli = { workspace = true }
 codex-utils-elapsed = { workspace = true }
 codex-utils-fuzzy-match = { workspace = true }
 codex-utils-home-dir = { workspace = true }
-codex-utils-oss = { workspace = true }
 codex-utils-path = { workspace = true }
 codex-utils-path-uri = { workspace = true }
 codex-utils-plugins = { workspace = true }

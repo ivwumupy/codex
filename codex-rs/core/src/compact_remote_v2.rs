@@ -11,9 +11,7 @@ use crate::client::ModelClientSession;
 use crate::client::ResponsesHttpExecutor;
 use crate::client_common::ResponseEvent;
 use crate::compact::CompactedHistoryMetadata;
-use crate::compact::CompactionAnalyticsAttempt;
-use crate::compact::CompactionAnalyticsDetails;
-use crate::compact::compaction_status_from_result;
+
 use crate::compact_model_fallback::record_model_fallback;
 use crate::compact_model_fallback::should_retry_with_current_model;
 use crate::compact_pending_input::MAX_RETAINED_AGENT_MESSAGE_TOKENS;
@@ -36,16 +34,16 @@ use crate::session::RequestEffortUsage;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionTrigger;
 use codex_context_fragments::set_annotated_content;
 use codex_context_fragments::to_annotated_content;
 use codex_features::Feature;
 use codex_features::Features;
 use codex_history::CodexHarnessMetadata;
 use codex_history::ResponseItemEnvelope;
+use codex_protocol::compaction::CompactionImplementation;
+use codex_protocol::compaction::CompactionPhase;
+use codex_protocol::compaction::CompactionReason;
+use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
@@ -182,35 +180,15 @@ async fn run_remote_compact_task_inner(
 ) -> CodexResult<bool> {
     let turn_context = &step_context.turn;
     let trigger = compaction_metadata.trigger();
-    let reason = compaction_metadata.reason();
-    let implementation = compaction_metadata.implementation();
+
     let phase = compaction_metadata.phase();
-    let mut analytics_details = CompactionAnalyticsDetails {
-        active_context_tokens_before: Some(sess.get_total_token_usage().await),
-        ..Default::default()
-    };
-    let attempt = CompactionAnalyticsAttempt::begin(
-        sess.as_ref(),
-        turn_context.as_ref(),
-        trigger,
-        reason,
-        implementation,
-        phase,
-    )
-    .await;
+
     let pre_compact_outcome = run_pre_compact_hooks(sess, turn_context, trigger).await;
     match pre_compact_outcome {
         PreCompactHookOutcome::Continue => {}
         PreCompactHookOutcome::Stopped => {
             let error = CodexErr::TurnAborted;
-            attempt
-                .track(
-                    sess.as_ref(),
-                    codex_analytics::CompactionStatus::Interrupted,
-                    Some(&error),
-                    analytics_details,
-                )
-                .await;
+
             return Err(error);
         }
     }
@@ -234,7 +212,6 @@ async fn run_remote_compact_task_inner(
         client_session,
         &world_state,
         compaction_metadata,
-        &mut analytics_details,
         started_item.as_ref(),
         candidate.map(|candidate| *candidate),
         fallback,
@@ -246,20 +223,14 @@ async fn run_remote_compact_task_inner(
         }
         return Ok(false);
     }
-    let status = compaction_status_from_result(&result);
-    let codex_error = result.as_ref().err();
+
     if result.is_ok() {
         let post_compact_outcome = run_post_compact_hooks(sess, turn_context, trigger).await;
         if let PostCompactHookOutcome::Stopped = post_compact_outcome {
-            attempt
-                .track(sess.as_ref(), status, codex_error, analytics_details)
-                .await;
             return Err(CodexErr::TurnAborted);
         }
     }
-    attempt
-        .track(sess.as_ref(), status, codex_error, analytics_details)
-        .await;
+
     match result {
         Ok(installed) => Ok(installed),
         Err(err)
@@ -269,7 +240,6 @@ async fn run_remote_compact_task_inner(
             Err(err)
         }
         Err(err) => {
-            sess.track_turn_codex_error(turn_context, &err);
             // Pre-turn failures are reported by run_turn after preserving the incoming prompt.
             if !matches!(phase, CompactionPhase::PreTurn) {
                 let event = EventMsg::Error(

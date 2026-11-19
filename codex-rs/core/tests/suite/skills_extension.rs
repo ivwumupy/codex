@@ -381,25 +381,6 @@ fn catalog_extensions(
     (Arc::new(extensions.build()), event_rx)
 }
 
-async fn wait_for_analytics_events(
-    server: &MockServer,
-    event_type: &str,
-    expected_count: usize,
-) -> Vec<Value> {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let events = responses::received_analytics_events(server, event_type).await;
-        if events.len() >= expected_count {
-            return events;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "timed out waiting for {event_type} analytics"
-        );
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-}
-
 fn configure_catalog_test(config: &mut Config) {
     config.include_skill_instructions = true;
     config
@@ -2562,15 +2543,6 @@ async fn executor_skill_invocation_is_environment_scoped_and_deduplicated() -> R
         );
     }
 
-    let events = wait_for_analytics_events(&server, "skill_invocation", /*expected_count*/ 1).await;
-    assert_eq!(events.len(), 1, "executor skill should be counted once");
-    assert_eq!(events[0]["skill_name"], "selected-environment-skill");
-    assert_eq!(
-        events[0]["skill_id"],
-        format!("{:x}", sha1::Sha1::digest(SELECTED_RESOURCE.as_bytes()))
-    );
-    assert_eq!(events[0]["event_params"]["invoke_type"], "implicit");
-
     Ok(())
 }
 
@@ -3261,17 +3233,7 @@ async fn production_turn_uses_provider_host_catalog_and_core_snapshot_injection(
     let user_text = request.message_input_texts("user").join("\n");
     assert!(user_text.contains(&snapshot_contents));
     assert!(!user_text.contains(provider_contents));
-    let app_mentioned_events =
-        wait_for_analytics_events(&server, "codex_app_mentioned", /*expected_count*/ 1).await;
-    let app_mentioned_event = &app_mentioned_events[0];
-    assert_eq!(
-        app_mentioned_event["event_params"]["connector_id"],
-        "calendar"
-    );
-    assert_eq!(
-        app_mentioned_event["event_params"]["invoke_type"],
-        "explicit"
-    );
+
     Ok(())
 }
 

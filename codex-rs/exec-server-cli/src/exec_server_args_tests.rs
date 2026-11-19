@@ -59,7 +59,6 @@ fn remote_forwarder_skips_cloud_config() {
         "--environment-id",
         "env-1",
     ]);
-    assert!(!command.should_load_cloud_config());
     command.chatgpt_token_stdin = true;
     assert!(command.validate_remote_transport().is_err());
 }
@@ -98,7 +97,6 @@ fn exec_server_parses_direct_aws_options() {
         );
         assert_eq!(command.environment_id.as_deref(), Some("env-1"));
         assert_eq!(command.remote_transport, ExecServerRemoteTransport::Direct);
-        assert!(!command.should_load_cloud_config());
         assert!(command.aws_sigv4);
         assert_eq!(
             (

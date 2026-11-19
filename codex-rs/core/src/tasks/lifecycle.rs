@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use codex_analytics::TurnAnalyticsMetadata;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::ThreadIdleCause;
 use codex_extension_api::TurnStartPhase;
@@ -8,6 +7,7 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnAbortReason;
+use codex_protocol::turn_timing::TurnAnalyticsMetadata;
 
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;

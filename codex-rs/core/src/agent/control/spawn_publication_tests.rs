@@ -124,7 +124,6 @@ async fn publication_harness(
         harness.manager.environment_manager(),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         harness.manager.image_store(),
         crate::ThreadStoreBuilder::from_config(&harness.config, harness.state_db.clone()).build(),
         Some(graph.clone()),

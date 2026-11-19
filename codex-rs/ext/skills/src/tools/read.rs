@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use codex_analytics::InvocationType;
 use codex_extension_api::ExtensionMetrics;
 use codex_extension_api::FunctionCallError;
 use codex_extension_api::ToolCall;
@@ -8,6 +7,7 @@ use codex_extension_api::ToolExecutor;
 use codex_extension_api::ToolExecutorFuture;
 use codex_extension_api::ToolName;
 use codex_extension_api::ToolSpec;
+use codex_protocol::skill_invocation::InvocationType;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;

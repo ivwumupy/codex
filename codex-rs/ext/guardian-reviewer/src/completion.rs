@@ -1,11 +1,11 @@
 //! Converts reviewer outcomes into decisions and reports. The host publishes these
 //! reports and applies them only to the action whose evidence was reviewed.
 
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewDecision;
-use codex_analytics::GuardianReviewTerminalStatus;
 use codex_prompts::ResolvedModelMessages;
 use codex_prompts::render_guardian_rejection;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
+use codex_protocol::guardian::GuardianReviewDecision;
+use codex_protocol::guardian::GuardianReviewTerminalStatus;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::GuardianAssessmentEvent;
 use codex_protocol::protocol::GuardianAssessmentOutcome;

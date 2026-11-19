@@ -402,261 +402,7 @@ async fn fixed_thread_text_supersedes_the_live_provider_and_isolated_helpers_rej
     }
 }
 
-#[test_case::test_case(None, "chatgpt.com", 1; "ordinary_openai")]
-#[test_case::test_case(Some(codex_features::RuntimeAuthMode::DualHeader), "chatgpt.com", 0; "dual_header_openai")]
-#[test_case::test_case(Some(codex_features::RuntimeAuthMode::AssertionOnly), "chatgpt.com", 0; "assertion_only_openai")]
-#[test_case::test_case(Some(codex_features::RuntimeAuthMode::DualHeader), "example.test", 1; "dual_header_custom_backend")]
-#[test_case::test_case(Some(codex_features::RuntimeAuthMode::AssertionOnly), "example.test", 1; "assertion_only_custom_backend")]
-#[tokio::test]
-async fn resumed_analytics_validates_openai_destination(
-    mode: Option<codex_features::RuntimeAuthMode>,
-    host: &str,
-    expected_requests: usize,
-) {
-    let proxy = MockServer::start().await;
-    wiremock::Mock::given(wiremock::matchers::path("/codex/analytics-events/events"))
-        .respond_with(wiremock::ResponseTemplate::new(200))
-        .mount(&proxy)
-        .await;
-    let home = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.codex_home = home.path().abs();
-    config.cwd = home.path().abs();
-    config.chatgpt_base_url = format!("http://{host}:{}", proxy.address().port());
-    config.model_provider.base_url = Some(proxy.uri());
-    config.respect_system_proxy = true;
-    config.cli_auth_credentials_store_mode = codex_login::AuthCredentialsStoreMode::File;
-    config.analytics_enabled = Some(true);
-    if let Some(mode) = mode {
-        config
-            .features
-            .enable(Feature::RuntimeAgentInstances)
-            .unwrap();
-        config.runtime_auth_mode = mode;
-    } else {
-        config
-            .features
-            .disable(Feature::RuntimeAgentInstances)
-            .unwrap();
-    }
-    codex_http_client::cache_system_proxy_route_for_test(
-        &format!("{}/codex/analytics-events/events", config.chatgpt_base_url),
-        proxy.uri(),
-    );
-    codex_login::login_with_api_key(
-        &config.codex_home,
-        "resumed-key",
-        codex_login::AuthCredentialsStoreMode::File,
-        codex_login::AuthKeyringBackendKind::default(),
-    )
-    .unwrap();
-    let resumed_auth =
-        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)
-            .await
-            .unwrap();
-    let original_auth = CodexAuth::from_api_key("startup-key");
-    let mut manager = ThreadManager::with_models_provider_and_home_for_tests(
-        original_auth.clone(),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-    );
-    let startup_analytics = AnalyticsEventsClient::new(
-        AuthManager::from_auth_for_testing(original_auth),
-        proxy.uri(),
-        /*analytics_enabled*/ Some(true),
-    );
-    Arc::get_mut(&mut manager.state)
-        .expect("unshared thread manager state")
-        .analytics_events_client = Some(startup_analytics);
-
-    let original = manager
-        .start_thread(StartThreadOptions {
-            history_mode: Some(ThreadHistoryMode::Legacy),
-            ..StartThreadOptions::new(config.clone())
-        })
-        .await
-        .expect("start original thread");
-    original.thread.ensure_rollout_materialized().await;
-    original.thread.flush_rollout().await.unwrap();
-    original.thread.shutdown_and_wait().await.unwrap();
-    manager.remove_thread(&original.thread_id).await;
-
-    let resumed = manager
-        .resume_thread_with_history(
-            config,
-            InitialHistory::Resumed(ResumedHistory {
-                history_revision: None,
-                conversation_id: original.thread_id,
-                history: Arc::new(Vec::new()),
-                rollout_path: original.thread.rollout_path(),
-            }),
-            resumed_auth,
-            /*parent_trace*/ None,
-            ClientMcpExtensions::default(),
-        )
-        .await
-        .expect("resume with another auth owner");
-    let analytics = &resumed.thread.session.services.analytics_events_client;
-    analytics.track_plugin_used(
-        codex_analytics::TrackEventsContext {
-            turn_metadata: None,
-            model_slug: "test-model".to_string(),
-            turn_id: "test-turn".to_string(),
-            thread_id: resumed.thread_id.to_string(),
-            product_client_id: "codex_work_cca".to_string(),
-        },
-        codex_plugin::PluginTelemetryMetadata {
-            plugin_id: Some(codex_plugin::PluginId::parse("test@local").expect("valid plugin ID")),
-            remote_plugin_id: None,
-            capability_summary: None,
-        },
-    );
-    analytics.flush().await;
-    resumed.thread.shutdown_and_wait().await.unwrap();
-
-    let requests: Vec<_> = proxy
-        .received_requests()
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|request| request.url.path() == "/codex/analytics-events/events")
-        .collect();
-    assert_eq!(requests.len(), expected_requests);
-    for request in requests {
-        assert_eq!(request.headers["authorization"], "Bearer resumed-key");
-        assert!(!request.headers.contains_key("x-openai-agent-assertion"));
-    }
-}
-
 /// A thread opt-out wins over a shared client without disabling its siblings.
-#[tokio::test]
-async fn thread_analytics_opt_out_overrides_shared_client() {
-    let server = MockServer::start().await;
-    wiremock::Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/codex/analytics-events/events"))
-        .respond_with(wiremock::ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-    let temp_dir = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.chatgpt_base_url = server.uri();
-    config.model_provider.base_url = Some(server.uri());
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
-    let shared_client = AnalyticsEventsClient::new(
-        AuthManager::from_auth_for_testing(auth.clone()),
-        server.uri(),
-        /*analytics_enabled*/ Some(true),
-    );
-    let mut expected_thread_ids = Vec::new();
-    let mut opted_out_thread_ids = Vec::new();
-
-    for (name, client_override, expected_enabled) in [
-        (
-            "enabled_override",
-            Some(shared_client.clone()),
-            [false, true, true],
-        ),
-        (
-            "disabled_override",
-            Some(AnalyticsEventsClient::disabled()),
-            [false, false, false],
-        ),
-        ("no_override", None, [false, true, true]),
-    ] {
-        config.codex_home = temp_dir.path().join(name).abs();
-        config.cwd = config.codex_home.abs();
-        std::fs::create_dir_all(&config.codex_home).expect("create codex home");
-        let mut manager = ThreadManager::with_models_provider_and_home_for_tests(
-            auth.clone(),
-            config.model_provider.clone(),
-            config.codex_home.to_path_buf(),
-            Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        );
-        Arc::get_mut(&mut manager.state)
-            .expect("unshared thread manager state")
-            .analytics_events_client = client_override;
-
-        for (setting, enabled) in [Some(false), Some(true), None]
-            .into_iter()
-            .zip(expected_enabled)
-        {
-            config.analytics_enabled = setting;
-            let started = manager
-                .start_thread(StartThreadOptions::new(config.clone()))
-                .await
-                .expect("start analytics test thread");
-            let services = &started.thread.session.services;
-            assert_eq!(started.thread.analytics_enabled(), enabled);
-            assert_eq!(
-                services
-                    .session_extension_data
-                    .get::<AnalyticsEventsClient>()
-                    .expect("analytics client in session store")
-                    .is_enabled(),
-                enabled,
-            );
-            let thread_id = started.thread_id.to_string();
-            if enabled {
-                expected_thread_ids.push(thread_id.clone());
-            } else {
-                opted_out_thread_ids.push(thread_id.clone());
-            }
-            services.analytics_events_client.track_app_used(
-                codex_analytics::TrackEventsContext {
-                    turn_metadata: None,
-                    model_slug: "test-model".to_string(),
-                    turn_id: format!("test-turn-{thread_id}"),
-                    thread_id,
-                    product_client_id: "codex_work_cca".to_string(),
-                },
-                codex_analytics::AppInvocation {
-                    connector_id: Some("test-connector".to_string()),
-                    app_name: None,
-                    invocation_type: None,
-                },
-                /*elicitation_type*/ None,
-            );
-            services.analytics_events_client.flush().await;
-        }
-        let shutdown = manager
-            .shutdown_all_threads_bounded(Duration::from_secs(10))
-            .await;
-        assert_eq!(shutdown.completed.len(), 3);
-    }
-
-    let events: Vec<serde_json::Value> = server
-        .received_requests()
-        .await
-        .expect("analytics requests")
-        .into_iter()
-        .filter(|request| request.url.path() == "/codex/analytics-events/events")
-        .flat_map(|request| {
-            request.body_json::<serde_json::Value>().expect("JSON body")["events"]
-                .as_array()
-                .expect("events array")
-                .clone()
-        })
-        .collect();
-    assert!(events.iter().all(|event| {
-        !opted_out_thread_ids
-            .iter()
-            .any(|thread_id| event["event_params"]["thread_id"] == thread_id.as_str())
-    }));
-    let mut actual_thread_ids: Vec<String> = events
-        .iter()
-        .filter(|event| event["event_type"] == "codex_app_used")
-        .map(|event| {
-            event["event_params"]["thread_id"]
-                .as_str()
-                .expect("app usage thread ID")
-                .to_string()
-        })
-        .collect();
-    actual_thread_ids.sort();
-    expected_thread_ids.sort();
-    assert_eq!(actual_thread_ids, expected_thread_ids);
-}
 
 /// Controls without a custom allocation policy still produce distinct thread identifiers.
 #[test]
@@ -1571,7 +1317,6 @@ async fn mcp_invalidation_refreshes_threads_that_are_still_starting() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         Arc::new(extensions.build()),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -2244,7 +1989,6 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         Arc::new(extensions.build()),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -2694,7 +2438,6 @@ async fn resume_and_fork_do_not_restore_thread_environments_from_rollout() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -2857,7 +2600,6 @@ async fn explicit_installation_id_skips_codex_home_file() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         thread_store,
         local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -2904,7 +2646,6 @@ async fn resume_active_thread_from_rollout_returns_running_thread() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -2973,7 +2714,6 @@ async fn resume_stopped_thread_from_rollout_spawns_new_thread() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -3049,7 +2789,6 @@ async fn resume_stopped_thread_from_rollout_preserves_thread_source() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         thread_store,
         local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -3139,7 +2878,6 @@ async fn subtree_listing_uses_injected_graph_store_without_state_db() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         Some(agent_graph_store),
@@ -3190,7 +2928,6 @@ async fn rollout_path_resume_and_fork_read_history_through_thread_store() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         thread_store.clone(),
         local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -3303,7 +3040,6 @@ async fn metadata_update_without_result_reads_only_when_the_caller_needs_the_thr
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         thread_store.clone(),
         /*agent_graph_store*/ None,
@@ -3439,7 +3175,6 @@ async fn new_uses_active_provider_for_model_refresh(with_cache: bool) {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -3595,7 +3330,6 @@ async fn startup_catalog_cache_policy_controls_refresh() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, /*state_db*/ None).build(),
         /*agent_graph_store*/ None,
@@ -3880,7 +3614,6 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, state_db.clone()).build(),
         local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -3995,7 +3728,6 @@ async fn interrupted_fork_snapshot_preserves_explicit_turn_id() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, state_db.clone()).build(),
         local_agent_graph_store_from_state_db(state_db.as_ref()),
@@ -4103,7 +3835,6 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         Arc::new(crate::test_support::EmptyUserInstructionsProvider),
-        /*analytics_events_client*/ None,
         passthrough_image_store(),
         ThreadStoreBuilder::from_config(&config, state_db.clone()).build(),
         local_agent_graph_store_from_state_db(state_db.as_ref()),

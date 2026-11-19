@@ -1,8 +1,8 @@
-use codex_analytics::InvocationType;
-use codex_analytics::SkillInvocation;
-use codex_analytics::SkillInvocationLocation;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_extension_api::ExtensionData;
+use codex_protocol::skill_invocation::InvocationType;
+use codex_protocol::skill_invocation::SkillInvocation;
+use codex_protocol::skill_invocation::SkillInvocationLocation;
 use codex_skills::ImplicitSkillAccess;
 use codex_skills::detect_implicit_skill_invocation_for_command;
 use codex_skills::implicit_skill_accesses_for_command;

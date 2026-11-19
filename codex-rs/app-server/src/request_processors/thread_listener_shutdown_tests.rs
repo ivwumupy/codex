@@ -15,7 +15,7 @@ use crate::thread_state::PendingNetworkApproval;
 use crate::thread_state::resolve_server_request_on_thread_listener;
 use anyhow::Context;
 use anyhow::Result;
-use codex_analytics::AnalyticsEventsClient;
+
 use codex_app_server_protocol::ClientResponsePayload;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadResumeParams;
@@ -54,10 +54,7 @@ async fn listener_shutdown_releases_runtime_and_preserves_other_subscribers(
     let config_manager =
         ConfigManager::without_managed_config_for_tests(config.codex_home.to_path_buf());
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel(/*buffer*/ 16);
-    let outgoing = Arc::new(OutgoingMessageSender::new(
-        outgoing_tx,
-        AnalyticsEventsClient::disabled(),
-    ));
+    let outgoing = Arc::new(OutgoingMessageSender::new(outgoing_tx));
     let thread_state_manager = ThreadStateManager::new();
     let thread_watch_manager = ThreadWatchManager::new_with_outgoing(outgoing.clone());
     let skills_watcher = SkillsWatcher::new(

@@ -150,7 +150,7 @@ async fn prepared_prefix_rejection_respects_caller_intent(
         },
     };
     let world_state = WorldState::default();
-    let mut analytics = CompactionAnalyticsDetails::default();
+
     let mut compaction = Box::pin(run_compaction(
         &sess,
         &step,
@@ -163,7 +163,6 @@ async fn prepared_prefix_rejection_respects_caller_intent(
             CompactionImplementation::ResponsesCompactionV2,
             CompactionPhase::PreTurn,
         ),
-        &mut analytics,
         /*started_item*/ None,
         Some(candidate),
         fallback,
@@ -190,20 +189,11 @@ async fn prepared_prefix_rejection_respects_caller_intent(
     let installed = compaction
         .await
         .expect("reject stale result without failing compaction");
-    // The foreground response has no usage; stale candidate statistics must not leak.
-    assert_eq!(
-        (
-            analytics.compaction_summary_tokens,
-            analytics.cached_input_tokens,
-            analytics.cache_write_input_tokens
-        ),
-        (None, None, None),
-    );
+
     let after = sess.clone_history().await;
     match fallback {
         CompactionFallback::Skip => {
             assert!(!installed);
-            assert_eq!(analytics.retained_image_count, None);
             assert_eq!(requests.requests().len(), 0);
             assert_eq!(after.annotated_items(), before.annotated_items());
             assert_eq!(sess.current_window().await, window_before);

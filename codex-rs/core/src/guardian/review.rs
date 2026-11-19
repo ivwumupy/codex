@@ -5,8 +5,6 @@
 mod request;
 pub(super) use request::ReviewAuthorization;
 
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewAnalyticsResult;
 use codex_core_plugins::PluginCommandAttribution;
 use codex_features::Feature;
 use codex_guardian_reviewer::GuardianAssessment;
@@ -20,6 +18,8 @@ use codex_guardian_reviewer::run_before_review_deadline;
 #[cfg(test)]
 use codex_guardian_reviewer::run_with_retry;
 use codex_prompts::ResolvedModelMessages;
+use codex_protocol::guardian::GuardianApprovalRequestSource;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
 use codex_protocol::openai_models::GuardianScope;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ReviewDecision;

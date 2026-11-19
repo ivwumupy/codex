@@ -13,7 +13,7 @@ use super::RemoteCompactionV2Output;
 use super::run_remote_compaction_request_v2;
 use crate::Prompt;
 use crate::client::ModelClientSession;
-use crate::compact::CompactionAnalyticsDetails;
+
 use crate::compact_remote_history::trim_function_call_history_to_fit_context_window;
 use crate::context::world_state::WorldState;
 use crate::context_manager::ContextManager;
@@ -23,11 +23,11 @@ use crate::responses_metadata::CompactionTurnMetadata;
 use crate::session::CompactionPrefix;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionTrigger;
 use codex_history::CodexHarnessMetadata;
+use codex_protocol::compaction::CompactionImplementation;
+use codex_protocol::compaction::CompactionPhase;
+use codex_protocol::compaction::CompactionReason;
+use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::BaseInstructions;
@@ -77,7 +77,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
     step_context: &Arc<StepContext>,
     compaction_trace: &CompactionTraceContext,
     compaction_metadata: CompactionTurnMetadata,
-    analytics_details: &mut CompactionAnalyticsDetails,
+
     input: RemoteCompactV2AttemptInput<'_>,
 ) -> CodexResult<RemoteCompactV2Attempt> {
     let turn_context = &step_context.turn;
@@ -120,15 +120,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
                     "rewrote history outputs before remote compaction v2"
                 );
             }
-            if estimated_deleted_tokens > 0 {
-                let max_local_deleted_tokens = sess.estimated_tokens_since_last_usage().await;
-                analytics_details.active_context_tokens_before = analytics_details
-                    .active_context_tokens_before
-                    .map(|active_context_tokens_before| {
-                        active_context_tokens_before
-                            .saturating_sub(estimated_deleted_tokens.min(max_local_deleted_tokens))
-                    });
-            }
+
             let trace_input_history = compaction_trace
                 .is_enabled()
                 .then(|| history.raw_items().cloned().collect());
@@ -355,7 +347,6 @@ pub(crate) async fn run_background_compaction(
         &step_context,
         &CompactionTraceContext::disabled(),
         metadata,
-        &mut CompactionAnalyticsDetails::default(),
         RemoteCompactV2AttemptInput::Background(prepared_input),
     )
     .await?;

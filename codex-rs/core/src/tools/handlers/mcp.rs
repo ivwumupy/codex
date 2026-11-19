@@ -234,12 +234,7 @@ impl McpHandler {
             .await;
         let prepared = prepared_mcp_call.as_ref().ok();
         // Use the executed call's binding; a later catalog refresh must not change eligibility.
-        let result_metadata_capture_allowed = invocation
-            .session
-            .services
-            .analytics_events_client
-            .is_enabled()
-            && prepared.is_some_and(codex_mcp::PreparedMcpCall::is_host_owned_apps);
+        let result_metadata_capture_allowed = false;
         let mcp_tool = prepared.map(|call| {
             McpToolContext::from_prepared_call(
                 call,

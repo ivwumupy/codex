@@ -21,7 +21,7 @@ pub(super) async fn run_compaction(
     mut client_session: Option<&mut ModelClientSession>,
     world_state: &WorldState,
     compaction_metadata: CompactionTurnMetadata,
-    analytics_details: &mut CompactionAnalyticsDetails,
+
     mut started_item: Option<&TurnItem>,
     candidate: Option<BackgroundCompactionCandidate>,
     fallback: CompactionFallback,
@@ -34,7 +34,6 @@ pub(super) async fn run_compaction(
             client_session.as_deref_mut(),
             world_state,
             compaction_metadata,
-            analytics_details,
             started_item,
             Some(candidate),
         )
@@ -62,7 +61,6 @@ pub(super) async fn run_compaction(
         client_session,
         world_state,
         compaction_metadata,
-        analytics_details,
         started_item,
         /*candidate*/ None,
     )
@@ -77,7 +75,7 @@ async fn build_and_install_compaction(
     mut client_session: Option<&mut ModelClientSession>,
     world_state: &WorldState,
     compaction_metadata: CompactionTurnMetadata,
-    analytics_details: &mut CompactionAnalyticsDetails,
+
     started_item: Option<&TurnItem>,
     candidate: Option<BackgroundCompactionCandidate>,
 ) -> CodexResult<bool> {
@@ -128,7 +126,6 @@ async fn build_and_install_compaction(
             step_context,
             &compaction_trace,
             compaction_metadata,
-            analytics_details,
             RemoteCompactV2AttemptInput::Foreground(client_session.as_deref_mut()),
         )
         .await;
@@ -153,7 +150,6 @@ async fn build_and_install_compaction(
                     replacement_step_context,
                     &fallback_compaction_trace,
                     compaction_metadata,
-                    analytics_details,
                     RemoteCompactV2AttemptInput::Foreground(client_session),
                 )
                 .await;
@@ -189,7 +185,6 @@ async fn build_and_install_compaction(
     {
         sess.record_rollout_budget_usage(&compaction_turn_context.sub_id, token_usage)
             .await?;
-        analytics_details.active_context_tokens_before = Some(token_usage.input_tokens);
     }
     let (compacted_history, retained_images) = build_v2_compacted_history(
         prompt_input,
@@ -265,12 +260,7 @@ async fn build_and_install_compaction(
         return Ok(false);
     }
     // Rejected candidates must not supply analytics for a later foreground attempt.
-    if let Some(token_usage) = token_usage {
-        analytics_details.compaction_summary_tokens = Some(token_usage.output_tokens);
-        analytics_details.cached_input_tokens = Some(token_usage.cached_input_tokens);
-        analytics_details.cache_write_input_tokens = Some(token_usage.cache_write_input_tokens);
-    }
-    analytics_details.retained_image_count = Some(retained_images);
+
     if let Some(trace_input_history) = trace_input_history.as_deref() {
         let replacement_history = sess
             .clone_history()

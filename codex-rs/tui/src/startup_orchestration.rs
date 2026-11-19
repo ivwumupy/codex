@@ -59,12 +59,7 @@ pub(super) async fn run_main_inner(
             .push("web_search=\"live\"".to_string());
     }
 
-    // When using `--oss`, let the bootstrapper pick the model (defaulting to
-    // gpt-oss:20b) and ensure it is present locally. Also, force the built‑in
-    let raw_overrides = cli.config_overrides.raw_overrides.clone();
-    // `oss` model provider.
-    let overrides_cli = codex_utils_cli::CliConfigOverrides { raw_overrides };
-    let mut cli_kv_overrides = match overrides_cli.parse_overrides() {
+    let mut cli_kv_overrides = match cli.config_overrides.parse_overrides() {
         // Parse `-c` overrides from the CLI.
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
@@ -154,26 +149,6 @@ pub(super) async fn run_main_inner(
         let mut validation_loader_overrides = launch_loader_overrides.clone();
         validation_loader_overrides.ignore_login_requirements =
             validation_target.uses_remote_workspace();
-        let validation_bootstrap = load_bootstrap_config_or_exit(
-            &codex_home,
-            validation_cwd.as_ref(),
-            cli_kv_overrides.clone(),
-            validation_loader_overrides.clone(),
-            strict_config,
-            CloudConfigBundleLoader::default(),
-        )
-        .await;
-        let validation_cloud_config_bundle = if workload_identity_selected {
-            cloud_config_bundle_for_app_server_target(
-                &validation_target,
-                &validation_bootstrap,
-                &codex_home,
-                &embedded_network_policy,
-            )
-            .await?
-        } else {
-            CloudConfigBundleLoader::default()
-        };
         load_config_or_exit(
             cli_kv_overrides.clone(),
             ConfigOverrides {
@@ -181,21 +156,12 @@ pub(super) async fn run_main_inner(
                 approval_policy,
                 sandbox_mode,
                 cwd: validation_cwd.map(AbsolutePathBuf::into_path_buf),
-                model_provider: cli
-                    .oss
-                    .then(|| {
-                        resolve_oss_provider(
-                            cli.oss_provider.as_deref(),
-                            &validation_bootstrap.config_toml,
-                        )
-                    })
-                    .flatten(),
                 bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
                 additional_writable_roots: cli.add_dir.clone(),
                 ..Default::default()
             },
             validation_loader_overrides,
-            validation_cloud_config_bundle,
+            CloudConfigBundleLoader::default(),
             strict_config,
         )
         .await;
@@ -225,8 +191,7 @@ pub(super) async fn run_main_inner(
         && !cli.bypass_hook_trust;
     let initial_screen = if cli.resume_picker || cli.fork_picker || cli.agents_overview {
         startup_draft::StartupDraftInitialScreen::SessionPicker
-    } else if !cli.oss
-        && explicit_remote_endpoint.is_none()
+    } else if explicit_remote_endpoint.is_none()
         && (reuse_implicit_local_daemon || search_only_config_override)
         && launch_loader_overrides.packaged_defaults_path.is_none()
         && startup_preflight::should_delay_startup_composer_for_first_login(
@@ -301,19 +266,6 @@ pub(super) async fn run_main_inner(
             err
         }
     })?;
-    if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        codex_cloud_config::ensure_config_server_login(
-            embedded_network_policy.bind_bootstrap_auth(bootstrap_auth_config(
-                &codex_home,
-                &presentation.bootstrap_config,
-            )?),
-            presentation
-                .bootstrap_config
-                .config_layer_stack
-                .requirements_toml(),
-        )
-        .await?;
-    }
     // Keep normal terminal signals available until local configuration is ready. Once raw
     // mode begins, StartupDraft immediately takes ownership of input.
     let (initialized_terminal, terminal_restore_guard) = tokio::task::spawn_blocking(|| {
@@ -326,7 +278,7 @@ pub(super) async fn run_main_inner(
     let terminal_size_tags = crate::terminal_size_telemetry::tags(initial_terminal_size);
     let startup_presentation::StartupPresentation {
         bootstrap_config,
-        config_cwd,
+        config_cwd: _,
         mut screen,
         local_settings,
     } = presentation;
@@ -362,7 +314,6 @@ pub(super) async fn run_main_inner(
         workload_identity_selected,
         std::env::var_os(codex_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR).as_deref(),
     )?;
-    let cloud_preview_available = app_server_target.uses_embedded_network_policy();
     let remote_cwd_override = cli
         .cwd
         .clone()
@@ -383,15 +334,7 @@ pub(super) async fn run_main_inner(
     } else {
         Ok(())
     };
-    let cloud_config_bundle = startup_draft
-        .run_until(cloud_config_bundle_for_app_server_target(
-            &app_server_target,
-            &bootstrap_config,
-            &codex_home,
-            &embedded_network_policy,
-        ))
-        .await??;
-    let bootstrap_config_toml = &bootstrap_config.config_toml;
+    let mut cloud_config_bundle = CloudConfigBundleLoader::default();
 
     let cwd_override = if app_server_target.uses_remote_workspace() {
         None
@@ -399,99 +342,15 @@ pub(super) async fn run_main_inner(
         cwd.clone()
     };
 
-    let mut manually_selected_oss_provider = None;
-    let model_provider_override = if cli.oss {
-        let bootstrap_config_with_cloud_config;
-        let config_toml_for_oss = if cli.oss_provider.is_none() {
-            // The first load intentionally skips cloud config so we can read
-            // auth/base-url settings needed to fetch the bundle. If OSS mode
-            // needs a default provider from config, reload with the bundle.
-            bootstrap_config_with_cloud_config = startup_draft
-                .run_until(load_bootstrap_config_or_exit(
-                    &codex_home,
-                    config_cwd.as_ref(),
-                    cli_kv_overrides.clone(),
-                    loader_overrides.clone(),
-                    strict_config,
-                    cloud_config_bundle.clone(),
-                ))
-                .await?;
-            &bootstrap_config_with_cloud_config.config_toml
-        } else {
-            bootstrap_config_toml
-        };
-
-        let resolved = resolve_oss_provider(cli.oss_provider.as_deref(), config_toml_for_oss);
-
-        if let Some(provider) = resolved {
-            Some(provider)
-        } else {
-            let selection = match startup_draft
-                .run_until(oss_selection::detect_oss_provider())
-                .await?
-            {
-                oss_selection::OssProviderDetection::AutoSelected(selection) => selection,
-                oss_selection::OssProviderDetection::NeedsSelection {
-                    lmstudio_status,
-                    ollama_status,
-                } => {
-                    startup_draft.flush_pending_events().await?;
-                    startup_draft
-                        .tui_mut()
-                        .with_restored(crate::tui::TerminalHandoff::Restore, || {
-                            oss_selection::select_oss_provider(lmstudio_status, ollama_status)
-                        })
-                        .await?
-                }
-            };
-            let provider = selection.provider;
-            if provider == "__CANCELLED__" {
-                return Err(std::io::Error::other(
-                    "OSS provider selection was cancelled by user",
-                ));
-            }
-            if selection.manually_selected {
-                manually_selected_oss_provider = Some(provider.clone());
-            }
-            Some(provider)
-        }
-    } else {
-        None
-    };
-
-    // Pass the --oss provider to the embedded app-server so catalog reloads keep
-    // the launch choice after workspace requirements are removed.
-    if let Some(provider) = &model_provider_override {
-        cli_kv_overrides.push((
-            "model_provider".to_string(),
-            toml::Value::String(provider.clone()),
-        ));
-    }
-
-    // When using `--oss`, let the bootstrapper pick the model based on selected provider
-    let model = if let Some(model) = &cli.model {
-        Some(model.clone())
-    } else if cli.oss {
-        // Use the provider from model_provider_override
-        model_provider_override
-            .as_ref()
-            .and_then(|provider_id| get_default_model_for_oss_provider(provider_id))
-            .map(std::borrow::ToOwned::to_owned)
-    } else {
-        None // No model specified, will use the default.
-    };
-
     let additional_dirs = cli.add_dir.clone();
 
     let mut overrides = ConfigOverrides {
-        model,
+        model: cli.model.clone(),
         approval_policy,
         sandbox_mode,
         cwd: cwd_override,
-        model_provider: model_provider_override.clone(),
         codex_self_exe: arg0_paths.codex_self_exe.clone(),
         codex_linux_sandbox_exe: arg0_paths.codex_linux_sandbox_exe.clone(),
-        show_raw_agent_reasoning: cli.oss.then_some(true),
         bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
         additional_writable_roots: additional_dirs,
         ..Default::default()
@@ -514,19 +373,6 @@ pub(super) async fn run_main_inner(
         config.cwd.as_path(),
     );
 
-    let mut cloud_config_bundle = if workload_identity_selected {
-        cloud_config_bundle
-    } else {
-        startup_draft
-            .run_until(managed_config_bundle_loader_for_storage(
-                embedded_network_policy.bind_bootstrap_auth(
-                    app_server_target.auth_config_for_cloud_loader(config.auth_config()),
-                ),
-                config.config_layer_stack.requirements_toml(),
-                /*enable_codex_api_key_env*/ false,
-            ))
-            .await??
-    };
     let managed_worktree = if cli.shared.worktree {
         let (destination, bundle, worktree) = startup_draft
             .run_until(worktree_startup::prepare(
@@ -794,7 +640,6 @@ pub(super) async fn run_main_inner(
                 _ if elevated_warning.is_some() => "windows_elevated",
                 Some("--no-daemon") => "explicit_no_daemon",
                 Some("--profile") => "profile",
-                Some("--oss") => "oss",
                 Some("--strict-config") => "strict_config",
                 Some("--dangerously-bypass-hook-trust") => "bypass_hook_trust",
                 Some("workload identity") => "workload_identity",
@@ -933,30 +778,6 @@ pub(super) async fn run_main_inner(
     let feedback_layer = feedback.logger_layer();
     let feedback_metadata_layer = feedback.metadata_layer();
 
-    if cli.oss && model_provider_override.is_some() {
-        // We're in the oss section, so provider_id should be Some
-        // Let's handle None case gracefully though just in case
-        let provider_id = match model_provider_override.as_ref() {
-            Some(id) => id,
-            None => {
-                error!("OSS provider unexpectedly not set when oss flag is used");
-                return Err(std::io::Error::other(
-                    "OSS provider not set but oss flag was used",
-                ));
-            }
-        };
-        startup_draft.flush_pending_events().await?;
-        startup_draft
-            .tui_mut()
-            .with_restored(crate::tui::TerminalHandoff::Restore, || async {
-                // Provider setup may print progress or block in an external downloader.
-                // Restore ordinary signal handling so Ctrl+C can interrupt that process.
-                crossterm::terminal::disable_raw_mode()?;
-                ensure_oss_provider_ready(provider_id, &config).await
-            })
-            .await?;
-    }
-
     let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
 
     let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
@@ -997,7 +818,6 @@ pub(super) async fn run_main_inner(
         app_server_target,
         remote_cwd_override,
         config,
-        manually_selected_oss_provider,
         overrides,
         cli_kv_overrides,
         cloud_config_bundle,
@@ -1006,7 +826,6 @@ pub(super) async fn run_main_inner(
         state_db,
         environment_manager,
         embedded_network_policy,
-        cloud_preview_available,
         managed_worktree.clone(),
         daemon_startup_warning,
         managed_daemon,

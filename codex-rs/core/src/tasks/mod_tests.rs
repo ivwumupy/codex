@@ -666,8 +666,8 @@ async fn hard_abort_drops_timing_guards_before_profile_completion() {
 
 #[tokio::test]
 async fn turn_critical_path_metrics_count_each_capture_once() {
-    use codex_analytics::TurnCriticalPath;
-    use codex_analytics::TurnCriticalPathDurations;
+    use codex_protocol::turn_timing::TurnCriticalPath;
+    use codex_protocol::turn_timing::TurnCriticalPathDurations;
 
     let (session, mut context, _rx) = make_session_and_context_with_rx().await;
     let context = Arc::get_mut(&mut context).unwrap();

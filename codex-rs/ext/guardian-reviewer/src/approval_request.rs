@@ -1,10 +1,10 @@
 //! Owns Guardian approval-request data, classification, and assessment/reporting mappings.
 //! Request debug output excludes action arguments, which may contain credentials.
 
-use codex_analytics::GuardianReviewedAction;
 use codex_protocol::approvals::GuardianAssessmentAction;
 use codex_protocol::approvals::GuardianCommandSource;
 use codex_protocol::approvals::NetworkApprovalProtocol;
+use codex_protocol::guardian::GuardianReviewedAction;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::models::SandboxPermissions;
 use codex_protocol::openai_models::GuardianScope;

@@ -2,7 +2,7 @@
 //! completed assessments from failures without assigning risk to errors.
 
 use crate::GuardianAssessment;
-use codex_analytics::GuardianReviewFailureReason;
+use codex_protocol::guardian::GuardianReviewFailureReason;
 use codex_protocol::protocol::CodexErrorInfo;
 use tokio::time::Instant;
 

@@ -186,7 +186,7 @@ pub(crate) struct TurnMetadataState {
     git_enrichment_complete: watch::Sender<bool>,
 }
 
-impl codex_analytics::TurnAnalyticsMetadata for TurnMetadataState {
+impl codex_protocol::turn_timing::TurnAnalyticsMetadata for TurnMetadataState {
     fn root_turn_id(&self) -> Option<String> {
         TurnMetadataState::root_turn_id(self)
     }

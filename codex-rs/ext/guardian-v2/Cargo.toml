@@ -16,7 +16,6 @@ workspace = true
 codex-agent-identity = { workspace = true }
 codex-runtime-agent-instance = { workspace = true }
 anyhow = { workspace = true }
-codex-analytics = { workspace = true }
 codex-api = { workspace = true }
 codex-config = { workspace = true }
 codex-context-fragments = { workspace = true }

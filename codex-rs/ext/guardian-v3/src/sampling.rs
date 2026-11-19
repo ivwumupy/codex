@@ -1,12 +1,12 @@
 //! Typed Guardian operations through the existing isolated-turn executor.
 
-use codex_analytics::GuardianReviewAnalyticsResult;
 use codex_guardian_reviewer::GuardianReviewSessionOutcome;
 use codex_guardian_reviewer::ReviewDeadline;
 use codex_guardian_reviewer::ReviewerRuntime;
 use codex_guardian_reviewer::SessionDisposition;
 use codex_guardian_reviewer::start_review_turn;
 use codex_guardian_reviewer::wait_for_guardian_review;
+use codex_protocol::guardian::GuardianReviewAnalyticsResult;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::TruncationPolicy;

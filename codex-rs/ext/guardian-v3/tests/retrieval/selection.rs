@@ -1,6 +1,5 @@
 //! Reviewer tools and model-driven selection share a fixed Guardian catalog.
 
-use codex_analytics::GuardianReviewSessionKind;
 use codex_core::guardian_review::prepare_review_prewarm;
 use codex_extension_api::SessionIsolation;
 use codex_extension_api::ToolPolicy;
@@ -23,6 +22,7 @@ use codex_message_board::UpsertChannelRequest;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ApprovalsReviewer;
+use codex_protocol::guardian::GuardianReviewSessionKind;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::InternalSessionSource;

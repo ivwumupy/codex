@@ -93,7 +93,7 @@ fn agents_reject_inputs_that_cannot_be_applied() -> Result<()> {
         ),
         (
             ["--oss", "agents", "--remote", "ws://127.0.0.1:4512"].as_slice(),
-            "cannot apply local provider or additional-directory overrides",
+            "unexpected argument '--oss'",
         ),
         (
             [

@@ -189,7 +189,6 @@ impl ExecServerCommand {
     ) -> anyhow::Result<()> {
         let strict_config = self.strict_config;
         self.validate_remote_transport()?;
-        let enable_cloud_config = self.should_load_cloud_config();
         let websocket_auth = self.websocket_auth.try_into_settings()?;
         if websocket_auth.config.is_some() && (self.remote.is_some() || self.command.is_some()) {
             anyhow::bail!("WebSocket listener auth cannot be used with --remote or forward");
@@ -228,12 +227,8 @@ impl ExecServerCommand {
             } else {
                 None
             };
-            let config = load_exec_server_config(
-                root_config_overrides,
-                strict_config,
-                enable_cloud_config,
-                stdin_auth.as_ref(),
-            );
+            let config =
+                load_exec_server_config(root_config_overrides, strict_config, stdin_auth.as_ref());
             let mut parent_lifetime = if self.exit_on_stdin_close && stdin_auth.is_some() {
                 ParentLifetime::MonitoredStdin(exec_server_telemetry::monitor_stdin_close())
             } else if self.exit_on_stdin_close {
@@ -356,7 +351,6 @@ impl ExecServerCommand {
             let config_result = load_exec_server_config(
                 root_config_overrides,
                 strict_config,
-                enable_cloud_config,
                 /*stdin_auth*/ None,
             )
             .await;
@@ -396,15 +390,6 @@ impl ExecServerCommand {
             );
             run.await.map_err(anyhow::Error::from_boxed)
         }
-    }
-
-    fn should_load_cloud_config(&self) -> bool {
-        self.remote.is_some()
-            && self.command.is_none()
-            && !self.executor_credential_stdin
-            && !self.registration_bearer_stdin
-            && !self.aws_sigv4
-            && !self.use_agent_identity_auth
     }
 
     fn validate_remote_transport(&self) -> anyhow::Result<()> {

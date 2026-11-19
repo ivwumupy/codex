@@ -17,7 +17,6 @@ use crate::app_server_session::ThreadParamsMode;
 use crate::legacy_core::config::ConfigBuilder;
 use crate::legacy_core::config::ConfigOverrides;
 use crate::legacy_core::config::load_config_toml_with_layer_stack;
-use crate::legacy_core::config::resolve_oss_provider;
 use crate::legacy_core::config::resolve_profile_v2_config_path;
 use crate::named_session_lookup::SessionCollection;
 use crate::named_session_lookup::display_label;
@@ -32,7 +31,6 @@ use codex_exec_server::ExecServerRuntimeOptions;
 use codex_protocol::ThreadId;
 use codex_utils_cli::CliConfigOverrides;
 use codex_utils_home_dir::find_codex_home;
-use codex_utils_oss::get_default_model_for_oss_provider;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
 use color_eyre::eyre::eyre;
@@ -302,15 +300,6 @@ pub(super) async fn start_app_server_for_session_command(
         arg0_paths.codex_linux_sandbox_exe.clone(),
     )
     .wrap_err("failed to resolve local runtime paths")?;
-    let prepared_environment_manager = EnvironmentManager::prepare_from_env()
-        .await
-        .wrap_err("failed to discover execution environments")?;
-    let config_cwd = super::config_cwd_for_app_server_target(
-        cli.cwd.as_deref(),
-        &app_server_target,
-        prepared_environment_manager.default_environment_is_remote(),
-    )
-    .wrap_err("failed to resolve config cwd")?;
 
     let mut loader_overrides = loader_overrides;
     if let Some(profile_v2) = cli.config_profile_v2.as_ref() {
@@ -324,52 +313,19 @@ pub(super) async fn start_app_server_for_session_command(
     let embedded_network_policy =
         codex_app_server_client::EmbeddedNetworkPolicy::load(&loader_overrides).await;
 
-    let bootstrap_config = load_config_toml_with_layer_stack(
-        codex_home.as_path(),
-        config_cwd.as_ref(),
-        cli_kv_overrides.clone(),
-        ConfigLoadOptions {
-            loader_overrides: loader_overrides.clone(),
-            strict_config,
-            cloud_config_bundle: CloudConfigBundleLoader::default(),
-        },
-    )
-    .await
-    .wrap_err("failed to load config.toml")?;
-    let config_toml = &bootstrap_config.config_toml;
-    let cloud_config_bundle = super::cloud_config_bundle_for_app_server_target(
-        &app_server_target,
-        &bootstrap_config,
-        codex_home.as_path(),
-        &embedded_network_policy,
-    )
-    .await?;
-
-    let model_provider = if cli.oss {
-        resolve_oss_provider(cli.oss_provider.as_deref(), config_toml)
-    } else {
-        None
-    };
-    let model = cli.model.clone().or_else(|| {
-        model_provider
-            .as_deref()
-            .and_then(get_default_model_for_oss_provider)
-            .map(ToOwned::to_owned)
-    });
+    let cloud_config_bundle = CloudConfigBundleLoader::default();
     let cwd = cli.cwd.clone();
     let config = ConfigBuilder::default()
         .cli_overrides(cli_kv_overrides.clone())
         .harness_overrides(ConfigOverrides {
-            model,
+            model: cli.model.clone(),
             cwd: if app_server_target.uses_remote_workspace() {
                 None
             } else {
                 cwd
             },
-            model_provider,
             codex_self_exe: arg0_paths.codex_self_exe.clone(),
             codex_linux_sandbox_exe: arg0_paths.codex_linux_sandbox_exe.clone(),
-            show_raw_agent_reasoning: cli.oss.then_some(true),
             bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
             ..Default::default()
         })
@@ -380,7 +336,9 @@ pub(super) async fn start_app_server_for_session_command(
         .await
         .wrap_err("failed to load configuration")?;
     let environment_manager = Arc::new(
-        prepared_environment_manager
+        EnvironmentManager::prepare_from_env()
+            .await
+            .wrap_err("failed to discover execution environments")?
             .build(
                 Some(local_runtime_paths),
                 app_server_target

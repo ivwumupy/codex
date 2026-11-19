@@ -1,6 +1,5 @@
 use codex_app_server_protocol::ModelProviderError;
 use codex_arg0::Arg0DispatchPaths;
-use codex_cloud_config::managed_config_bundle_loader;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::ConfigLayerStack;
 use codex_config::LoaderOverrides;
@@ -189,39 +188,6 @@ impl ConfigManager {
             self.runtime_feature_enablement.write().map_err(|_| ())?;
         runtime_feature_enablement.extend(enablement);
         Ok(())
-    }
-
-    pub(crate) fn update_managed_config_loader(
-        &self,
-        auth_manager: Arc<AuthManager>,
-        config: &Config,
-    ) {
-        // Keep config-server settings and their refresh worker when only
-        // ChatGPT/API-key credentials change.
-        if self
-            .current_managed_config_loader()
-            .config_server()
-            .is_some()
-        {
-            self.revoke_mcp_ema();
-            return;
-        }
-        let loader = managed_config_bundle_loader(
-            auth_manager,
-            config.chatgpt_base_url.clone(),
-            self.codex_home.clone(),
-            config
-                .http_client_factory()
-                .with_network_policy(self.local_network_policy.policy()),
-            config.config_layer_stack.requirements_toml(),
-        );
-        if let Ok(mut guard) = self.cloud_config_bundle.write() {
-            guard.retire_ema_policy();
-            *guard = loader;
-        } else {
-            warn!("failed to update cloud config bundle loader");
-        }
-        self.revoke_mcp_ema();
     }
 
     pub(crate) fn clear_chatgpt_config_loader(&self) {
@@ -418,18 +384,11 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// Load local policy before auth, then fetch the account's cloud configuration.
-    /// Callers choose their error/recovery policy before initializing any runtimes.
     pub(crate) async fn load_managed_startup_config(
         &self,
         cwd: Option<PathBuf>,
     ) -> std::io::Result<CloudStartupConfig> {
         let bootstrap = self.load_startup_config(cwd.clone()).await?.config;
-        let auth =
-            AuthManager::shared_from_config(&bootstrap, /*enable_codex_api_key_env*/ false)
-                .await
-                .map_err(std::io::Error::other)?;
-        self.update_managed_config_loader(auth, &bootstrap);
         let config = self.load_latest_config(cwd).await;
         Ok(CloudStartupConfig { bootstrap, config })
     }

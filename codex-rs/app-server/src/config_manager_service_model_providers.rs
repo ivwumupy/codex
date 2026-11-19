@@ -17,9 +17,7 @@ use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME;
 use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::GCP_PROVIDER_NAME;
-use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_NAME;
 use codex_model_provider_info::built_in_model_providers;
@@ -91,8 +89,6 @@ impl ConfigManager {
         let ids: BTreeSet<_> = configured
             .into_iter()
             .flat_map(|table| table.keys().map(String::as_str))
-            // Local OSS built-ins cannot have configured provider tables.
-            .filter(|id| !matches!(*id, OLLAMA_OSS_PROVIDER_ID | LMSTUDIO_OSS_PROVIDER_ID))
             .chain([OPENAI_PROVIDER_ID])
             .collect();
         let data = ids

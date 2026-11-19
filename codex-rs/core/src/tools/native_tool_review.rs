@@ -10,7 +10,7 @@ use crate::tools::context::ToolCallSource;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::sandboxing::ApprovalRequestReasons;
-use codex_analytics::GuardianApprovalRequestSource;
+use codex_protocol::guardian::GuardianApprovalRequestSource;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::ReviewDecision;
 
