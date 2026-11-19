@@ -12,10 +12,11 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.target }}
+        CODEX_REPO_ROOT: ${{ github.workspace }}
       run: |
         set -euo pipefail
 
-        version="$(python3 "${GITHUB_WORKSPACE}/.github/scripts/rusty_v8_bazel.py" resolved-v8-crate-version)"
+        version="$(PYTHONPATH="${GITHUB_WORKSPACE}/scripts" python3 -c 'from codex_package.v8 import resolved_v8_crate_version; print(resolved_v8_crate_version())')"
         release_tag="rusty-v8-v${version}"
         base_url="https://github.com/openai/codex/releases/download/${release_tag}"
         binding_dir="${RUNNER_TEMP}/rusty_v8"

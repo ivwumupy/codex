@@ -1,7 +1,7 @@
 """Prepare an inspected build output using the existing platform runtime policy.
 
 Receipts describe the declared build inputs and inspection, not authenticity or
-approval. The current build commit comes from Bazel's workspace status file.
+approval. The status file identifies the source commit.
 """
 
 import argparse
@@ -92,7 +92,6 @@ def prepare_built(prefix, build_receipt, status, target, output, *, sdk_output=N
 
 
 def prepare_archive(archive, build_receipt, status, target, output, *, sdk_output=None):
-    # Archives preserve native aliases through Bazel's cache and sandbox links.
     with tempfile.TemporaryDirectory(prefix="voice-prefix-") as temporary:
         prefix = Path(temporary)
         with tarfile.open(archive) as source:
@@ -119,7 +118,8 @@ if __name__ == "__main__":
             args.sdk_output.rmdir()
         except FileNotFoundError:
             pass
-    prepare_archive(
+    prepare = prepare_built if args.prefix.is_dir() else prepare_archive
+    prepare(
         args.prefix,
         args.build_receipt,
         args.status,

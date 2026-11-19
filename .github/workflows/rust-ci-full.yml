@@ -93,9 +93,6 @@ jobs:
     name: Argument comment lint - ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
     timeout-minutes: 120
-    environment:
-      name: bazel
-      deployment: false
     strategy:
       fail-fast: false
       matrix:
@@ -108,18 +105,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Run argument comment lint on codex-rs via Bazel
+      - name: Run argument comment lint on codex-rs with Cargo
         uses: ./.github/actions/run-argument-comment-lint
-        with:
-          target: ${{ runner.os }}
 
   # --- CI to validate on different os/targets --------------------------------
   cargo_voice_inputs:
     name: Cargo voice inputs - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    environment:
-      name: bazel
-      deployment: false
     permissions:
       contents: read
     timeout-minutes: 120

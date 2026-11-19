@@ -10,11 +10,6 @@ on:
 jobs:
   # Keep reusable workflow calls alphabetized. The `required` job below is the
   # version-controlled list that the main-branch ruleset should require.
-  bazel:
-    name: Bazel
-    uses: ./.github/workflows/bazel.yml
-    secrets: inherit
-
   blob-size-policy:
     name: Blob size policy
     uses: ./.github/workflows/blob-size-policy.yml
@@ -50,8 +45,6 @@ jobs:
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
     if: ${{ always() }}
-    # Bazel is advisory while the BuildBuddy key is revoked. Restore its dependency
-    # once the suite can run without BuildBuddy.
     needs:
       - blob-size-policy
       - cargo-deny

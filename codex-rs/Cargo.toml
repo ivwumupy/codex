@@ -449,7 +449,6 @@ regex-lite = "0.1.8"
 regex-syntax = "0.8.8"
 reqwest = { version = "0.12", features = ["cookies"] }
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "98a54789b80110ad210495c4ad845c89e1980471", version = "=3.5.1", default-features = false }
-runfiles = { git = "https://github.com/dzbarsky/rules_rust", rev = "b56cbaa8465e74127f1ea216f813cd377295ad81" }
 rustix = { version = "1.1.4", features = ["net"] }
 rustls = { version = "0.23.46", default-features = false, features = [
     "aws_lc_rs",
@@ -568,9 +567,6 @@ zstd = "0.13"
 
 wiremock = "0.6"
 zeroize = "1.8.2"
-
-[workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codex_bazel)'] }
 
 [workspace.lints.clippy]
 await_holding_invalid_type = "deny"

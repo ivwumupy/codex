@@ -54,14 +54,12 @@ requires CMake and a C compiler. This is separate from the runtime's decoder Opu
 copy; final symbol binding and packaging validation must cover both copies.
 
 Cargo Linux builds require ALSA development inputs discoverable by pkg-config
-(for example `libasound2-dev` on Debian/Ubuntu). Bazel uses the declared `alsa_lib`
-source target through `alsa-sys`; macOS uses CoreAudio and Windows uses WASAPI.
+(for example `libasound2-dev` on Debian/Ubuntu). macOS uses CoreAudio and Windows uses WASAPI.
 CPAL and its native link inputs belong only to the helper. Producing a closed
 Linux distribution still requires the prepared ALSA SDK/runtime/configuration
 closure; a successful source build does not establish that packaging proof.
 
-Bazel stamps the binary with `STABLE_GIT_COMMIT`. Cargo builders must provide the
-same variable; an unstamped source build reports `dev` via `--build-commit` and is
+Cargo builders stamp the binary with `STABLE_GIT_COMMIT`; an unstamped source build reports `dev` via `--build-commit` and is
 not a distributable build identity. The client/control crate has no native audio
 dependencies. `VoiceHost` resolves only the physical package's
 `codex-resources/voice/bin/codex-voice-host[.exe]`, filters the child environment,
