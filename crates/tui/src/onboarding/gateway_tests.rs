@@ -33,20 +33,17 @@ fn screen(widget: &AuthModeWidget, height: u16) -> String {
 async fn select_a_saved_gateway_during_sign_in() -> color_eyre::Result<()> {
     let (mut widget, home) = super::tests::widget_forced_chatgpt().await;
     widget.auth_config.forced_login_method = None;
-    widget.bedrock_setup_enabled = true;
-    widget.gcp_setup_enabled = true;
     widget.gateway_setup_enabled = true;
 
-    widget.handle_key_event(KeyCode::Char('3').into());
     insta::assert_snapshot!("gateway_sign_in_menu", screen(&widget, /*height*/ 8));
-    widget.handle_key_event(KeyCode::Char('4').into());
+    widget.handle_key_event(KeyCode::Char('2').into());
     widget.advance_gateway_request().await;
     insta::assert_snapshot!("gateway_empty_picker", screen(&widget, /*height*/ 8));
     widget.handle_key_event(KeyCode::Esc.into());
 
     let managed = home.path().join("managed_config.toml");
     std::fs::write(&managed, "model_provider = 'openai'")?;
-    widget.handle_key_event(KeyCode::Char('4').into());
+    widget.handle_key_event(KeyCode::Char('2').into());
     widget.advance_gateway_request().await;
     let error = screen(&widget, /*height*/ 8);
     assert!(error.contains("configuration policy"));
@@ -62,7 +59,7 @@ base_url = "https://office.example.test/v1"
 wire_api = "responses"
 "#,
     )?;
-    widget.handle_key_event(KeyCode::Char('4').into());
+    widget.handle_key_event(KeyCode::Char('2').into());
     widget.advance_gateway_request().await;
     insta::assert_snapshot!("gateway_saved_picker", screen(&widget, /*height*/ 8));
     widget.handle_key_event(KeyCode::Enter.into());
@@ -79,8 +76,6 @@ wire_api = "responses"
 async fn create_highlights_the_saved_gateway_until_explicitly_selected() -> color_eyre::Result<()> {
     let (mut widget, home) = super::tests::widget_forced_chatgpt().await;
     widget.auth_config.forced_login_method = None;
-    widget.bedrock_setup_enabled = true;
-    widget.gcp_setup_enabled = true;
     widget.gateway_setup_enabled = true;
     write_provider(
         &widget.app_server_request_handle,
@@ -94,8 +89,7 @@ async fn create_highlights_the_saved_gateway_until_explicitly_selected() -> colo
     )
     .await
     .map_err(color_eyre::Report::msg)?;
-    widget.handle_key_event(KeyCode::Char('3').into());
-    widget.handle_key_event(KeyCode::Char('4').into());
+    widget.handle_key_event(KeyCode::Char('2').into());
     widget.advance_gateway_request().await;
     widget.handle_key_event(KeyCode::Down.into());
     widget.handle_key_event(KeyCode::Enter.into());
@@ -178,24 +172,4 @@ async fn create_highlights_the_saved_gateway_until_explicitly_selected() -> colo
         })
     );
     Ok(())
-}
-
-#[tokio::test]
-async fn gateway_oauth_displays_the_browser_link_and_retry_action() {
-    let (widget, _home) = super::tests::widget_forced_chatgpt().await;
-    *widget.sign_in_state.write().unwrap() = SignInState::GatewayOAuth {
-        provider_id: "office".into(),
-        url: None,
-    };
-    insta::assert_snapshot!(screen(&widget, /*height*/ 1), @"Starting gateway sign-in…");
-    *widget.sign_in_state.write().unwrap() = SignInState::GatewayOAuth {
-        provider_id: "office".into(),
-        url: Some("https://office.example.test/authorize".into()),
-    };
-    insta::assert_snapshot!("gateway_oauth_browser", screen(&widget, /*height*/ 4));
-    *widget.sign_in_state.write().unwrap() = SignInState::GatewayOAuthFailed {
-        provider_id: "office".into(),
-        message: "Gateway sign-in expired.".into(),
-    };
-    insta::assert_snapshot!("gateway_oauth_failed", screen(&widget, /*height*/ 4));
 }

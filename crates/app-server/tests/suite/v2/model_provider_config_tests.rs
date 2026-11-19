@@ -200,7 +200,7 @@ async fn custom_provider_writes_reject_builtin_auth_names_and_preserve_existing_
     let ids = [r"team\gpu", "corp.gateway", r#"team"gpu"#];
     let mut providers = json!({});
     for id in ids {
-        providers[id] = json!({"name":"Amazon Bedrock", "base_url":"https://old.example.test"});
+        providers[id] = json!({"name":"Team gateway", "base_url":"https://old.example.test"});
     }
     std::fs::write(
         &config_path,
@@ -221,8 +221,6 @@ async fn custom_provider_writes_reject_builtin_auth_names_and_preserve_existing_
         ),
         (Some(ids[0]), json!({"name": "Amazon Bedrock Runtime"})),
         (Some(ids[0]), json!({"name": "Google Cloud Vertex AI"})),
-        (Some(ids[0]), json!({"baseUrl": new_url})),
-        (Some(ids[0]), json!({"name":"Renamed", "envKey":null})),
     ] {
         settings["type"] = json!("customGateway");
         settings["providerId"] = json!(provider_id);
@@ -245,12 +243,12 @@ async fn custom_provider_writes_reject_builtin_auth_names_and_preserve_existing_
         let request = server
             .send_request(
                 "modelProvider/config/write",
-                Some(json!({"settings":{"type":"customGateway","providerId":id,"name":"Amazon Bedrock Mantle","baseUrl":new_url}})),
+                Some(json!({"settings":{"type":"customGateway","providerId":id,"name":"Renamed gateway","baseUrl":new_url}})),
             )
             .await?;
         let saved: Value = server.read_response(request).await?;
         assert_eq!(saved["provider"]["id"], id);
-        providers[id] = json!({"name": "Amazon Bedrock Mantle", "base_url": new_url});
+        providers[id] = json!({"name": "Renamed gateway", "base_url": new_url});
     }
     let saved: Value = toml::from_str(&std::fs::read_to_string(config_path)?)?;
     assert_eq!(saved["model_providers"], providers);
@@ -258,76 +256,20 @@ async fn custom_provider_writes_reject_builtin_auth_names_and_preserve_existing_
 }
 
 #[tokio::test]
-async fn builtin_provider_patches_preserve_auth_and_do_not_select_or_authenticate() -> Result<()> {
+async fn cloud_provider_patches_are_rejected_without_writing_config() -> Result<()> {
     let home = TempDir::new()?;
     let config_path = home.path().join("config.toml");
-    std::fs::write(
-        home.path().join("requirements.toml"),
-        "model_provider = 'openai'\n",
-    )?;
+    let config = "model_provider = 'openai'\n";
+    std::fs::write(&config_path, config)?;
     let mut server = TestAppServer::builder()
         .with_codex_home(home.path())
         .with_env_overrides(CLEARED_AUTH_ENV)
         .build_initialized()
         .await?;
-    let credential_file = home.path().join("missing-credentials.json");
-    for mut settings in [
-        json!({"type":"bedrock", "providerId":"amazon-bedrock", "profile":"work", "region":"us-east-1"}),
-        json!({"type":"bedrock", "providerId":"amazon-bedrock-runtime", "profile":null, "region":"us-west-2"}),
-        json!({"type":"gcp", "providerId":"gcp", "projectId":"test-project", "location":"global", "credentialFile":credential_file}),
-    ] {
-        let params = serde_json::from_value(json!({"settings":settings}))?;
-        let saved: Value = server
-            .request(|request_id| ClientRequest::ModelProviderConfigWrite { request_id, params })
-            .await?;
-        let id = settings
-            .as_object_mut()
-            .unwrap()
-            .remove("providerId")
-            .unwrap();
-        assert_eq!(saved["provider"]["id"], id);
-        assert_eq!(saved["provider"]["settings"], settings);
-    }
-    let refresh = json!({"command":"aws", "args":["sso", "login"]});
-    let export = json!({"command":"unused-credential-command", "args":["test-only"]});
-    let mut configured: Value = toml::from_str(&std::fs::read_to_string(&config_path)?)?;
-    configured["model_providers"]["amazon-bedrock"]["aws"]["auth_refresh"] = refresh.clone();
-    configured["model_providers"]["amazon-bedrock-runtime"]["aws"]["credential_export"] =
-        export.clone();
-    std::fs::write(&config_path, toml::to_string(&configured)?)?;
     for settings in [
-        json!({"type":"bedrock", "providerId":"amazon-bedrock", "region":null}),
-        json!({"type":"bedrock", "providerId":"amazon-bedrock-runtime", "region":"eu-west-1"}),
-        json!({"type":"gcp", "providerId":"gcp", "location":"us-central1", "credentialFile":null}),
-        json!({"type":"gcp", "providerId":"gcp"}),
-    ] {
-        let params = serde_json::from_value(json!({"settings":settings}))?;
-        let saved: Value = server
-            .request(|request_id| ClientRequest::ModelProviderConfigWrite { request_id, params })
-            .await?;
-        assert_eq!(saved["provider"]["id"], settings["providerId"]);
-    }
-    let list: Value = server
-        .request(|request_id| ClientRequest::ModelProviderList {
-            request_id,
-            params: Default::default(),
-        })
-        .await?;
-    assert_eq!(list["defaultProviderId"], "openai");
-    assert_eq!(list["canChangeDefault"], false);
-    let before_rejections = std::fs::read_to_string(&config_path)?;
-    let actual: Value = toml::from_str(&before_rejections)?;
-    assert_eq!(
-        actual,
-        json!({"model_providers": {
-            "amazon-bedrock": {"aws":{"profile":"work", "auth_refresh":refresh}},
-            "amazon-bedrock-runtime": {"aws":{"region":"eu-west-1", "credential_export":export}},
-            "gcp":{"project_id":"test-project", "location":"us-central1"}
-        }})
-    );
-    for settings in [
-        json!({"type":"bedrock", "providerId":"amazon-bedrock-runtime", "profile":"conflicts-with-command", "region":"must-not-save"}),
-        json!({"type":"gcp", "providerId":"gcp", "credentialFile":"relative/path", "location":"must-not-save"}),
+        json!({"type":"bedrock", "providerId":"amazon-bedrock", "region":"us-east-1"}),
+        json!({"type":"bedrock", "providerId":"amazon-bedrock-runtime", "profile":"work"}),
+        json!({"type":"gcp", "providerId":"gcp", "projectId":"test-project"}),
     ] {
         let write = server
             .send_request(
@@ -338,30 +280,8 @@ async fn builtin_provider_patches_preserve_auth_and_do_not_select_or_authenticat
         let error = server
             .read_stream_until_error_message(RequestId::Integer(write))
             .await?;
-        assert_eq!(
-            error.error.data,
-            Some(json!({"config_write_error_code":"configValidationError"}))
-        );
-        assert_eq!(std::fs::read_to_string(&config_path)?, before_rejections);
+        assert!(error.error.message.contains("unsupported"));
+        assert_eq!(std::fs::read_to_string(&config_path)?, config);
     }
-    for settings in [
-        json!({"type":"bedrock", "providerId":"gcp", "region":"must-not-save"}),
-        json!({"type":"gcp", "providerId":"amazon-bedrock", "location":"must-not-save"}),
-        json!({"type":"bedrock", "providerId":"amazon-bedrock", "envKey":"UNSUPPORTED"}),
-        json!({"type":"gcp", "providerId":"gcp", "profile":"wrong-provider-field"}),
-        json!({"type":"gcp", "location":"missing-id"}),
-    ] {
-        let write = server
-            .send_request(
-                "modelProvider/config/write",
-                Some(json!({"settings":settings})),
-            )
-            .await?;
-        let error = server
-            .read_stream_until_error_message(RequestId::Integer(write))
-            .await?;
-        assert_eq!(error.error.code, -32600);
-    }
-    assert_eq!(std::fs::read_to_string(&config_path)?, before_rejections);
     Ok(())
 }

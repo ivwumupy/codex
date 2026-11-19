@@ -59,9 +59,6 @@ use super::change_state::AuthOwner;
 use super::change_state::same_login;
 use super::change_state::same_owner;
 use super::external_bearer::BearerTokenRefresher;
-use super::revoke::revoke_auth_tokens;
-use super::workload_identity::WorkloadIdentityExternalAuth;
-use super::workload_identity::WorkloadIdentitySessionError;
 use crate::auth::AuthHeaders;
 pub use crate::auth::agent_identity::AgentIdentityAuth;
 pub use crate::auth::agent_identity::AgentIdentityAuthError;
@@ -76,7 +73,6 @@ use crate::auth::storage::AuthStorageBackend;
 use crate::auth::storage::auth_storage_commit_guard;
 use crate::auth::storage::create_auth_storage;
 use crate::default_client::create_client;
-use crate::default_client::create_default_auth_client;
 use crate::oauth::ErrorBodyLimit;
 use crate::oauth::OAuthClient;
 use crate::oauth::OAuthError;
@@ -263,16 +259,10 @@ pub struct AuthManagerInitializationError(AuthManagerInitializationErrorSource);
 
 #[derive(Debug, Error)]
 enum AuthManagerInitializationErrorSource {
-    #[error(transparent)]
-    WorkloadIdentityConfiguration(WorkloadIdentitySessionError),
+    #[error("Workload identity authentication is unsupported. Configure an API key.")]
+    UnsupportedWorkloadIdentity,
     #[error(transparent)]
     InitialAuth(RefreshTokenError),
-}
-
-impl From<WorkloadIdentitySessionError> for AuthManagerInitializationError {
-    fn from(error: WorkloadIdentitySessionError) -> Self {
-        Self(AuthManagerInitializationErrorSource::WorkloadIdentityConfiguration(error))
-    }
 }
 
 impl From<RefreshTokenError> for AuthManagerInitializationError {
@@ -366,143 +356,12 @@ impl From<RefreshTokenError> for std::io::Error {
 }
 
 impl CodexAuth {
-    #[allow(clippy::too_many_arguments)]
-    async fn from_auth_dot_json(
-        codex_home: &Path,
-        auth_dot_json: AuthDotJson,
-        auth_credentials_store_mode: AuthCredentialsStoreMode,
-        chatgpt_base_url: Option<&str>,
-        keyring_backend_kind: AuthKeyringBackendKind,
-        agent_identity_authapi_base_url: Option<&str>,
-        auth_route_config: &AuthRouteConfig,
-        cached_auth: Option<&CodexAuth>,
-    ) -> std::io::Result<Self> {
-        let auth_mode = auth_dot_json.resolved_mode();
-        if auth_mode == AuthMode::ApiKey {
-            let Some(api_key) = auth_dot_json.openai_api_key.as_deref() else {
-                return Err(std::io::Error::other("API key auth is missing a key."));
-            };
-            return Ok(Self::from_api_key(api_key));
-        }
-        if auth_mode == AuthMode::AgentIdentity {
-            let Some(agent_identity) = auth_dot_json.agent_identity.clone() else {
-                return Err(std::io::Error::other(
-                    "agent identity auth is missing agent identity auth material.",
-                ));
-            };
-            let base_url = chatgpt_base_url
-                .unwrap_or(ChatGptEnvironment::default().chatgpt_base_url())
-                .trim_end_matches('/')
-                .to_string();
-            let agent_identity_authapi_base_url =
-                require_agent_identity_authapi_base_url(agent_identity_authapi_base_url)?;
-            match agent_identity {
-                AgentIdentityStorage::Jwt(jwt) => {
-                    let auth = AgentIdentityAuth::from_jwt(
-                        &jwt,
-                        &base_url,
-                        agent_identity_authapi_base_url,
-                        auth_route_config,
-                    )
-                    .await?;
-                    return Ok(Self::AgentIdentity(auth));
-                }
-                AgentIdentityStorage::Record(record) => {
-                    let auth = AgentIdentityAuth::from_record(
-                        record,
-                        agent_identity_authapi_base_url,
-                        auth_route_config,
-                    )
-                    .await?;
-                    return Ok(Self::AgentIdentity(auth));
-                }
-            }
-        }
-        if auth_mode == AuthMode::PersonalAccessToken {
-            let Some(personal_access_token) = auth_dot_json.personal_access_token.as_deref() else {
-                return Err(std::io::Error::other(
-                    "personal access token auth is missing a personal access token.",
-                ));
-            };
-            return Ok(Self::PersonalAccessToken(
-                PersonalAccessTokenAuth::load_with_cached(
-                    personal_access_token,
-                    auth_route_config,
-                    cached_auth,
-                )
-                .await?,
-            ));
-        }
-        if auth_mode == AuthMode::BedrockApiKey {
-            let Some(auth) = auth_dot_json.bedrock_api_key else {
-                return Err(std::io::Error::other(
-                    "Bedrock API key auth is missing a Bedrock API key.",
-                ));
-            };
-            return Ok(Self::BedrockApiKey(auth));
-        }
-        if auth_mode == AuthMode::BedrockAccessKeys {
-            let Some(auth) = auth_dot_json.bedrock_access_keys else {
-                return Err(std::io::Error::other(
-                    "Bedrock access keys auth is missing AWS access keys.",
-                ));
-            };
-            return Ok(Self::BedrockAccessKeys(auth));
-        }
-        if auth_mode == AuthMode::Headers {
-            return Err(std::io::Error::other(
-                "externally provided auth cannot be loaded from auth storage.",
-            ));
-        }
-
-        let storage_mode = auth_dot_json.storage_mode(auth_credentials_store_mode);
-        let provenance = auth_dot_json
-            .tokens
-            .as_ref()
-            .and_then(|tokens| tokens.oauth_provenance.as_ref());
-        // Reuse only the transport, not the credential state or storage backend: the
-        // selected source can change even when its credential document is identical.
-        let cached_client = cached_auth
-            .filter(|auth| auth.get_current_auth_json().as_ref() == Some(&auth_dot_json))
-            .and_then(|auth| match auth {
-                Self::Chatgpt(auth) => Some(auth.state.client.clone()),
-                Self::ChatgptAuthTokens(auth) => Some(auth.state.client.clone()),
-                _ => None,
-            });
-        let client = match cached_client {
-            Some(client) => client,
-            None => {
-                create_default_auth_client(&refresh_token_endpoint(provenance), auth_route_config)?
-            }
-        };
-        let state = ChatgptAuthState {
-            auth_dot_json: Arc::new(Mutex::new(Some(auth_dot_json))),
-            client,
-        };
-
-        match auth_mode {
-            AuthMode::Chatgpt => {
-                let storage = create_auth_storage(
-                    codex_home.to_path_buf(),
-                    storage_mode,
-                    keyring_backend_kind,
-                );
-                Ok(Self::Chatgpt(ChatgptAuth { state, storage }))
-            }
-            AuthMode::ChatgptAuthTokens => Ok(Self::ChatgptAuthTokens(ChatgptAuthTokens { state })),
-            AuthMode::ApiKey => unreachable!("api key mode is handled above"),
-            AuthMode::Headers => {
-                unreachable!("externally provided auth is never loaded from auth storage")
-            }
-            AuthMode::AgentIdentity => unreachable!("agent identity mode is handled above"),
-            AuthMode::PersonalAccessToken => {
-                unreachable!("personal access token mode is handled above")
-            }
-            AuthMode::BedrockApiKey => unreachable!("bedrock api key mode is handled above"),
-            AuthMode::BedrockAccessKeys => {
-                unreachable!("bedrock access keys mode is handled above")
-            }
-        }
+    fn from_stored_api_key(auth: AuthDotJson) -> std::io::Result<Self> {
+        let key = auth
+            .openai_api_key
+            .as_deref()
+            .ok_or_else(|| std::io::Error::other("API key auth is missing a key."))?;
+        Ok(Self::from_api_key(key))
     }
 
     pub async fn from_auth_storage(
@@ -1095,22 +954,8 @@ pub async fn logout_with_revoke(
     codex_home: &Path,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
-    auth_route_config: &AuthRouteConfig,
+    _auth_route_config: &AuthRouteConfig,
 ) -> std::io::Result<bool> {
-    let auth_dot_json = match load_auth_dot_json(
-        codex_home,
-        auth_credentials_store_mode,
-        keyring_backend_kind,
-    ) {
-        Ok(auth_dot_json) => auth_dot_json,
-        Err(err) => {
-            tracing::warn!("failed to load stored auth during logout: {err}");
-            None
-        }
-    };
-    if let Err(err) = revoke_auth_tokens(auth_dot_json.as_ref(), auth_route_config).await {
-        tracing::warn!("failed to revoke auth tokens during logout: {err}");
-    }
     logout_all_stores(
         codex_home,
         auth_credentials_store_mode,
@@ -1203,8 +1048,18 @@ fn ensure_auth_workspace_allowed(
     expected_workspace_ids: Option<&[String]>,
     account_id: &str,
 ) -> std::io::Result<()> {
-    crate::server::ensure_workspace_account_allowed(expected_workspace_ids, account_id)
-        .map_err(|message| std::io::Error::new(std::io::ErrorKind::PermissionDenied, message))
+    if let Some(allowed) = expected_workspace_ids
+        && !allowed.iter().any(|expected| expected == account_id)
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "Login is restricted to workspace id(s) {}.",
+                allowed.join(", ")
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_agent_identity_workspace_allowed(
@@ -1308,9 +1163,7 @@ impl AuthConfig {
     }
 
     pub fn validate(&self) -> std::io::Result<()> {
-        if self.is_login_method_allowed(ForcedLoginMethod::Api)
-            || self.is_login_method_allowed(ForcedLoginMethod::Chatgpt)
-        {
+        if self.is_login_method_allowed(ForcedLoginMethod::Api) {
             Ok(())
         } else {
             Err(std::io::Error::new(
@@ -1373,12 +1226,8 @@ fn auth_mode_is_allowed(
     allowed_login_methods: Option<&[ForcedLoginMethod]>,
     mode: AuthMode,
 ) -> bool {
-    let method = if mode.uses_codex_backend() {
-        ForcedLoginMethod::Chatgpt
-    } else {
-        ForcedLoginMethod::Api
-    };
-    allowed_login_methods.is_none_or(|allowed| allowed.contains(&method))
+    matches!(mode, AuthMode::ApiKey | AuthMode::Headers)
+        && allowed_login_methods.is_none_or(|methods| methods.contains(&ForcedLoginMethod::Api))
 }
 
 fn validate_auth_restrictions(
@@ -1392,7 +1241,7 @@ fn validate_auth_restrictions(
                 "API key login is required".to_string()
             }
             Some(_) => "ChatGPT login is required".to_string(),
-            None => unreachable!("unrestricted login methods accept every auth mode"),
+            None => "ChatGPT account credentials are unsupported".to_string(),
         });
     }
 
@@ -1606,90 +1455,33 @@ async fn load_auth(
     enable_codex_api_key_env: bool,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     allowed_login_methods: Option<&[ForcedLoginMethod]>,
-    forced_chatgpt_workspace_id: Option<&[String]>,
-    chatgpt_base_url: Option<&str>,
+    _forced_chatgpt_workspace_id: Option<&[String]>,
+    _chatgpt_base_url: Option<&str>,
     keyring_backend_kind: AuthKeyringBackendKind,
-    agent_identity_authapi_base_url: Option<&str>,
-    auth_route_config: &AuthRouteConfig,
-    cached_auth: Option<&CodexAuth>,
+    _agent_identity_authapi_base_url: Option<&str>,
+    _auth_route_config: &AuthRouteConfig,
+    _cached_auth: Option<&CodexAuth>,
     allowed_auth_modes: Option<&[AuthMode]>,
 ) -> std::io::Result<Option<CodexAuth>> {
     let mode_allowed = |mode| allowed_auth_modes.is_none_or(|modes| modes.contains(&mode));
-    // API key via env var takes precedence over any other auth method.
-    if enable_codex_api_key_env
-        && mode_allowed(AuthMode::ApiKey)
-        && auth_mode_is_allowed(allowed_login_methods, AuthMode::ApiKey)
-        && let Some(api_key) = read_codex_api_key_from_env()
+    if !mode_allowed(AuthMode::ApiKey)
+        || !auth_mode_is_allowed(allowed_login_methods, AuthMode::ApiKey)
     {
+        return Ok(None);
+    }
+    if enable_codex_api_key_env && let Some(api_key) = read_codex_api_key_from_env() {
         return Ok(Some(CodexAuth::from_api_key(api_key.as_str())));
     }
 
-    // External ChatGPT auth tokens live in the in-memory (ephemeral) store. Always check this
-    // first so external auth takes precedence over any persisted credentials.
     let ephemeral_storage = create_auth_storage(
         codex_home.to_path_buf(),
         AuthCredentialsStoreMode::Ephemeral,
         AuthKeyringBackendKind::default(),
     );
     if let Some(auth_dot_json) = load_stored_auth(ephemeral_storage).await?
-        && auth_mode_is_allowed(allowed_login_methods, auth_dot_json.resolved_mode())
+        && auth_dot_json.resolved_mode() == AuthMode::ApiKey
     {
-        if !mode_allowed(auth_dot_json.resolved_mode()) {
-            return Ok(None);
-        }
-        if let Some(agent_identity) = auth_dot_json.agent_identity.as_ref() {
-            ensure_agent_identity_workspace_allowed(forced_chatgpt_workspace_id, agent_identity)?;
-        }
-        let auth = CodexAuth::from_auth_dot_json(
-            codex_home,
-            auth_dot_json,
-            AuthCredentialsStoreMode::Ephemeral,
-            chatgpt_base_url,
-            keyring_backend_kind,
-            agent_identity_authapi_base_url,
-            auth_route_config,
-            cached_auth,
-        )
-        .await?;
-        if let CodexAuth::PersonalAccessToken(auth) = &auth {
-            ensure_auth_workspace_allowed(forced_chatgpt_workspace_id, auth.account_id())?;
-        }
-        return Ok(Some(auth));
-    }
-
-    if auth_mode_is_allowed(allowed_login_methods, AuthMode::AgentIdentity)
-        && let Some(access_token) = read_codex_access_token_from_env()
-    {
-        return match classify_codex_access_token(&access_token) {
-            CodexAccessToken::PersonalAccessToken(access_token) => {
-                if !mode_allowed(AuthMode::PersonalAccessToken) {
-                    return Ok(None);
-                }
-                let auth = PersonalAccessTokenAuth::load_with_cached(
-                    access_token,
-                    auth_route_config,
-                    cached_auth,
-                )
-                .await?;
-                ensure_auth_workspace_allowed(forced_chatgpt_workspace_id, auth.account_id())?;
-                Ok(Some(CodexAuth::PersonalAccessToken(auth)))
-            }
-            CodexAccessToken::AgentIdentityJwt(jwt) => {
-                if !mode_allowed(AuthMode::AgentIdentity) {
-                    return Ok(None);
-                }
-                let record = AgentIdentityAuthRecord::from_agent_identity_jwt(jwt)?;
-                ensure_auth_workspace_allowed(forced_chatgpt_workspace_id, &record.account_id)?;
-                CodexAuth::from_agent_identity_jwt_with_authapi_base_url(
-                    jwt,
-                    chatgpt_base_url,
-                    require_agent_identity_authapi_base_url(agent_identity_authapi_base_url)?,
-                    auth_route_config,
-                )
-            }
-            .await
-            .map(Some),
-        };
+        return CodexAuth::from_stored_api_key(auth_dot_json).map(Some);
     }
 
     // If the caller explicitly requested ephemeral auth, there is no persisted fallback.
@@ -1703,34 +1495,12 @@ async fn load_auth(
         auth_credentials_store_mode,
         keyring_backend_kind,
     );
-    let auth_dot_json = match load_stored_auth(storage).await? {
-        Some(auth) => auth,
-        None => return Ok(None),
-    };
-    if !mode_allowed(auth_dot_json.resolved_mode())
-        || !auth_mode_is_allowed(allowed_login_methods, auth_dot_json.resolved_mode())
-    {
-        return Ok(None);
+    match load_stored_auth(storage).await? {
+        Some(auth) if auth.resolved_mode() == AuthMode::ApiKey => {
+            CodexAuth::from_stored_api_key(auth).map(Some)
+        }
+        _ => Ok(None),
     }
-    if let Some(agent_identity) = auth_dot_json.agent_identity.as_ref() {
-        ensure_agent_identity_workspace_allowed(forced_chatgpt_workspace_id, agent_identity)?;
-    }
-
-    let auth = CodexAuth::from_auth_dot_json(
-        codex_home,
-        auth_dot_json,
-        auth_credentials_store_mode,
-        chatgpt_base_url,
-        keyring_backend_kind,
-        agent_identity_authapi_base_url,
-        auth_route_config,
-        cached_auth,
-    )
-    .await?;
-    if let CodexAuth::PersonalAccessToken(auth) = &auth {
-        ensure_auth_workspace_allowed(forced_chatgpt_workspace_id, auth.account_id())?;
-    }
-    Ok(Some(auth))
 }
 
 // Blocking keyring access must not prevent an async caller's deadline from firing.
@@ -3407,18 +3177,15 @@ impl AuthManager {
         enable_codex_api_key_env: bool,
         allowed_auth_modes: Option<Vec<AuthMode>>,
     ) -> Result<Arc<Self>, AuthManagerInitializationError> {
-        let external_auth = WorkloadIdentityExternalAuth::from_process_config(&auth_config)?;
-        let mut manager =
-            Self::new_from_auth_config(auth_config, enable_codex_api_key_env, allowed_auth_modes)
-                .await;
-        manager.workload_identity_selected = external_auth.is_some();
-        let manager = Arc::new(manager);
-        if let Some(external_auth) = external_auth {
-            manager
-                .install_external_auth(Arc::new(external_auth))
-                .await?;
+        if super::workload_identity::is_workload_identity_selected() {
+            return Err(AuthManagerInitializationError(
+                AuthManagerInitializationErrorSource::UnsupportedWorkloadIdentity,
+            ));
         }
-        Ok(manager)
+        Ok(Arc::new(
+            Self::new_from_auth_config(auth_config, enable_codex_api_key_env, allowed_auth_modes)
+                .await,
+        ))
     }
 
     pub fn unauthorized_recovery(self: &Arc<Self>) -> UnauthorizedRecovery {
@@ -3610,24 +3377,7 @@ impl AuthManager {
     }
 
     pub async fn logout_with_revoke(&self) -> std::io::Result<bool> {
-        self.ensure_logout_allowed()?;
-        let auth_dot_json = self
-            .auth_cached()
-            .and_then(|auth| auth.get_current_auth_json());
-        if let Err(err) = revoke_auth_tokens(auth_dot_json.as_ref(), &self.auth_route_config).await
-        {
-            tracing::warn!("failed to revoke auth tokens during logout: {err}");
-        }
-        let result = logout_all_stores(
-            &self.codex_home,
-            self.auth_credentials_store_mode,
-            self.keyring_backend_kind,
-        )?;
-        // Always reload to clear cached auth, even if no stored credentials were present.
-        self.invalidate_pending_auth_reads();
-        self.clear_external_auth();
-        self.reload().await;
-        Ok(result)
+        self.logout().await
     }
 
     fn ensure_logout_allowed(&self) -> std::io::Result<()> {

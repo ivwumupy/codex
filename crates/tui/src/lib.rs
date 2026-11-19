@@ -8,14 +8,10 @@ use crate::legacy_core::config::Config;
 use crate::legacy_core::config::ConfigBuilder;
 use crate::legacy_core::config::ConfigOverrides;
 use crate::legacy_core::config::ConfigTomlLoadResult;
-use crate::legacy_core::config::bootstrap_auth_config;
-use crate::legacy_core::config::edit::ConfigEdit;
-use crate::legacy_core::config::edit::ConfigEditsBuilder;
 use crate::legacy_core::config::load_config_toml_with_layer_stack;
 #[cfg(test)]
 use crate::legacy_core::config::resolve_bootstrap_http_client_factory;
 use crate::legacy_core::config::resolve_profile_v2_config_path;
-use crate::onboarding::check_gov_cloud;
 use crate::session_resume::ResolveCwdOutcome;
 use crate::session_resume::ResumeCwdContext;
 use crate::session_resume::effective_resume_cwd_mode;
@@ -54,7 +50,6 @@ use codex_config::types::ResumeCwdMode;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimeOptions;
 use codex_features::Feature;
-use codex_login::AuthConfig;
 use codex_login::default_client::originator;
 use codex_login::default_client::set_default_client_residency_requirement;
 use codex_login::enforce_login_restrictions;
@@ -130,7 +125,6 @@ mod config_update;
 mod copy_input_guard;
 pub(crate) mod custom_terminal;
 mod daybreak;
-mod device_login;
 mod experimental_features;
 mod image_decode;
 mod markdown_copy;
@@ -176,7 +170,6 @@ pub(crate) mod live_wrap;
 mod local_settings;
 mod rendered_selection;
 pub use live_wrap::RowBuilder;
-mod local_chatgpt_auth;
 mod managed_new_thread_defaults;
 mod markdown;
 mod markdown_render;
@@ -274,7 +267,6 @@ mod wrapping;
 mod table_detect;
 
 use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
-use crate::onboarding::onboarding_screen::run_gov_cloud_guidance;
 use crate::onboarding::onboarding_screen::run_onboarding_app;
 use crate::startup_hooks_review::StartupHooksReviewOutcome;
 use crate::startup_hooks_review::load_startup_hooks_review_entry;
@@ -1234,8 +1226,6 @@ async fn run_ratatui_app(
     let uses_remote_workspace = app_server_target.uses_remote_workspace();
     color_eyre::install()?;
 
-    tooltips::announcement::prewarm(initial_config.http_client_factory());
-
     // Forward panic reports through tracing so they appear in the UI status
     // line, but do not swallow the default/color-eyre panic handler.
     // Chain to the previous hook so users still get a rich panic report
@@ -1375,30 +1365,22 @@ async fn run_ratatui_app(
         // Authentication can change while any interactive onboarding screen is open.
         startup_account = None;
         let show_login_screen = should_show_login_screen(login_status, requires_openai_auth);
-        let show_wizard = |feature| {
-            should_show_provider_setup_wizard(
-                login_status,
-                requires_openai_auth,
-                &initial_config,
-                &app_server_target,
-                feature,
-            )
-        };
         let onboarding_result = run_onboarding_app(
             OnboardingScreenArgs {
                 show_login_screen,
-                bedrock_setup_enabled: show_wizard(Feature::BedrockSetupWizard),
-                gcp_setup_enabled: show_wizard(Feature::GcpSetupWizard),
-                gateway_setup_enabled: show_wizard(Feature::GatewaySetupWizard)
-                    && app_server.as_ref().is_some_and(|server| {
-                        server
-                            .client_provider_override_for_new_chats(&initial_config)
-                            .is_none()
-                    }),
+                gateway_setup_enabled: should_show_provider_setup_wizard(
+                    login_status,
+                    requires_openai_auth,
+                    &initial_config,
+                    &app_server_target,
+                ) && app_server.as_ref().is_some_and(|server| {
+                    server
+                        .client_provider_override_for_new_chats(&initial_config)
+                        .is_none()
+                }),
                 show_trust_screen: should_show_trust_screen_flag,
                 remote_project_trust: None,
                 login_status,
-                app_server_target: app_server_target.clone(),
                 app_server_request_handle: app_server
                     .as_ref()
                     .map(AppServerSession::request_handle),
@@ -1470,20 +1452,10 @@ async fn run_ratatui_app(
                     ),
                 )
                 .await??;
-            let mut server =
+            let server =
                 AppServerSession::new(backend_id, client, app_server_target.thread_params_mode())
                     .with_local_codex_home(&selected.codex_home)
                     .with_remote_cwd_override(remote_cwd_override.clone());
-            if let Err(err) = boxed_future!(onboarding::authenticate_gateway(
-                &mut tui,
-                &mut server,
-                &selected
-            ))
-            .await
-            {
-                shutdown_startup_session(Some(server), &mut terminal_restore_guard).await;
-                return Err(err);
-            }
             startup_model_provider = selected_id;
             app_server = Some(server);
         }
@@ -2142,40 +2114,6 @@ async fn run_ratatui_app(
         &session_selection,
         &loader_overrides,
     );
-    // Connected servers resolve their own provider; the local config may differ.
-    let check_gov_cloud_guidance = config.notices.hide_gov_cloud_guidance != Some(true)
-        && (config.model_provider.is_amazon_bedrock()
-            || !matches!(app_server_target, AppServerTarget::Embedded));
-    let guidance_request_handle = app_server.request_handle();
-    let gateway_sign_in = async {
-        if !uses_remote_workspace
-            && let Some(prompt) = startup_draft
-                .run_until(
-                    &mut tui,
-                    device_login::start_if_needed(
-                        &mut app_server,
-                        &session_selection,
-                        &config,
-                        device_login::prefer_device_login(),
-                    ),
-                )
-                .await??
-        {
-            startup_draft.flush_pending_events(&mut tui).await?;
-            onboarding::onboarding_screen::run_gateway_device_login(
-                &mut tui,
-                &mut app_server,
-                prompt,
-            )
-            .await?;
-        }
-        Ok::<_, color_eyre::Report>(())
-    }
-    .await;
-    if let Err(err) = gateway_sign_in {
-        shutdown_startup_session(Some(app_server), &mut terminal_restore_guard).await;
-        return Err(err);
-    }
     let startup_prefetch_started_at = Instant::now();
     // Fetch the catalog alongside hooks/list. Fresh starts choose the model after config/read.
     app_server.prefetch_model_list();
@@ -2193,13 +2131,10 @@ async fn run_ratatui_app(
                     Ok(Some(bootstrap))
                 },
                 load_startup_hooks_review_entry(hooks_request_handle, hooks_cwd),
-                async {
-                    check_gov_cloud_guidance && check_gov_cloud(guidance_request_handle).await
-                },
             )
         })
         .await;
-    let (startup_bootstrap, startup_hooks_entry, show_gov_cloud_guidance) = match startup_prefetch {
+    let (startup_bootstrap, startup_hooks_entry) = match startup_prefetch {
         Ok(startup_prefetch) => startup_prefetch,
         Err(err) => {
             shutdown_startup_session(Some(app_server), &mut terminal_restore_guard).await;
@@ -2218,22 +2153,6 @@ async fn run_ratatui_app(
         }
     };
     let startup_elapsed_before_app = startup_prefetch_started_at.elapsed();
-    if show_gov_cloud_guidance {
-        if let Err(err) = run_gov_cloud_guidance(&mut tui).await {
-            shutdown_startup_session(Some(app_server), &mut terminal_restore_guard).await;
-            return Err(err);
-        }
-        if let Err(err) = ConfigEditsBuilder::for_config(&config)
-            .with_edits([ConfigEdit::SetPath {
-                segments: vec!["notice".into(), "hide_gov_cloud_guidance".into()],
-                value: toml_edit::value(true),
-            }])
-            .apply()
-            .await
-        {
-            tracing::warn!(%err, "Failed to save GovCloud guidance acknowledgment");
-        }
-    }
     let startup_hooks_review = maybe_run_startup_hooks_review(
         &mut app_server,
         &mut tui,
@@ -2536,21 +2455,14 @@ fn should_show_provider_setup_wizard(
     requires_openai_auth: bool,
     config: &Config,
     app_server_target: &AppServerTarget,
-    feature: Feature,
 ) -> bool {
-    let supported_target = match app_server_target {
-        AppServerTarget::Embedded => true,
-        AppServerTarget::LocalDaemon { .. } => feature == Feature::BedrockSetupWizard,
-        AppServerTarget::Remote { .. } | AppServerTarget::Cloud => false,
-    };
-    supported_target
+    matches!(app_server_target, AppServerTarget::Embedded)
         && should_show_login_screen(login_status, requires_openai_auth)
-        && config.features.enabled(feature)
-        && (feature != Feature::GatewaySetupWizard
-            || config
-                .config_layer_stack
-                .required_model_provider()
-                .is_none())
+        && config.features.enabled(Feature::GatewaySetupWizard)
+        && config
+            .config_layer_stack
+            .required_model_provider()
+            .is_none()
         && config.model_provider_id == "openai"
         && config
             .auth_config()

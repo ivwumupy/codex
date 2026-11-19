@@ -161,33 +161,6 @@ async fn plugins_manager_reads_auth_mode_from_auth_manager() {
 }
 
 #[test]
-fn curated_repo_sync_stays_deferred_for_remote_chatgpt_catalog() {
-    CURATED_REPO_SYNC_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
-    let tmp = TempDir::new().unwrap();
-    let config = PluginsConfigInput::new(
-        unrestricted_config_layer_stack(),
-        Default::default(),
-        "openai".to_string(),
-        /*plugins_enabled*/ true,
-        /*remote_plugin_enabled*/ true,
-        "https://chatgpt.com".to_string(),
-        test_http_client_factory(),
-        /*product_sku*/ None,
-    );
-    let manager = Arc::new(test_plugins_manager_with_options(
-        tmp.path().to_path_buf(),
-        Some(Product::Codex),
-        Some(AuthMode::Chatgpt),
-    ));
-
-    manager.maybe_start_curated_repo_sync_for_config(
-        &config, /*on_effective_plugins_changed*/ None,
-    );
-
-    assert!(!CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst));
-}
-
-#[test]
 fn marketplace_source_refresh_notifies_only_after_installed_cache_changes() {
     let tmp = TempDir::new().unwrap();
     let manager = test_plugins_manager(tmp.path().to_path_buf());

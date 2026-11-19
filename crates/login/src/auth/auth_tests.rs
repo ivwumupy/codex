@@ -1399,7 +1399,7 @@ async fn unauthorized_recovery_reports_mode_and_step_names() {
 
 #[tokio::test]
 #[serial(codex_auth_env)]
-async fn refresh_failure_is_scoped_to_the_matching_auth_snapshot() {
+async fn stored_chatgpt_credentials_are_ignored() {
     let codex_home = tempdir().unwrap();
     let _access_token_guard = remove_access_token_env_var();
     write_auth_file(
@@ -1426,39 +1426,8 @@ async fn refresh_failure_is_scoped_to_the_matching_auth_snapshot() {
         /*allowed_auth_modes*/ None,
     )
     .await
-    .expect("load auth")
-    .expect("auth available");
-    let mut updated_auth_dot_json = auth
-        .get_current_auth_json()
-        .expect("AuthDotJson should exist");
-    let updated_tokens = updated_auth_dot_json
-        .tokens
-        .as_mut()
-        .expect("tokens should exist");
-    updated_tokens.access_token = "new-access-token".to_string();
-    updated_tokens.refresh_token = "new-refresh-token".to_string();
-    let updated_auth = CodexAuth::from_auth_dot_json(
-        codex_home.path(),
-        updated_auth_dot_json,
-        AuthCredentialsStoreMode::File,
-        /*chatgpt_base_url*/ None,
-        AuthKeyringBackendKind::Direct,
-        /*agent_identity_authapi_base_url*/ None,
-        &crate::test_support::transport_default_auth_route_config(),
-        /*cached_auth*/ None,
-    )
-    .await
-    .expect("updated auth should parse");
-
-    let manager = AuthManager::from_auth_for_testing(auth.clone());
-    let error = RefreshTokenFailedError::new(
-        RefreshTokenFailedReason::Exhausted,
-        "refresh token already used",
-    );
-    manager.record_permanent_refresh_failure_if_unchanged(&auth, &error);
-
-    assert_eq!(manager.refresh_failure_for_auth(&auth), Some(error));
-    assert_eq!(manager.refresh_failure_for_auth(&updated_auth), None);
+    .expect("load auth");
+    assert!(auth.is_none());
 }
 
 #[tokio::test]

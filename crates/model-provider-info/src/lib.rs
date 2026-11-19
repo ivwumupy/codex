@@ -749,33 +749,23 @@ other non-default provider fields are not supported"
 pub fn built_in_model_providers(
     openai_base_url: Option<String>,
 ) -> HashMap<String, ModelProviderInfo> {
-    use ModelProviderInfo as P;
-    let openai_provider = P::create_openai_provider(openai_base_url);
-    let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
-    let amazon_bedrock_runtime_provider =
-        P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
-    let gcp_provider = P::create_gcp_provider();
+    HashMap::from([(
+        OPENAI_PROVIDER_ID.to_owned(),
+        ModelProviderInfo::create_openai_provider(openai_base_url),
+    )])
+}
 
-    [
-        (OPENAI_PROVIDER_ID, openai_provider),
-        (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
-        (GCP_PROVIDER_ID, gcp_provider),
-        (
-            AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
-            amazon_bedrock_runtime_provider,
-        ),
-    ]
-    .into_iter()
-    .map(|(k, v)| (k.to_string(), v))
-    .collect()
+pub fn is_removed_cloud_provider_id(id: &str) -> bool {
+    matches!(
+        id,
+        AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
+    )
 }
 
 /// Merge configured providers into the built-in provider catalog.
 ///
 /// Configured providers extend the built-in set. Built-in providers are not
-/// generally overridable. OpenAI allows a catalog URL override, while the
-/// cloud-hosted OpenAI providers allow a limited
-/// set of endpoint, authentication, header, and cloud-specific overrides.
+/// generally overridable. OpenAI allows a catalog URL override.
 pub fn merge_configured_model_providers(
     mut model_providers: HashMap<String, ModelProviderInfo>,
     configured_model_providers: HashMap<String, ModelProviderInfo>,
@@ -801,80 +791,24 @@ pub fn merge_configured_model_providers(
                 }
                 built_in_provider.model_catalog_url = Some(catalog_url);
             }
-        } else if matches!(
-            key.as_str(),
-            AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
-        ) {
-            provider
-                .validate_bedrock_override()
-                .map_err(|message| format!("model_providers.{key} {message}"))?;
-            let base_url_override = provider.base_url.take();
-            let auth_override = provider.auth.take();
-            let aws_override = provider.aws.take();
-            let http_headers_override = provider.http_headers.take();
-            if let Some(built_in_provider) = model_providers.get_mut(&key) {
-                built_in_provider.base_url = base_url_override;
-                built_in_provider.auth = auth_override;
-                if let Some(aws_override) = aws_override {
-                    built_in_provider.aws = Some(aws_override);
-                }
-                if let Some(http_headers_override) = http_headers_override {
-                    built_in_provider
-                        .http_headers
-                        .get_or_insert_default()
-                        .extend(http_headers_override);
-                }
-            }
-        } else if key == GCP_PROVIDER_ID {
-            merge_gcp_provider_overrides(model_providers.get_mut(&key), provider)?;
         } else {
+            if is_removed_cloud_provider_id(&key)
+                || provider.aws.is_some()
+                || provider.is_gcp()
+                || provider.is_amazon_bedrock()
+                || provider.gateway_oauth.is_some()
+                || provider.auth.is_some()
+                || provider.credential_file.is_some()
+            {
+                return Err(format!(
+                    "model_providers.{key}: cloud and account authentication are unsupported. Configure a base_url and an API key."
+                ));
+            }
             model_providers.entry(key).or_insert(provider);
         }
     }
 
     Ok(model_providers)
-}
-
-/// Validates GCP overrides and applies them when the built-in provider is present.
-pub fn merge_gcp_provider_overrides(
-    built_in: Option<&mut ModelProviderInfo>,
-    mut overrides: ModelProviderInfo,
-) -> Result<(), String> {
-    overrides
-        .validate_gcp_credential_file()
-        .and_then(|()| overrides.validate())
-        .map_err(|message| format!("model_providers.{GCP_PROVIDER_ID} {message}"))?;
-    let base_url = overrides.base_url.take();
-    let auth = overrides.auth.take();
-    let credential_file = overrides.credential_file.take();
-    let http_headers = overrides.http_headers.take();
-    let project_id = overrides.project_id.take();
-    let location = overrides.location.take();
-    if overrides != ModelProviderInfo::default() {
-        return Err(format!(
-            "model_providers.{GCP_PROVIDER_ID} only supports changing \
-`base_url`, `auth`, `http_headers`, `project_id`, `location`, and `credential_file`; other non-default provider fields are not supported"
-        ));
-    }
-
-    if let Some(provider) = built_in {
-        provider.project_id = project_id;
-        provider.location = location;
-        provider.credential_file = credential_file;
-        if let Some(base_url) = base_url {
-            provider.base_url = Some(base_url);
-        }
-        if let Some(auth) = auth {
-            provider.auth = Some(auth);
-        }
-        if let Some(http_headers) = http_headers {
-            provider
-                .http_headers
-                .get_or_insert_default()
-                .extend(http_headers);
-        }
-    }
-    Ok(())
 }
 
 pub fn custom_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {

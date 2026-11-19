@@ -27,7 +27,6 @@ fn insert_splash(app: &mut App, tui: &mut tui::Tui) {
             &session,
             /*is_first_event*/ false,
             /*tooltip_override*/ None,
-            /*auth_plan*/ None,
         )),
     );
 }

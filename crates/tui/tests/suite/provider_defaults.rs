@@ -165,8 +165,6 @@ cli_auth_credentials_store = "file"
 suppress_unstable_features_warning = true
 [features]
 gateway_setup_wizard = true
-bedrock_setup_wizard = false
-gcp_setup_wizard = false
 api_key_model_discovery = false
 [projects.{trusted}]
 trust_level = "trusted"
@@ -185,21 +183,9 @@ requires_openai_auth = true
         &["--profile", "work", "--no-daemon", "verify the gateway"],
     )?;
     terminal
-        .wait_for_screen("Sign in another way")
+        .wait_for_screen("Use a custom provider or gateway")
         .with_context(|| terminal.screen_contents())?;
-    // Startup drains input after its first draw. Retry the menu shortcut until it is accepted.
-    let deadline = std::time::Instant::now() + Duration::from_secs(/*secs*/ 30);
-    while !terminal.screen_contains("Use a custom provider or gateway") {
-        ensure!(
-            std::time::Instant::now() < deadline,
-            "gateway option missing: {}",
-            terminal.screen_contents()
-        );
-        terminal.write_input(b"2")?;
-        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
-    }
-    // Arrow navigation avoids carrying the menu shortcut across two screens.
-    terminal.write_input(b"\x1b[B\r")?;
+    terminal.write_input(b"2")?;
     terminal.wait_for_screen("Office gateway")?;
     terminal.write_input(b"\x1b[H\r")?;
     terminal.wait_for_screen("Paste or type your API key")?;
