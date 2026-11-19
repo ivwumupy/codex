@@ -2,10 +2,9 @@
 source: crates/tui/src/onboarding/gcp_tests.rs
 expression: terminal.backend().to_string()
 ---
-  Sign in with ChatGPT to use Codex as part of your paid plan
-  or connect an API key for usage-based billing
+  Choose an API key or provider.
 
-> 1. Sign in with ChatGPT
-  2. Sign in with Device Code
-  3. Sign in another way
+> 1. Use an OpenAI API key
+     Pay for what you use
+
   Press enter to continue

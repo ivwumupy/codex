@@ -2,10 +2,9 @@
 source: crates/tui/src/onboarding/gcp_tests.rs
 expression: terminal.backend().to_string()
 ---
-  Sign in another way
+  Choose an API key or provider.
 
   1. Use an OpenAI API key
   2. Use Amazon Bedrock
 > 3. Use Google Cloud Vertex AI
   Press enter to continue
-  Press esc to go back

@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use anyhow::Context;
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::write_chatgpt_auth;
@@ -191,7 +190,13 @@ fn login_status_validates_configured_workload_identity() -> Result<()> {
     write_file_auth_config(codex_home.path())?;
     let missing_assertion = codex_home.path().join("missing-identity-token");
 
-    for login_method in ["chatgpt", "api"] {
+    for (login_method, expected_error) in [
+        (
+            "chatgpt",
+            "authentication requirements do not permit any usable login method",
+        ),
+        ("api", "could not read workload identity assertion file"),
+    ] {
         let mut command = codex_command(codex_home.path())?;
         command
             .env_remove(CODEX_ACCESS_TOKEN_ENV_VAR)
@@ -203,10 +208,7 @@ fn login_status_validates_configured_workload_identity() -> Result<()> {
                 "login",
                 "status",
             ]);
-        command
-            .assert()
-            .failure()
-            .stderr(contains("could not read workload identity assertion file"));
+        command.assert().failure().stderr(contains(expected_error));
     }
 
     Ok(())

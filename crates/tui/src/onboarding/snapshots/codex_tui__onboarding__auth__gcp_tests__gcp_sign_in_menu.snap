@@ -2,7 +2,7 @@
 source: crates/tui/src/onboarding/gcp_tests.rs
 expression: terminal.backend().to_string()
 ---
-  Sign in another way
+  Choose an API key or provider.
 
 > 1. Use an OpenAI API key
      Pay for what you use
@@ -14,4 +14,3 @@ expression: terminal.backend().to_string()
      Connect using your Google Cloud credentials
 
   Press enter to continue
-  Press esc to go back
