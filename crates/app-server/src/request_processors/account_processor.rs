@@ -586,7 +586,8 @@ impl AccountRequestProcessor {
         params: GetAuthStatusParams,
     ) -> Result<GetAuthStatusResponse, JSONRPCErrorError> {
         let include_token = params.include_token.unwrap_or(false);
-        if params.refresh_token.unwrap_or(false)
+        let do_refresh = params.refresh_token.unwrap_or(false);
+        if do_refresh
             && let Err(err) = self.auth_manager.refresh_token().await
         {
             tracing::warn!("failed to refresh provider credentials: {err}");
