@@ -1,2 +1,2 @@
-app-server-protocol/schema/** linguist-generated
-hooks/schema/generated/** linguist-generated
+crates/app-server-protocol/schema/** linguist-generated
+crates/hooks/schema/generated/** linguist-generated

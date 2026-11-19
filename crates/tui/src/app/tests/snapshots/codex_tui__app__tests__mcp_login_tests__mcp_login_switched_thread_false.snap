@@ -1,0 +1,5 @@
+---
+source: crates/tui/src/app/tests/mcp_login_tests.rs
+expression: next_history_message(&mut events)
+---
+■ Enterprise sign-in failed.

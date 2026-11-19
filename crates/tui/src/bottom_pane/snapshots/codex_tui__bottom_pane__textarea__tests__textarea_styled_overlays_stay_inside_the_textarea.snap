@@ -1,0 +1,14 @@
+---
+source: crates/tui/src/bottom_pane/textarea.rs
+expression: "snapshots.join(\"\\n\\n\")"
+---
+element
+"abadKEEP"
+"next    "
+"        "
+
+
+highlight
+"abadKEEP"
+"next    "
+"        "

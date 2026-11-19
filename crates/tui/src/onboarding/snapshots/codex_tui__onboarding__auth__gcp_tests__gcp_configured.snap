@@ -1,0 +1,5 @@
+---
+source: crates/tui/src/onboarding/gcp_tests.rs
+expression: terminal.backend().to_string()
+---
+✓ Google Cloud Vertex AI configured

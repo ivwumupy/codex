@@ -1,0 +1,7 @@
+---
+source: crates/tui/src/bottom_pane/textarea/mouse_tests.rs
+assertion_line: 91
+expression: rows
+---
+·ello ··
+wor·····
