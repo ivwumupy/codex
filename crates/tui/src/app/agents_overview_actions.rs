@@ -309,15 +309,8 @@ impl App {
             state.rename_target = None;
         }
         self.repaint_agents_overview();
-        let voice_result = if removes_subtree || self.voice_owner_thread_id() == Some(thread_id) {
-            self.stop_voice_for_removed_thread(app_server, thread_id)
-                .await
-        } else {
-            Ok(())
-        };
         let operation = async {
             let result = async {
-                voice_result?;
                 if removes_subtree
                     && let Some(primary) = primary_thread_id
                     && primary != thread_id

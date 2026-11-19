@@ -111,8 +111,7 @@ impl App {
     }
 
     pub(super) fn can_cycle_conversation_backend(&self) -> bool {
-        self.voice_owner_thread_id().is_none()
-            && self.chat_widget.can_choose_new_backend()
+        self.chat_widget.can_choose_new_backend()
             && self
                 .current_displayed_thread_id()
                 .and_then(|id| self.thread_event_channels.get(&id))
@@ -134,9 +133,6 @@ impl App {
             || self.reject_pending_permission_root_switch()
         {
             return Ok(());
-        }
-        if self.voice_owner_thread_id().is_some() {
-            return Err("End the voice call before switching.".into());
         }
         let displayed_thread = self.current_displayed_thread_id();
         let outgoing_slot = backends.displayed;

@@ -95,7 +95,6 @@ fn is_known_contextual_developer_message_content(content: &[ContentItem]) -> boo
             "<environments_instructions>",
             "<git_attribution>",
             "<plugins_instructions>",
-            "<realtime_conversation>",
             "<skills_instructions>",
             "<tools>",
             "<personality_spec>",

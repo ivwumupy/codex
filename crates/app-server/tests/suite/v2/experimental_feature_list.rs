@@ -99,11 +99,11 @@ async fn experimental_feature_list_returns_feature_metadata_with_stage() -> Resu
 }
 
 #[tokio::test]
-async fn experimental_feature_list_reports_managed_in_app_voice() -> Result<()> {
+async fn experimental_feature_list_reports_managed_in_app_chat() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
         codex_home.path().join("requirements.toml"),
-        "[features]\nin_app_voice = false\n",
+        "[features]\nin_app_chat = false\n",
     )?;
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -126,12 +126,12 @@ async fn experimental_feature_list_reports_managed_in_app_voice() -> Result<()> 
             features
                 .data
                 .into_iter()
-                .find(|feature| feature.name == "in_app_voice"),
+                .find(|feature| feature.name == "in_app_chat"),
         ),
         (
-            Some(BTreeMap::from([("in_app_voice".to_string(), false)])),
+            Some(BTreeMap::from([("in_app_chat".to_string(), false)])),
             Some(ExperimentalFeature {
-                name: "in_app_voice".to_string(),
+                name: "in_app_chat".to_string(),
                 stage: ExperimentalFeatureStage::Stable,
                 display_name: None,
                 description: None,

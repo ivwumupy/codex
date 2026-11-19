@@ -135,13 +135,7 @@ async fn mailbox_preemption_preserves_response_when_deferred(
             .await?;
     }
     // The barrier confirms that both messages were queued before finishing the item.
-    test.codex
-        .submit(Op::RealtimeConversationListVoices)
-        .await?;
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-    })
-    .await;
+    core_test_support::wait_for_submission_queue(&test.codex).await;
     release.send(()).expect("release response");
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -533,13 +527,7 @@ async fn start_mailbox_preemption(
             .await?;
     }
     // The barrier confirms that both messages were queued before finishing the item.
-    test.codex
-        .submit(Op::RealtimeConversationListVoices)
-        .await?;
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-    })
-    .await;
+    core_test_support::wait_for_submission_queue(&test.codex).await;
     release.send(()).expect("release response");
     Ok(test)
 }

@@ -153,7 +153,7 @@ async fn harness_shares_runtime_and_honors_thread_auth_config() -> Result<()> {
         .mount(&server)
         .await;
 
-    run_harness_through_proxy(&server, TEST_NAME, /*realtime_target*/ None).await?;
+    run_harness_through_proxy(&server, TEST_NAME).await?;
 
     let requests = responses.requests();
     let expected = [
@@ -774,7 +774,6 @@ async fn mcp_uploads_follow_a_resumed_actors_runtime() -> Result<()> {
     run_harness_through_proxy(
         &server,
         "suite::runtime_auth::mcp_uploads_follow_a_resumed_actors_runtime",
-        /*realtime_target*/ None,
     )
     .await?;
     assert_eq!(responses.requests().len(), 9);
@@ -1129,7 +1128,6 @@ async fn daybreak_requests_use_runtime_auth() -> Result<()> {
     run_harness_through_proxy(
         &server,
         "suite::runtime_auth::daybreak_requests_use_runtime_auth",
-        /*realtime_target*/ None,
     )
     .await?;
     let requests = server.received_requests().await.unwrap();

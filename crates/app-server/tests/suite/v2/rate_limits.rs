@@ -926,7 +926,6 @@ async fn account_requests_share_runtime_and_rotate_on_restart(mode: &str) -> Res
         &format!(
             "suite::v2::rate_limits::account_requests_share_runtime_and_rotate_on_restart::{mode}"
         ),
-        /*realtime_target*/ None,
     )
     .await?;
 

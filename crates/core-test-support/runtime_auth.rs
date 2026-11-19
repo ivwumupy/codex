@@ -16,20 +16,14 @@ use wiremock::MockServer;
 pub const PROBE_SERVER: &str = "CODEX_RUNTIME_AUTH_TEST_SERVER";
 
 /// Run one test in an isolated subprocess with first-party HTTP routed to the mock server.
-/// An optional Realtime target receives chatgpt.com Realtime WebSocket upgrades.
-pub async fn run_harness_through_proxy(
-    server: &MockServer,
-    test_name: &str,
-    realtime_target: Option<std::net::SocketAddr>,
-) -> Result<()> {
-    run_harness_through_proxy_with_env(server, test_name, realtime_target, &[]).await
+pub async fn run_harness_through_proxy(server: &MockServer, test_name: &str) -> Result<()> {
+    run_harness_through_proxy_with_env(server, test_name, &[]).await
 }
 
 /// Adds process-local auth inputs without changing the test runner's environment.
 pub async fn run_harness_through_proxy_with_env(
     server: &MockServer,
     test_name: &str,
-    realtime_target: Option<std::net::SocketAddr>,
     environment: &[(&str, Option<&str>)],
 ) -> Result<()> {
     // The production destination check stays intact. A test-only CA and CONNECT proxy route
@@ -86,37 +80,8 @@ pub async fn run_harness_through_proxy_with_env(
                 stream
                     .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                     .await?;
-                let realtime_host = headers.starts_with("CONNECT chatgpt.com:443 ");
                 let mut stream = acceptor.accept(stream).await?;
-                let mut prefix = Vec::new();
-                let mut destination = target;
-                if let Some(realtime_target) = realtime_target.filter(|_| realtime_host) {
-                    // Background HTTP requests share this host with Realtime. Only upgrades
-                    // belong on the WebSocket fixture; ordinary HTTP still goes to wiremock.
-                    while !prefix.ends_with(b"\r\n\r\n") && prefix.len() < 65536 {
-                        prefix.push(stream.read_u8().await?);
-                    }
-                    anyhow::ensure!(
-                        prefix.ends_with(b"\r\n\r\n"),
-                        "oversized test request headers"
-                    );
-                    let request_headers = std::str::from_utf8(&prefix)?;
-                    let realtime_path = request_headers.lines().next().is_some_and(|line| {
-                        line.starts_with("GET /v1/realtime") || line.starts_with("GET /v1/live")
-                    });
-                    if realtime_path
-                        && request_headers.lines().any(|line| {
-                            line.split_once(':').is_some_and(|(name, value)| {
-                                name.eq_ignore_ascii_case("upgrade")
-                                    && value.trim().eq_ignore_ascii_case("websocket")
-                            })
-                        })
-                    {
-                        destination = realtime_target;
-                    }
-                }
-                let mut target = TcpStream::connect(destination).await?;
-                target.write_all(&prefix).await?;
+                let mut target = TcpStream::connect(target).await?;
                 tokio::io::copy_bidirectional(&mut stream, &mut target).await?;
                 Ok::<_, anyhow::Error>(())
             });

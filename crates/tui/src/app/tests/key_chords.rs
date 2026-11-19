@@ -1043,16 +1043,6 @@ async fn transcript_fixed_keys_take_precedence_over_pager_chord_prefixes() -> Re
         );
         app.reset_external_editor_state(&mut tui);
     }
-    for voice in ["f9", "f9 v"] {
-        app.keymap = RuntimeKeymap::from_config(&toml::from_str(&format!(
-            "[chat]\ntoggle_voice = '{voice}'\n[pager]\nclose_transcript = 'f9'"
-        ))?)
-        .unwrap();
-        app.open_transcript_overlay(&mut tui);
-        press(&mut app, &mut tui, &mut app_server, KeyCode::F(9).into()).await?;
-        assert!(!app.transcript_view.is_detailed());
-        assert!(!app.key_chord_matcher.is_pending());
-    }
     app.keymap = RuntimeKeymap::from_config(&toml::from_str(
         "[global]\nfind_transcript = 'f6 f'\n[pager]\nscroll_down = 'f6'",
     )?)
@@ -1544,100 +1534,5 @@ parent draft!");
     assert_eq!(app.chat_widget.composer_text_with_pending(), draft.text);
     tokio::time::resume();
     server.shutdown().await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn key_capture_receives_voice_shortcut_and_chord_prefix() -> Result<()> {
-    let (mut app, mut rx, _op_rx) = super::make_test_app_with_channels().await;
-    let mut app_server = start_config_write_test_app_server(&app).await?;
-    let mut tui = crate::tui::test_support::make_test_tui()?;
-    super::enable_side_retention(&mut app)?;
-    tui.set_owned_screen(/*owned*/ true)?;
-    let parent = ThreadId::new();
-    app.active_thread_id = Some(parent);
-    let child = ThreadId::new();
-    app.side_threads
-        .insert(child, super::SideThreadState::new(parent));
-    for (config, key) in [
-        ("", 8),
-        ("[chat]\ntoggle_voice = 'f8 v'", 8),
-        ("[global]\nhide_pane = 'f12'", 12),
-        ("[global]\nfocus_main_composer = 'f12'", 12),
-        ("[global]\nfocus_sidebar_content = 'f12 s'", 12),
-        ("[global]\nfocus_pane_left = 'f12 h'", 12),
-        ("[global]\nfocus_pane_right = 'f12 l'", 12),
-    ] {
-        app.keymap =
-            RuntimeKeymap::for_session(&toml::from_str(config)?, /*workspace*/ true).unwrap();
-        app.chat_widget.open_keymap_capture(
-            "composer".into(),
-            "submit".into(),
-            crate::app_event::KeymapEditIntent::ReplaceAll,
-            crate::app_event::KeymapCaptureMode::SingleKey,
-            &app.keymap,
-        );
-        press(&mut app, &mut tui, &mut app_server, KeyCode::F(key).into()).await?;
-        assert!(
-            matches!(rx.try_recv()?, crate::app_event::AppEvent::KeymapCaptured { key: captured, .. } if captured == format!("f{key}"))
-        );
-    }
-    // A printable remap belongs to the composer unless this session and thread own a pane.
-    app.keymap = RuntimeKeymap::for_session(
-        &toml::from_str("[global]\nhide_pane = '%'")?,
-        /*workspace*/ true,
-    )
-    .unwrap();
-    for (thread, enabled, owned, offline, draft) in [
-        (parent, true, true, false, ""),
-        (ThreadId::new(), true, true, false, "%"),
-        (parent, false, true, false, "%"),
-        (parent, true, false, false, "%"),
-        (parent, true, true, true, "%"),
-    ] {
-        app.active_thread_id = Some(thread);
-        app.config
-            .features
-            .set_enabled(codex_features::Feature::TuiWorkspace, enabled)?;
-        tui.set_owned_screen(owned)?;
-        app.reconnect.offline = offline;
-        app.chat_widget.apply_external_edit(String::new());
-        for key in [KeyCode::Char('%'), KeyCode::Right] {
-            press(&mut app, &mut tui, &mut app_server, key.into()).await?;
-        }
-        assert_eq!(app.chat_widget.composer_text_with_pending(), draft);
-    }
-
-    // Offline, the same printable binding focuses the local composer but cannot switch threads.
-    let mut stopped = app_server.request_view();
-    app_server.shutdown().await?;
-    app.local_settings.tui.keymap = toml::from_str("[global]\nfocus_main_composer = '%'")?;
-    super::enable_side_retention(&mut app)?;
-    app.active_thread_id = Some(ThreadId::new());
-    app.reconnect.offline = true;
-    app.chat_widget.apply_external_edit("draft".into());
-    app.transcript_view.begin_search();
-    for key in [KeyCode::Char('%'), KeyCode::Char('!'), KeyCode::Right] {
-        press(&mut app, &mut tui, &mut stopped, key.into()).await?;
-    }
-    assert!(!app.transcript_view.has_active_interaction());
-    assert_eq!(app.chat_widget.composer_text_with_pending(), "draft!");
-    app.active_thread_id = Some(child);
-    for key in [KeyCode::Char('%'), KeyCode::Right] {
-        press(&mut app, &mut tui, &mut stopped, key.into()).await?;
-    }
-    assert_eq!(app.chat_widget.composer_text_with_pending(), "draft!%");
-    // Bare letters and arrows still edit the draft.
-    for key in [
-        KeyCode::Char('h'),
-        KeyCode::Left,
-        KeyCode::Char('l'),
-        KeyCode::Right,
-        KeyCode::Char('!'),
-        KeyCode::Right,
-    ] {
-        press(&mut app, &mut tui, &mut stopped, key.into()).await?;
-    }
-    assert_eq!(app.chat_widget.composer_text_with_pending(), "draft!%lh!");
     Ok(())
 }

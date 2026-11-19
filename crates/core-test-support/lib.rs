@@ -269,6 +269,20 @@ pub fn find_codex_linux_sandbox_exe() -> Result<PathBuf, CargoBinError> {
     codex_utils_cargo_bin::cargo_bin("codex-linux-sandbox")
 }
 
+/// Wait until the submission loop has processed previously enqueued operations.
+pub async fn wait_for_submission_queue(codex: &CodexThread) {
+    let (reply, response) = tokio::sync::oneshot::channel();
+    // Turn IDs are UUIDs, so this conditional interrupt cannot match a live turn.
+    codex
+        .submit(codex_protocol::protocol::Op::InterruptIfNoPendingInput {
+            turn_id: "submission-barrier".into(),
+            reply,
+        })
+        .await
+        .expect("enqueue submission barrier");
+    assert!(!response.await.expect("submission loop reached barrier"));
+}
+
 pub async fn wait_for_event<F>(
     codex: &CodexThread,
     predicate: F,

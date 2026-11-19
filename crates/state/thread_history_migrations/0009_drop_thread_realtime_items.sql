@@ -1,0 +1,2 @@
+DROP TRIGGER thread_realtime_items_projection_cleanup;
+DROP TABLE thread_realtime_items;

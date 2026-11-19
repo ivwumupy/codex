@@ -42,7 +42,6 @@ pub fn apply_rollout_item(
         RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_) => {}
-        RolloutItem::RealtimeItem(_) => {}
         RolloutItem::TokenUsageRecord(_) => {}
     }
     if metadata.model_provider.is_empty() {
@@ -73,7 +72,6 @@ pub fn rollout_item_affects_thread_metadata(item: &RolloutItem) -> bool {
         | RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::Compacted(_)
-        | RolloutItem::RealtimeItem(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::SecurityRiskScore(_)
@@ -593,7 +591,6 @@ mod tests {
                 comp_hash: None,
                 collaboration_mode: None,
                 multi_agent_version: None,
-                realtime_active: None,
                 cyber_access_program: None,
                 effort: None,
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
@@ -636,7 +633,6 @@ mod tests {
                 comp_hash: None,
                 collaboration_mode: None,
                 multi_agent_version: None,
-                realtime_active: None,
                 cyber_access_program: None,
                 effort: None,
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
@@ -675,7 +671,6 @@ mod tests {
                 comp_hash: None,
                 collaboration_mode: None,
                 multi_agent_version: None,
-                realtime_active: None,
                 cyber_access_program: None,
                 effort: Some(ReasoningEffort::High),
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
@@ -711,7 +706,6 @@ mod tests {
                 comp_hash: None,
                 collaboration_mode: None,
                 multi_agent_version: None,
-                realtime_active: None,
                 cyber_access_program: None,
                 effort: Some(ReasoningEffort::High),
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),

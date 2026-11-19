@@ -333,8 +333,7 @@ fn review_original(mut item: RolloutItem) -> anyhow::Result<Option<RolloutItem>>
         | RolloutItem::TokenUsageRecord(_)
         | RolloutItem::WorldState(_)
         | RolloutItem::SecurityRiskScore(_)
-        | RolloutItem::EventMsg(_)
-        | RolloutItem::RealtimeItem(_) => false,
+        | RolloutItem::EventMsg(_) => false,
     };
     if !include {
         return Ok(None);

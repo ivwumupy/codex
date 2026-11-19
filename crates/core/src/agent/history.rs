@@ -72,8 +72,7 @@ fn keep_forked_rollout_item(item: &RolloutItem, preserve_context_baselines: bool
             | ResponseItem::ContextCompaction { .. }
             | ResponseItem::Other => false,
         },
-        RolloutItem::RealtimeItem(_)
-        | RolloutItem::InterAgentCommunication(_)
+        RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_) => false,
@@ -419,7 +418,6 @@ pub(super) async fn prepare_forked_history(
                 }
                 true
             }
-            RolloutItem::RealtimeItem(_) => false,
             RolloutItem::DynamicToolsUpdated { .. }
             | RolloutItem::EventMsg(_)
             | RolloutItem::SessionMeta(_)

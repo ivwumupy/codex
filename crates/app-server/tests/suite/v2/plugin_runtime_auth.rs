@@ -156,7 +156,6 @@ async fn direct_mutation_initializes_runtime_after_config_reload(
     run_harness_through_proxy(
         &server,
         &format!("suite::v2::plugin_install::runtime_auth_tests::direct_mutation_initializes_runtime_after_config_reload::{operation}_{mode}"),
-        /*realtime_target*/ None,
     ).await?;
     let requests = server
         .received_requests()

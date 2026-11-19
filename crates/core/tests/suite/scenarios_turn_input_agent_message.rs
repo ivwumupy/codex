@@ -145,11 +145,7 @@ async fn agent_followup_preserves_native_boundaries(
             start_options: Default::default(),
         })
         .await?;
-    child.submit(Op::RealtimeConversationListVoices).await?;
-    wait_for_event(&child, |event| {
-        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-    })
-    .await;
+    core_test_support::wait_for_submission_queue(&child).await;
     let message = |text: &str| {
         TurnInputRequest::new(TurnInput::InterAgentCommunication(
             InterAgentCommunication::new(

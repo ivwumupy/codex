@@ -179,7 +179,6 @@ async fn git_attribution_runtime_auth_uses_request_destination(
     run_harness_through_proxy(
         &server,
         &format!("suite::v2::git_attribution::git_attribution_runtime_auth_uses_request_destination::{case}"),
-        /*realtime_target*/ None,
     )
     .await?;
 

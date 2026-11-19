@@ -1,7 +1,6 @@
 //! Sticky context follows the visible turn while leaving source text and hit rows intact.
 
 use super::*;
-use crate::history_cell::new_spoken_user_prompt;
 use crate::history_cell::new_user_prompt;
 use crate::transcript_view::tests::cell;
 use crate::transcript_view::tests::render;
@@ -101,32 +100,29 @@ fn header_sanitizes_controls_and_truncates_by_display_width() {
 
 #[test]
 fn pinned_prompt_matches_the_original_prompt_style() {
-    for prompt in [
-        new_user_prompt("keep going".into(), Vec::new(), Vec::new(), Vec::new()),
-        new_spoken_user_prompt("keep going".into()),
-    ] {
-        let width = 30;
-        let mut expected = Buffer::empty(Rect::new(
-            /*x*/ 0, /*y*/ 0, width, /*height*/ 3,
-        ));
-        TextLayout::new(prompt.transcript_hyperlink_lines(width), width).render(
-            expected.area,
-            &mut expected,
-            /*start_row*/ 0,
-        );
-        let cells: Vec<Arc<dyn HistoryCell>> = vec![
-            Arc::new(prompt),
-            cell("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight"),
-        ];
-        let mut view = TranscriptView::default();
-        let actual = render(&mut view, &cells, width, /*height*/ 7);
+    let prompt = new_user_prompt("keep going".into(), Vec::new(), Vec::new(), Vec::new());
 
-        assert_eq!(
-            &actual.content[..usize::from(width)],
-            &expected.content[usize::from(width)..usize::from(width * 2)]
-        );
-        assert_eq!(view.area.y, 1);
-    }
+    let width = 30;
+    let mut expected = Buffer::empty(Rect::new(
+        /*x*/ 0, /*y*/ 0, width, /*height*/ 3,
+    ));
+    TextLayout::new(prompt.transcript_hyperlink_lines(width), width).render(
+        expected.area,
+        &mut expected,
+        /*start_row*/ 0,
+    );
+    let cells: Vec<Arc<dyn HistoryCell>> = vec![
+        Arc::new(prompt),
+        cell("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight"),
+    ];
+    let mut view = TranscriptView::default();
+    let actual = render(&mut view, &cells, width, /*height*/ 7);
+
+    assert_eq!(
+        &actual.content[..usize::from(width)],
+        &expected.content[usize::from(width)..usize::from(width * 2)]
+    );
+    assert_eq!(view.area.y, 1);
 }
 
 #[test]

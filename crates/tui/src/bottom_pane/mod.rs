@@ -98,7 +98,6 @@ mod status_line_style;
 mod status_surface_preview;
 mod title_setup;
 pub(crate) mod user_verification;
-mod voice_strip;
 mod warnings;
 mod warnings_view;
 pub(crate) use action_required_title::ACTION_REQUIRED_PREVIEW_PREFIX;
@@ -125,8 +124,6 @@ pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
 pub(crate) use request_user_input::RequestUserInputOverlay;
 pub(crate) use status_line_style::StatusLineAccent;
 pub(crate) use status_line_style::status_line_from_segments;
-pub(crate) use voice_strip::VoiceStripPhase;
-pub(crate) use voice_strip::VoiceStripState;
 mod bottom_pane_view;
 mod composer_gap;
 mod effort_ignition;
@@ -501,10 +498,7 @@ impl BottomPane {
         self.composer.agents_navigation_key_available()
             && !crate::keymap::keymap_action_ids()
                 .filter(|action| {
-                    matches!(
-                        action.context,
-                        KeymapContext::Global | KeymapContext::Chat | KeymapContext::Voice
-                    )
+                    matches!(action.context, KeymapContext::Global | KeymapContext::Chat)
                 })
                 .any(|action| {
                     crate::keymap::bindings_for_action(
@@ -517,7 +511,7 @@ impl BottomPane {
             && !self.keymap.chords.bindings.iter().any(|binding| {
                 matches!(
                     binding.action.context,
-                    KeymapContext::Global | KeymapContext::Chat | KeymapContext::Voice
+                    KeymapContext::Global | KeymapContext::Chat
                 ) && binding.chord.prefix.is_press(left)
             })
     }
@@ -671,11 +665,6 @@ impl BottomPane {
 
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
         self.composer.set_goal_command_enabled(enabled);
-        self.request_redraw();
-    }
-
-    pub fn set_voice_command_enabled(&mut self, enabled: bool) {
-        self.composer.set_voice_command_enabled(enabled);
         self.request_redraw();
     }
 
@@ -1299,12 +1288,6 @@ impl BottomPane {
             view.pending_hint = items.clone();
         }
         self.composer.set_footer_hint_override(items);
-        self.request_redraw();
-    }
-
-    pub(crate) fn set_voice_strip(&mut self, state: Option<VoiceStripState>) {
-        self.composer
-            .set_voice_strip(state, self.frame_requester.clone());
         self.request_redraw();
     }
 

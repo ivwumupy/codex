@@ -117,7 +117,6 @@ async fn analytics_runtime_covers_regional_account_and_report_requests() -> Resu
     run_harness_through_proxy(
         &server,
         "analytics::client::runtime_auth_tests::analytics_runtime_covers_regional_account_and_report_requests",
-        /*realtime_target*/ None,
     ).await?;
     server.verify().await;
     let requests = server
@@ -218,7 +217,6 @@ async fn analytics_runtime_bootstrap_preserves_sign_in_guidance() -> Result<()> 
     run_harness_through_proxy(
         &server,
         "analytics::client::runtime_auth_tests::analytics_runtime_bootstrap_preserves_sign_in_guidance",
-        /*realtime_target*/ None,
     ).await?;
     server.verify().await;
     let requests = server

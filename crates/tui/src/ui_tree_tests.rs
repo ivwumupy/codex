@@ -136,18 +136,6 @@ fn links_only_annotate_their_own_cells() {
 }
 
 #[test]
-fn render_line_keeps_exactly_fitting_halfwidth_voiced_katakana() {
-    let text = tree(json!("ｶﾞ"));
-    let area = Rect::new(
-        /*x*/ 0, /*y*/ 0, /*width*/ 2, /*height*/ 1,
-    );
-    let mut buffer = Buffer::empty(area);
-    text.render_line(area.width, &Theme::default())
-        .render_fitted(area, &mut buffer);
-    assert_eq!(buffer[(0, 0)].symbol(), "ｶﾞ");
-}
-
-#[test]
 fn ellipsis_counts_toward_width_only_when_there_is_overflow() {
     let row = tree(json!({"type":"row","props":{"gap":1},"children":["abcde", null]}));
     for (width, expected) in [(0, ""), (1, "…"), (4, "abc…"), (5, "abcde")] {

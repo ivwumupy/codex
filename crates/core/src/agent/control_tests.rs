@@ -2731,7 +2731,6 @@ async fn spawn_agent_fork_sanitizes_inherited_compaction_metadata() {
             model: "parent-model".into(),
             comp_hash: None,
             cyber_access_program: None,
-            realtime_active: None,
         }),
     };
     let parent_usage = TokenUsage {
@@ -3889,7 +3888,6 @@ async fn spawn_agent_full_fork_legacy_compaction_rebuilds_child_instructions_onc
                         model: "parent-model".into(),
                         comp_hash: None,
                         cyber_access_program: None,
-                        realtime_active: None,
                     }),
                 }),
             })),

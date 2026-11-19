@@ -47,11 +47,8 @@ use codex_api::Compression;
 use codex_api::MemoriesClient as ApiMemoriesClient;
 use codex_api::MemorySummarizeInput as ApiMemorySummarizeInput;
 use codex_api::MemorySummarizeOutput as ApiMemorySummarizeOutput;
-use codex_api::Provider as ApiProvider;
 use codex_api::RESPONSES_PATH;
 use codex_api::RawMemory as ApiRawMemory;
-use codex_api::RealtimeCallClient as ApiRealtimeCallClient;
-use codex_api::RealtimeSessionConfig as ApiRealtimeSessionConfig;
 use codex_api::Reasoning;
 use codex_api::ReasoningContext;
 use codex_api::RequestTelemetry;
@@ -147,8 +144,6 @@ use codex_model_provider::SharedModelProvider;
 use codex_model_provider::WorkspaceRoutingContext;
 #[cfg(test)]
 use codex_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OPENAI_PROVIDER_NAME;
 use codex_model_provider_info::WireApi;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
@@ -176,7 +171,6 @@ const WS_REQUEST_HEADER_RESPONSES_LITE_CLIENT_METADATA_KEY: &str =
 const RESPONSES_WEBSOCKETS_V2_BETA_HEADER_VALUE: &str = "responses_websockets=2026-02-06";
 const X_OPENAI_INTERNAL_CODEX_RESPONSES_LITE_HEADER: &str =
     "x-openai-internal-codex-responses-lite";
-const REALTIME_CALLS_ENDPOINT: &str = "/realtime/calls";
 const MEMORIES_SUMMARIZE_ENDPOINT: &str = "/memories/trace_summarize";
 #[cfg(test)]
 pub(crate) const WEBSOCKET_CONNECT_TIMEOUT: Duration =
@@ -554,19 +548,6 @@ enum WebsocketStreamOutcome {
     FallbackToHttp,
 }
 
-/// Result of opening a WebRTC Realtime call.
-///
-/// The SDP answer goes back to the client. The call id and auth headers stay on the server so the
-/// ordinary Realtime WebSocket machinery can join the same in-progress call as a sideband
-/// controller.
-pub(crate) struct RealtimeWebrtcCallStart {
-    pub(crate) sdp: String,
-    pub(crate) call_id: String,
-    pub(crate) sideband_headers: ApiHeaderMap,
-    pub(crate) sideband_auth: SharedAuthProvider,
-    pub(crate) sideband_http_client_factory: HttpClientFactory,
-}
-
 impl ModelClient {
     #[allow(clippy::too_many_arguments)]
     /// Creates a new session-scoped `ModelClient`.
@@ -804,196 +785,6 @@ impl ModelClient {
 
         self.store_cached_websocket_session(WebsocketSession::default());
         activated
-    }
-
-    async fn realtime_client_setup(
-        &self,
-        auth_context: &codex_model_provider::ProviderAuthContext,
-        http_client_factory: HttpClientFactory,
-        base_url: Option<&str>,
-        headers: Option<&ApiHeaderMap>,
-        call_setup: Option<&CurrentClientSetup>,
-    ) -> Result<CurrentClientSetup> {
-        self.validate_required_cyber_access_program(/*programs*/ None)?;
-        // Realtime uses the OpenAI-compatible API protocol independently of the inference transport.
-        let mut info = ModelProviderInfo {
-            name: OPENAI_PROVIDER_NAME.to_owned(),
-            aws: None,
-            ..self.state.provider.info().clone()
-        };
-        if let Some(headers) = headers {
-            info.http_headers = Some(
-                headers
-                    .iter()
-                    .map(|(name, value)| {
-                        value
-                            .to_str()
-                            .map(|value| (name.to_string(), value.to_string().into()))
-                            .map_err(|_| CodexErr::InvalidRequest(format!("invalid {name} header")))
-                    })
-                    .collect::<Result<_>>()?,
-            );
-            info.env_http_headers = None;
-        }
-        if let Some(base_url) = base_url {
-            let mut url = url::Url::parse(base_url).map_err(|error| {
-                CodexErr::InvalidRequest(format!("invalid realtime URL: {error}"))
-            })?;
-            if url.scheme() == "wss" {
-                url.set_scheme("https")
-                    .map_err(|_| CodexErr::InvalidRequest("invalid realtime URL".into()))?;
-            }
-            info.base_url = Some(url.to_string());
-        }
-        if info
-            .base_url
-            .as_deref()
-            .is_none_or(codex_runtime_agent_instance::is_openai_api_url)
-        {
-            info.requires_openai_auth = true;
-        }
-        let provider = auth_context.model_provider(info.clone());
-        if let Some(call_setup) = call_setup
-            && call_setup.runtime_id.is_none()
-            && provider.runtime_auth().is_none()
-        {
-            // Call creation and its sideband share the captured credentials and account policy.
-            return Ok(CurrentClientSetup {
-                auth: call_setup.auth.clone(),
-                auth_owner: call_setup.auth_owner.clone(),
-                auth_revision: call_setup.auth_revision,
-                api_provider: provider.api_provider_for_auth(call_setup.auth.as_ref())?,
-                redirect_policy: call_setup.redirect_policy,
-                api_auth: Arc::clone(&call_setup.api_auth),
-                agent_identity_telemetry: call_setup.agent_identity_telemetry.clone(),
-                runtime_id: None,
-                http_client_factory,
-            });
-        }
-        let mut setup = codex_model_provider::resolve_request(
-            provider.as_ref(),
-            Some(ProviderAuthScope {
-                agent_identity_policy: self.agent_identity_policy,
-                session_source: self.state.session_source.clone(),
-                agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
-            }),
-            /*routing*/ None,
-            http_client_factory,
-        )
-        .await?;
-        if let (Some((runtime, mode)), Some(expected_auth)) = (
-            provider.runtime_auth(),
-            call_setup.and_then(|setup| setup.auth.as_ref()),
-        ) {
-            let credentials = provider.auth_manager();
-            let runtime = codex_model_provider::select_runtime_provider(
-                &info,
-                credentials.as_ref(),
-                runtime,
-            )?;
-            let selected = codex_model_provider::select_runtime_auth_for(
-                &runtime,
-                expected_auth,
-                &setup.api_provider.headers,
-            )
-            .await?;
-            setup.api_auth = provider
-                .compose_auth(codex_model_provider::ResolvedProviderAuth {
-                    credential: Some(selected.auth().clone()),
-                    auth: selected.clone().into_auth_provider(*mode),
-                    agent_identity_telemetry: setup.agent_identity_telemetry.clone(),
-                    runtime: Some(selected.clone()),
-                })
-                .await?
-                .auth;
-            setup.auth = Some(selected.auth().clone());
-            setup.auth_revision = Some(selected.change_state().generation);
-            setup.auth_owner = Some(selected.auth_owner().clone());
-            setup.runtime_id = Some(selected.runtime().id().to_string());
-            setup.http_client_factory = selected
-                .bind_http_client_factory(setup.http_client_factory)
-                .map_err(|error| codex_api::map_api_error(error.into()))?;
-        }
-        Ok(setup)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn create_realtime_call_with_headers(
-        &self,
-        sdp: String,
-        session_config: ApiRealtimeSessionConfig,
-        mut extra_headers: ApiHeaderMap,
-        api_provider_override: Option<ApiProvider>,
-        sideband_base_url: &str,
-        auth_context: &codex_model_provider::ProviderAuthContext,
-        http_client_factory: HttpClientFactory,
-    ) -> Result<RealtimeWebrtcCallStart> {
-        let mut setup = self
-            .realtime_client_setup(
-                auth_context,
-                http_client_factory,
-                api_provider_override
-                    .as_ref()
-                    .map(|provider| provider.base_url.as_str()),
-                api_provider_override
-                    .as_ref()
-                    .map(|provider| &provider.headers),
-                /*call_setup*/ None,
-            )
-            .await?;
-        if let Some(header_value) = self.generate_attestation_header_for().await {
-            extra_headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
-        }
-        if let Some(api_provider) = api_provider_override {
-            setup.api_provider = api_provider;
-        }
-        let sideband = self
-            .realtime_client_setup(
-                auth_context,
-                setup.http_client_factory.clone(),
-                Some(sideband_base_url),
-                Some(&setup.api_provider.headers),
-                Some(&setup),
-            )
-            .await?;
-        let transport = setup.http_transport(REALTIME_CALLS_ENDPOINT)?;
-        let response = ApiRealtimeCallClient::new(transport, setup.api_provider, setup.api_auth)
-            .create_with_session_and_headers(sdp, session_config, extra_headers.clone())
-            .await
-            .map_err(|error| self.state.provider.map_api_error(error))?;
-        let mut sideband_headers = sideband.api_provider.headers;
-        sideband_headers.extend(extra_headers);
-        Ok(RealtimeWebrtcCallStart {
-            sdp: response.sdp,
-            call_id: response.call_id,
-            sideband_headers,
-            sideband_auth: sideband.api_auth,
-            sideband_http_client_factory: sideband.http_client_factory,
-        })
-    }
-
-    pub(crate) async fn realtime_sideband_auth(
-        &self,
-        mut extra_headers: ApiHeaderMap,
-        base_url: &str,
-        auth_context: &codex_model_provider::ProviderAuthContext,
-        http_client_factory: HttpClientFactory,
-    ) -> Result<(SharedAuthProvider, ApiHeaderMap, HttpClientFactory)> {
-        let setup = self
-            .realtime_client_setup(
-                auth_context,
-                http_client_factory,
-                Some(base_url),
-                /*headers*/ None,
-                /*call_setup*/ None,
-            )
-            .await?;
-        if let Some(header_value) = self.generate_attestation_header_for().await {
-            extra_headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
-        }
-        let mut headers = setup.api_provider.headers;
-        headers.extend(extra_headers);
-        Ok((setup.api_auth, headers, setup.http_client_factory))
     }
 
     /// Builds memory summaries for each provided normalized raw memory.

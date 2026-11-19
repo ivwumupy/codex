@@ -589,7 +589,6 @@ async fn decisions_reuses_saved_runtime_and_isolates_an_identical_explicit_key()
     run_harness_through_proxy(
         &server,
         "async_scorer::decisions::tests::decisions_reuses_saved_runtime_and_isolates_an_identical_explicit_key",
-        /*realtime_target*/ None,
     )
     .await?;
     let requests = server
@@ -776,7 +775,6 @@ async fn decisions_preserves_platform_wif_credentials() -> anyhow::Result<()> {
     run_harness_through_proxy_with_env(
         &server,
         "async_scorer::decisions::tests::decisions_preserves_platform_wif_credentials",
-        /*realtime_target*/ None,
         &[
             ("OPENAI_FEDERATION_RULE_ID", Some("platform-rule")),
             (

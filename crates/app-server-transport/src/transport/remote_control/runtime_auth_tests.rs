@@ -235,7 +235,7 @@ async fn actor_requests_share_runtime_and_pairing_keeps_its_server_token() -> an
                 "server_id": "server", "environment_id": "env", "pairing_code": "pairing", "manual_pairing_code": null, "expires_at": "2999-01-01T00:00:00Z"
             }))).expect(/*r*/ 2).mount(&server).await;
     }
-    run_harness_through_proxy(&server, "transport::remote_control::runtime_auth_tests::actor_requests_share_runtime_and_pairing_keeps_its_server_token", /*realtime_target*/ None).await?;
+    run_harness_through_proxy(&server, "transport::remote_control::runtime_auth_tests::actor_requests_share_runtime_and_pairing_keeps_its_server_token").await?;
     let requests = server.received_requests().await.unwrap();
     let mut proofs = HashSet::new();
     let mut dual = 0;

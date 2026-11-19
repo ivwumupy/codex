@@ -118,7 +118,6 @@ async fn cloud_archive_preserves_attached_child_and_other_tasks() -> Result<()> 
     app.chat_widget
         .apply_external_edit("Keep child draft".into());
     let draft = app.chat_widget.capture_thread_input_state();
-    crate::chatwidget::activate_voice_for_thread(&mut app.chat_widget, child);
 
     app.confirm_agents_overview_action(parent, AgentsOverviewAction::Archive);
     insta::assert_snapshot!(render_bottom_popup(&app.chat_widget, /*width*/ 80), @"
@@ -174,7 +173,6 @@ async fn cloud_archive_preserves_attached_child_and_other_tasks() -> Result<()> 
         (Some(child), Some(child), Some(child))
     );
     assert_eq!(app.chat_widget.capture_thread_input_state(), draft);
-    assert_eq!(app.voice_owner_thread_id(), Some(child));
     if let Some(refresh) = app.agents_overview.refresh_task.take() {
         refresh.abort();
     }
@@ -1159,7 +1157,6 @@ async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashb
             // Removal must not depend on the overview having the primary or its ancestors cached.
             app.agents_overview.threads.remove(&primary);
         }
-        crate::chatwidget::activate_voice_for_thread(&mut app.chat_widget, primary);
         // Canceling pagination must allow automatic refill to finish after removing the last task.
         app.agents_overview.initialized = true;
         app.agents_overview.view_state.lock().unwrap().loading = true;
@@ -1182,7 +1179,6 @@ async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashb
             finish_overview_refresh(&mut app, &app_server, &mut rx).await;
         }
         assert!(!app.agents_overview.view_state.lock().unwrap().loading);
-        assert_eq!(app.voice_owner_thread_id(), None);
         assert_eq!(
             (
                 app.primary_thread_id,

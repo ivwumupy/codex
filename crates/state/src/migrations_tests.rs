@@ -579,7 +579,7 @@ INSERT INTO thread_items (thread_id, turn_id, item_id, rollout_ordinal, created_
 }
 
 #[tokio::test]
-async fn realtime_items_preserve_older_thread_history_writers() {
+async fn thread_history_migrations_preserve_ordinary_items_and_checkpoints() {
     let sqlite_home = crate::runtime::test_support::unique_temp_dir();
     tokio::fs::create_dir_all(&sqlite_home)
         .await
@@ -626,7 +626,7 @@ async fn realtime_items_preserve_older_thread_history_writers() {
     THREAD_HISTORY_MIGRATOR
         .run(&pool)
         .await
-        .expect("realtime item migration should apply");
+        .expect("thread history migrations should apply");
     let turn_id_not_null = sqlx::query_scalar::<_, i64>(
         "SELECT \"notnull\" FROM pragma_table_info('thread_items') WHERE name = 'turn_id'",
     )
@@ -635,12 +635,6 @@ async fn realtime_items_preserve_older_thread_history_writers() {
     .expect("existing thread item schema should remain inspectable");
     assert_eq!(turn_id_not_null, 1);
 
-    sqlx::query(
-        "INSERT INTO thread_realtime_items (thread_id, item_id, rollout_ordinal, created_at_ms, item_type, item_json) VALUES ('thread-1', 'realtime-item', 2, 200, 'realtime_session_started', '{}')",
-    )
-    .execute(&pool)
-    .await
-    .expect("thread-scoped realtime item should be inserted separately");
     let checkpoint = sqlx::query_as::<_, (i64, i64)>(
         "SELECT next_rollout_byte_offset, next_rollout_ordinal FROM thread_history_projection_state WHERE thread_id = 'thread-1'",
     )
@@ -652,7 +646,7 @@ async fn realtime_items_preserve_older_thread_history_writers() {
     let older_pool = sqlite
         .open_thread_history_db(&older_migrator, /*telemetry_override*/ None)
         .await
-        .expect("older binaries should tolerate the additive realtime migration");
+        .expect("older binaries should tolerate the history migrations");
     sqlx::query(
         "INSERT INTO thread_items (thread_id, turn_id, item_id, rollout_ordinal, created_at_ms, item_json) VALUES ('thread-1', 'turn-1', 'older-writer-item', 3, 300, '{}')",
     )
@@ -676,7 +670,7 @@ async fn realtime_items_preserve_older_thread_history_writers() {
     .bind("thread-1")
     .fetch_all(&older_pool)
     .await
-    .expect("older binaries should never observe turnless realtime items");
+    .expect("read ordinary items after migration");
     assert_eq!(
         ordinary_items,
         vec![
@@ -696,14 +690,13 @@ async fn realtime_items_preserve_older_thread_history_writers() {
         .execute(&older_pool)
         .await
         .expect("older binaries should delete their known projection checkpoint");
-    let remaining_realtime_items = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM thread_realtime_items WHERE thread_id = ?",
+    let voice_table_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'thread_realtime_items')",
     )
-    .bind("thread-1")
     .fetch_one(&pool)
     .await
-    .expect("read realtime items after an older writer deleted the thread");
-    assert_eq!(remaining_realtime_items, 0);
+    .expect("inspect migrated schema");
+    assert!(!voice_table_exists);
 
     older_pool.close().await;
     pool.close().await;

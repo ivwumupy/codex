@@ -63,7 +63,6 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
 use codex_protocol::protocol::EnvironmentConfigState;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RealtimeConversationVersion as RealtimeWsVersion;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionConfiguredEvent;
 use codex_protocol::protocol::SessionSource;
@@ -708,8 +707,6 @@ impl TestCodexBuilder {
         };
         self.config_mutators.push(Box::new(move |config| {
             config.model_provider.supports_websockets = true;
-            config.experimental_realtime_ws_model = Some("realtime-test-model".to_string());
-            config.realtime.version = RealtimeWsVersion::V1;
         }));
         let test_env = TestEnv::local().await?;
         Box::pin(self.build_with_home_and_base_url(

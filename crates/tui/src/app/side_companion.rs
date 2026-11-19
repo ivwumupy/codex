@@ -90,9 +90,7 @@ impl SideCompanion {
                     Duration::ZERO,
                 ));
             }
-            ServerNotification::AgentMessageDelta(delta)
-                if !delta.delta.is_empty() && !store.is_realtime_delegated_turn(&delta.turn_id) =>
-            {
+            ServerNotification::AgentMessageDelta(delta) if !delta.delta.is_empty() => {
                 if self
                     .answer
                     .as_ref()
@@ -111,11 +109,6 @@ impl SideCompanion {
             }
             ServerNotification::ItemCompleted(event) => {
                 let item = &event.item.payload;
-                if store.is_realtime_delegated_turn(&event.turn_id)
-                    && crate::chatwidget::is_private_realtime_agent_item(item)
-                {
-                    return false;
-                }
                 return self.finish_item(&event.turn_id, item);
             }
             ServerNotification::TurnCompleted(event)
@@ -130,10 +123,7 @@ impl SideCompanion {
                     }
                 }
                 if turn.status == TurnStatus::Completed
-                    && let Some((item, _)) = crate::chatwidget::final_agent_message(
-                        turn,
-                        store.is_realtime_delegated_turn(&turn.id),
-                    )
+                    && let Some((item, _)) = crate::chatwidget::final_agent_message(turn)
                     && crate::chatwidget::needs_agent_message(
                         self.display.last_completed_agent_message.as_ref(),
                         &turn.id,

@@ -1,8 +1,6 @@
 //! Shared composer geometry keeps rendering, measurement, and the cursor aligned.
 
 use super::*;
-use crate::bottom_pane::voice_strip::VoiceStrip;
-use crate::bottom_pane::voice_strip::VoiceStripState;
 use crate::render::renderable::Renderable;
 use crate::tui::FrameRequester;
 use ratatui::buffer::Buffer;
@@ -18,32 +16,7 @@ struct ComposerRows {
     hints: u16,
 }
 
-impl ChatComposer {
-    pub(crate) fn set_voice_strip(
-        &mut self,
-        state: Option<VoiceStripState>,
-        frame_requester: FrameRequester,
-    ) {
-        match (self.voice_strip.as_mut(), state) {
-            (Some(strip), Some(state)) => strip.update(state),
-            (_, Some(state)) => self.voice_strip = Some(VoiceStrip::new(state, frame_requester)),
-            (_, None) => self.voice_strip = None,
-        }
-    }
-
-    pub(super) fn render_voice_strip(&self, composer_rect: Rect, buf: &mut Buffer) {
-        if let Some(strip) = &self.voice_strip
-            && composer_rect.height >= strip.desired_height(composer_rect.width) + 4
-        {
-            let voice_rect = Rect {
-                y: composer_rect.y.saturating_add(/*rhs*/ 1),
-                height: strip.desired_height(composer_rect.width),
-                ..composer_rect
-            };
-            strip.render(voice_rect, buf);
-        }
-    }
-}
+impl ChatComposer {}
 
 impl ChatComposer {
     pub(super) fn layout_with_options(
@@ -71,15 +44,11 @@ impl ChatComposer {
             height: area.height - status_height,
             ..area
         };
-        let voice_rows = self
-            .voice_strip
-            .as_ref()
-            .map_or(0, |strip| strip.desired_height(area.width) + 1);
         let shortcuts_above = self.shortcuts_above_composer(options);
         let (composer_rect, popup_rect, mut footer_rect) = if shortcuts_above {
             let [shortcuts, composer, footer] = Layout::vertical([
                 Constraint::Max(above_input),
-                Constraint::Min(3 + voice_rows),
+                Constraint::Min(3),
                 Constraint::Length(footer_hint_height),
             ])
             .areas(area);
@@ -87,7 +56,7 @@ impl ChatComposer {
         } else if self.popups.active.is_above_composer() {
             // Preserve the draft first, then its footer, and use remaining space for suggestions.
             let [mut composer, mut popup, footer] = Layout::vertical([
-                Constraint::Min(3 + voice_rows),
+                Constraint::Min(3),
                 Constraint::Max(above_input),
                 Constraint::Length(footer_hint_height),
             ])
@@ -96,18 +65,15 @@ impl ChatComposer {
             composer.y = popup.bottom();
             (composer, popup, footer)
         } else {
-            let [composer, popup] = Layout::vertical([
-                Constraint::Min(3 + voice_rows),
-                Constraint::Max(footer_hint_height),
-            ])
-            .areas(area);
+            let [composer, popup] =
+                Layout::vertical([Constraint::Min(3), Constraint::Max(footer_hint_height)])
+                    .areas(area);
             (composer, popup, popup)
         };
         footer_rect.y = footer_rect.y.saturating_add(status.height);
         // Keep the draft visible when clipped.
-        let voice_rows = voice_rows * u16::from(composer_rect.height >= voice_rows + 3);
         let mut textarea_rect = composer_rect.inset(Insets::tlbr(
-            /*top*/ 1 + voice_rows,
+            /*top*/ 1,
             LIVE_PREFIX_COLS,
             /*bottom*/ 1,
             /*right*/ 1u16.saturating_add(options.textarea_right_reserve),
@@ -214,9 +180,6 @@ impl ChatComposer {
             remote_images_height,
             remote_images_separator,
             2,
-            self.voice_strip.as_ref().map_or(/*default*/ 0, |strip| {
-                strip.desired_height(width).saturating_add(1)
-            }),
         ]
         .into_iter()
         .fold(0, u16::saturating_add);

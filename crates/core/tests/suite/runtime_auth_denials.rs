@@ -120,7 +120,7 @@ async fn turns_stop_on_runtime_denial_but_recover_ordinary_401() -> Result<()> {
         }
     }
 
-    run_harness_through_proxy(&server, TEST_NAME, /*realtime_target*/ None).await?;
+    run_harness_through_proxy(&server, TEST_NAME).await?;
     let mut proof_ids = BTreeSet::new();
     let requests = server.received_requests().await.unwrap();
     let attempts: Vec<_> = requests

@@ -409,14 +409,7 @@ async fn enqueue_queue_only_agent_mail(codex: &CodexThread, text: &str) {
 
 async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
     enqueue_queue_only_agent_mail(codex, text).await;
-    codex
-        .submit(Op::RealtimeConversationListVoices)
-        .await
-        .expect("submit list-voices barrier");
-    wait_for_event(codex, |event| {
-        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-    })
-    .await;
+    core_test_support::wait_for_submission_queue(&codex).await;
 }
 
 async fn wait_for_reasoning_item_started(codex: &CodexThread) {
@@ -1147,7 +1140,6 @@ async fn any_new_input_interrupts_sleep(input: WaitInput) {
     wait_for_sleep_item_completed(&codex, FIRST_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_sleep_item_started(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
 
-    // The list-voices barrier can consume the sleep completion that we need to observe next.
     enqueue_queue_only_agent_mail(&codex, "new mailbox input").await;
     wait_for_sleep_item_completed(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_turn_complete(&codex).await;
@@ -2741,11 +2733,7 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
                     start_options: Default::default(),
                 })
                 .await?;
-            codex.submit(Op::RealtimeConversationListVoices).await?;
-            wait_for_event(codex, |event| {
-                matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-            })
-            .await;
+            core_test_support::wait_for_submission_queue(&codex).await;
         }
     }
     release_failure.send(()).expect("release compact failure");

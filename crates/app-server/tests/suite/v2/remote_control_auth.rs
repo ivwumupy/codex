@@ -593,7 +593,6 @@ async fn public_client_management_uses_runtime_auth() -> Result<()> {
     run_harness_through_proxy(
         &server,
         "suite::v2::remote_control::auth_tests::public_client_management_uses_runtime_auth",
-        /*realtime_target*/ None,
     )
     .await?;
     let requests = server.received_requests().await.unwrap();

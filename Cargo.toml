@@ -13,7 +13,6 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 # Internal
-codex-realtime-webrtc = { path = "crates/realtime-webrtc" }
 app_test_support = { path = "crates/app-server-test-support" }
 codex-agent-graph-store = { path = "crates/agent-graph-store" }
 codex-agent-identity = { path = "crates/agent-identity" }

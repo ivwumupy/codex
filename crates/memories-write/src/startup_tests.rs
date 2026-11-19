@@ -1777,7 +1777,6 @@ async fn memories_startup_uses_thread_runtime_and_keeps_custom_destinations_inde
     run_harness_through_proxy(
         &server,
         "startup_tests::memories_startup_uses_thread_runtime_and_keeps_custom_destinations_independent",
-        /*realtime_target*/ None,
     )
     .await?;
     let requests = server.received_requests().await.unwrap();

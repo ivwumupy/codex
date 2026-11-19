@@ -77,9 +77,6 @@ pub(crate) fn side_chat_prompt_preview(content: &[UserInput]) -> Option<&str> {
 }
 
 fn side_chat_prompt_parts(content: &[UserInput]) -> Option<impl Iterator<Item = &str>> {
-    if crate::chatwidget::realtime_delegation_input(content).is_some() {
-        return None;
-    }
     let mut text = content.iter().filter_map(|input| {
         let UserInput::Text { text, .. } = input else {
             return None;
@@ -341,9 +338,6 @@ impl AppServerSession {
                     ThreadItemPayload::UserMessage { content, .. } => match order {
                         SortDirection::Asc => side_chat_prompt_preview(content).map(str::to_owned),
                         SortDirection::Desc => {
-                            if crate::chatwidget::realtime_delegation_input(content).is_some() {
-                                return None;
-                            }
                             let mut prompt =
                                 ChatWidget::user_message_display_from_inputs(content).message;
                             if prompt.trim().is_empty() {

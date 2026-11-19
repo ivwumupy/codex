@@ -508,11 +508,7 @@ async fn spawned_child_has_independent_timing_and_parent_wait_is_tools(
             })
             .await?;
         // The response fences the submission queue before the tool can finish.
-        child.submit(Op::RealtimeConversationListVoices).await?;
-        wait_for_event(&child, |event| {
-            matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
-        })
-        .await;
+        core_test_support::wait_for_submission_queue(&child).await;
     }
     wait_for_event(&test.codex, |event| matches!(event,
         EventMsg::ItemStarted(event) if matches!(&event.item, codex_protocol::items::TurnItem::CollabAgentToolCall(item) if item.id == "wait-worker")

@@ -7,7 +7,6 @@ use codex_app_server_protocol::SortDirection;
 use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::ThreadItemsListParams;
 use codex_app_server_protocol::ThreadItemsListResponse;
-use codex_app_server_protocol::ThreadRealtimeItemContent;
 use codex_app_server_protocol::ThreadTimelineEntry;
 use codex_app_server_protocol::ThreadTimelineListParams;
 use codex_app_server_protocol::ThreadTimelineListResponse;
@@ -22,9 +21,6 @@ use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadMemoryMode;
 use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnStartedEvent;
-use codex_protocol::realtime::RealtimeItem;
-use codex_protocol::realtime::RealtimeItemContent;
-use codex_protocol::realtime::RealtimeTranscriptRole;
 use codex_protocol::user_input::UserInput;
 use codex_rollout::RolloutItem;
 use codex_thread_store::AppendThreadItemsParams;
@@ -39,10 +35,12 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 #[tokio::test]
-async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> Result<()> {
+async fn timeline_pages_items_and_turn_boundaries() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&server.uri()).write(codex_home.path())?;
+    MockResponsesConfig::new(&server.uri())
+        .with_sandbox_mode("danger-full-access")
+        .write(codex_home.path())?;
 
     let thread_id = ThreadId::default();
     let sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
@@ -92,11 +90,6 @@ async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> 
         .append_items(AppendThreadItemsParams {
             thread_id,
             items: vec![
-                RolloutItem::RealtimeItem(RealtimeItem {
-                    id: "voice-1:started".to_string(),
-                    realtime_session_id: "voice-1".to_string(),
-                    content: RealtimeItemContent::RealtimeSessionStarted,
-                }),
                 RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
                     turn_attribution: None,
                     turn_id: "turn-1".to_string(),
@@ -121,14 +114,6 @@ async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> 
                     started_at_ms: Some(0),
                     completed_at_ms: 1,
                 })),
-                RolloutItem::RealtimeItem(RealtimeItem {
-                    id: "voice-1:transcript-1".to_string(),
-                    realtime_session_id: "voice-1".to_string(),
-                    content: RealtimeItemContent::TranscriptSegment {
-                        role: RealtimeTranscriptRole::Assistant,
-                        text: "Checking staging".to_string(),
-                    },
-                }),
                 RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
                     root_turn_id: None,
                     turn_id: "turn-1".to_string(),
@@ -155,11 +140,11 @@ async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> 
             params: ThreadTimelineListParams {
                 thread_id: thread_id.to_string(),
                 cursor: None,
-                limit: Some(3),
+                limit: Some(2),
             },
         })
         .await?;
-    assert_eq!(page.data.len(), 3);
+    assert_eq!(page.data.len(), 2);
     assert!(matches!(
         &page.data[0],
         ThreadTimelineEntry::Item { turn_id, item, .. }
@@ -170,19 +155,6 @@ async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> 
     ));
     assert!(matches!(
         &page.data[1],
-        ThreadTimelineEntry::Realtime { item, .. }
-            if matches!(
-                &item.content,
-                ThreadRealtimeItemContent::TranscriptSegment { text, .. }
-                    if text == "Checking staging"
-            )
-    ));
-    assert_eq!(
-        page.active_realtime_session_at_page_start.as_deref(),
-        Some("voice-1")
-    );
-    assert!(matches!(
-        &page.data[2],
         ThreadTimelineEntry::TurnCompleted { turn_id, duration_ms: Some(2000), .. }
             if turn_id == "turn-1"
     ));
@@ -197,21 +169,12 @@ async fn timeline_pages_mix_items_and_resolve_the_opening_realtime_session() -> 
             },
         })
         .await?;
-    assert_eq!(older.data.len(), 2);
+    assert_eq!(older.data.len(), 1);
     assert!(matches!(
         &older.data[0],
-        ThreadTimelineEntry::Realtime { item, .. }
-            if matches!(
-                item.content,
-                ThreadRealtimeItemContent::RealtimeSessionStarted
-            )
-    ));
-    assert!(matches!(
-        &older.data[1],
         ThreadTimelineEntry::TurnStarted { turn_id, started_at: Some(10), .. }
             if turn_id == "turn-1"
     ));
-    assert_eq!(older.active_realtime_session_at_page_start, None);
     assert_eq!(older.next_cursor, None);
 
     let ordinary: ThreadItemsListResponse = app_server

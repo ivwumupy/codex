@@ -23,7 +23,6 @@ impl ChatWidget {
         else {
             return;
         };
-        self.remember_typed_reasoning_item(turn_id, &id);
         self.on_reasoning_item_started(id);
         self.replace_reasoning_parts(summary, content);
         if let Some((summary, content)) = parts {
@@ -65,9 +64,7 @@ impl ChatWidget {
             }
             _ => return true,
         };
-        if resumed_turn_id != *turn_id
-            || self.is_realtime_delegated_reasoning_item(turn_id, item_id)
-        {
+        if resumed_turn_id != *turn_id {
             return false;
         }
         self.restore_active_reasoning_item(
@@ -123,7 +120,6 @@ impl ChatWidget {
             }))
             .collect::<Vec<_>>();
         for (turn, hidden_nested_review_turn) in turns.into_iter().zip(hidden_nested_review_turns) {
-            self.restore_realtime_transcripts_before_turn(&turn.id);
             // Defer terminal transcript rows until their page loads. Active
             // turns must restore their lifecycle even before any items are available.
             if matches!(turn.status, TurnStatus::Completed | TurnStatus::Interrupted)
@@ -143,14 +139,7 @@ impl ChatWidget {
                 duration_ms,
                 ..
             } = turn;
-            let delegated = items.iter().any(|item| {
-                matches!(&item.payload, ThreadItemPayload::UserMessage { content, .. }
-                    if realtime::realtime_delegation_input(content).is_some())
-            });
             if matches!(status, TurnStatus::InProgress) {
-                if delegated {
-                    self.remember_realtime_delegated_reasoning_turn(&turn_id);
-                }
                 self.warning_display_state.startup_complete = true;
                 self.turn_lifecycle.last_turn_id = Some(turn_id.clone());
                 self.last_non_retry_error = None;
@@ -163,19 +152,8 @@ impl ChatWidget {
                     ThreadItemPayload::Reasoning { id, .. } => Some(id.clone()),
                     _ => None,
                 });
-            let mut replaying_delegation = false;
             for entry in items {
                 let item = entry.payload;
-                if matches!(&item, ThreadItemPayload::UserMessage { content, .. }
-                    if realtime::realtime_delegation_input(content).is_some())
-                {
-                    replaying_delegation = true;
-                }
-                // Voice can steer a typed turn already in progress. Its earlier
-                // commentary and reasoning still belong to the typed request.
-                if replaying_delegation && realtime::is_private_realtime_agent_item(&item) {
-                    continue;
-                }
                 if hidden_nested_review_turn
                     && matches!(item, ThreadItemPayload::UserMessage { .. })
                 {
@@ -319,21 +297,6 @@ impl ChatWidget {
                 questions,
                 ..
             } => {
-                if self.complete_realtime_delegated_agent_item(
-                    &turn_id,
-                    &ThreadItemPayload::AgentMessage {
-                        moderation: None,
-                        id: id.clone(),
-                        text: text.clone(),
-                        phase: phase.clone(),
-                        memory_citation: memory_citation.clone(),
-                        delivery,
-                        questions: questions.clone(),
-                    },
-                    from_replay,
-                ) {
-                    return;
-                }
                 self.on_agent_message_item_completed(
                     AgentMessageItem {
                         moderation: None,

@@ -1216,52 +1216,6 @@ async fn provider_continuation_starts_current_provider_and_drafts_saved_referenc
     Ok(())
 }
 
-#[tokio::test]
-async fn backend_cycling_waits_for_foreground_and_parked_voice_calls() -> Result<()> {
-    for parked in [false, true] {
-        let (mut app, _events, _ops) = make_test_app_with_channels().await;
-        let source = crate::start_embedded_app_server_for_picker(&app.config).await?;
-        let destination = crate::start_embedded_app_server_for_picker(&app.config).await?;
-        let source_id = source.backend_id();
-        let destination_id = destination.backend_id();
-        let thread_id = ThreadId::new();
-        app.enqueue_primary_thread_session(
-            test_thread_session(thread_id, app.config.cwd.to_path_buf()),
-            Vec::new(),
-        )
-        .await?;
-        assert!(app.can_cycle_conversation_backend());
-        crate::chatwidget::activate_voice_for_thread(&mut app.chat_widget, thread_id);
-        if parked {
-            let (visible, _, _, _) =
-                crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
-            app.background_voice = Some(Box::new(std::mem::replace(&mut app.chat_widget, visible)));
-        }
-        app.chat_widget
-            .restore_user_message_to_composer("keep draft".into());
-        assert!(!app.can_cycle_conversation_backend());
-        let mut backends = BackendSessions::from_initial(source, vec![destination]);
-        let mut tui = crate::tui::test_support::make_test_tui()?;
-        let error = app
-            .start_new_session_on_other_backend(
-                &mut tui,
-                &mut backends,
-                destination_id,
-                crate::app::backend_selection::NewBackendSession::CarryDraft,
-            )
-            .await
-            .unwrap_err();
-        insta::allow_duplicates! {
-            insta::assert_snapshot!(error, @"End the voice call before switching.");
-        }
-        assert_eq!(backends.displayed_owner(), source_id);
-        assert_eq!(app.voice_owner_thread_id(), Some(thread_id));
-        assert_eq!(app.chat_widget.composer_text_with_pending(), "keep draft");
-        backends.shutdown().await?;
-    }
-    Ok(())
-}
-
 #[tokio::test(start_paused = true)]
 async fn cloud_switch_wait_keeps_draft_editable_without_submitting_to_local() -> Result<()> {
     use crate::app::cloud_switch_wait::ClipboardHandoff;

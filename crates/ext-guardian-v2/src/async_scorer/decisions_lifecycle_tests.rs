@@ -422,7 +422,6 @@ async fn decisions_startup_uses_thread_runtime_and_staging_destination() -> anyh
     run_harness_through_proxy(
         &server,
         "async_scorer::extension::tests::decisions_lifecycle_tests::decisions_startup_uses_thread_runtime_and_staging_destination",
-        /*realtime_target*/ None,
     )
     .await?;
     let requests = server.received_requests().await.unwrap();

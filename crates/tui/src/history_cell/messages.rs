@@ -26,7 +26,6 @@ pub(crate) struct UserHistoryCell {
 pub(crate) enum UserMessagePresentation {
     #[default]
     Typed,
-    Spoken,
     /// Render each submitted answer as Markdown beneath its question caption.
     AsyncReplies {
         /// Keep the decoded pairs so the two-row limit applies only to question captions.
@@ -195,10 +194,6 @@ impl UserHistoryCell {
         self
     }
 
-    pub(crate) fn is_spoken(&self) -> bool {
-        matches!(self.presentation, UserMessagePresentation::Spoken)
-    }
-
     pub(crate) fn uses_markdown(&self) -> bool {
         // Inline elements use byte ranges in the literal prompt.
         matches!(self.presentation, UserMessagePresentation::Typed) && self.text_elements.is_empty()
@@ -234,7 +229,7 @@ impl HistoryCell for UserHistoryCell {
 
     fn display_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         let lines = self.transcript_hyperlink_lines(width);
-        if self.is_spoken() || !self.text_elements.is_empty() {
+        if !self.text_elements.is_empty() {
             // Native history applies line styles over spans. Keep the prompt fill on the line
             // while resolving its foreground onto the text, marker, and inline elements.
             lines
@@ -248,12 +243,7 @@ impl HistoryCell for UserHistoryCell {
 
     fn transcript_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         let sanitized_message = sanitize_user_text((&self.message).into());
-        // Speech transcripts can begin with whitespace; the marker already supplies its separator.
-        let message = if self.is_spoken() {
-            sanitized_message.trim_start()
-        } else {
-            sanitized_message.as_ref()
-        };
+        let message = sanitized_message.as_ref();
         let text_elements = if message == self.message {
             self.text_elements.as_slice()
         } else {
@@ -282,11 +272,7 @@ impl HistoryCell for UserHistoryCell {
                     false,
                 )
             } else {
-                let marker = if self.is_spoken() {
-                    "› ".red().bold()
-                } else {
-                    "› ".bold().dim()
-                };
+                let marker = "› ".bold().dim();
                 let markdown = if self.uses_markdown() {
                     crate::markdown::render_markdown_for_viewport(message, wrap_width)
                 } else {
@@ -594,7 +580,6 @@ pub(crate) struct AgentMarkdownCell {
     cwd: PathBuf,
     inline_visualization_context: Option<crate::inline_visualization::InlineVisualizationContext>,
     rendered_lines: Option<MarkdownRenderCache>,
-    spoken_artifacts: bool,
     question_titles: Vec<std::ops::Range<usize>>,
 }
 
@@ -648,7 +633,6 @@ impl AgentMarkdownCell {
             cwd: cwd.to_path_buf(),
             inline_visualization_context,
             rendered_lines,
-            spoken_artifacts: false,
             question_titles: Vec::new(),
         }
     }
@@ -668,16 +652,6 @@ impl AgentMarkdownCell {
         self.question_titles =
             super::async_questions::title_ranges(&self.markdown_source, questions);
         self
-    }
-
-    pub(crate) fn new_spoken(markdown_source: String, cwd: &Path) -> Self {
-        let mut cell = Self::new_with_inline_visualizations(
-            markdown_source,
-            cwd,
-            /*inline_visualization_context*/ None,
-        );
-        cell.spoken_artifacts = true;
-        cell
     }
 }
 
@@ -731,10 +705,7 @@ impl AgentMarkdownCell {
                 )
             };
             let lines = if self.question_titles.is_empty() {
-                let mut lines = markdown(&self.markdown_source);
-                if self.spoken_artifacts {
-                    super::spoken_artifacts::annotate_spoken_artifacts(&mut lines, &self.cwd);
-                }
+                let lines = markdown(&self.markdown_source);
                 prefix_hyperlink_lines(lines, "• ".dim(), "  ".into())
             } else {
                 super::async_questions::render(
@@ -859,12 +830,6 @@ pub(crate) fn new_user_prompt(
         remote_image_urls,
         presentation: UserMessagePresentation::Typed,
     }
-}
-
-pub(crate) fn new_spoken_user_prompt(message: String) -> UserHistoryCell {
-    let mut cell = new_user_prompt(message, Vec::new(), Vec::new(), Vec::new());
-    cell.presentation = UserMessagePresentation::Spoken;
-    cell
 }
 
 /// Retain a completed reasoning block in the expanded transcript only.

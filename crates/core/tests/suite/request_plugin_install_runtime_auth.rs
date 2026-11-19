@@ -212,7 +212,6 @@ async fn resumed_plugin_install_uses_the_threads_account(mode: RuntimeAuthMode) 
     run_harness_through_proxy(
         &server,
         &format!("suite::request_plugin_install::runtime_auth_tests::resumed_plugin_install_uses_the_threads_account::{case}"),
-        /*realtime_target*/ None,
     ).await?;
     let requests = server
         .received_requests()

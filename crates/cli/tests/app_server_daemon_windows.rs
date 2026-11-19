@@ -6,8 +6,6 @@ use anyhow::ensure;
 use codex_utils_cargo_bin::copy_executable;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use sha2::Digest;
-use sha2::Sha256;
 use std::process::Command;
 
 #[test]
@@ -22,7 +20,7 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
     let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
     let entrypoint = format!("codex-{target}.exe");
     let codex = package.join(&entrypoint);
-    for directory in ["bin", "codex-path", "codex-resources/voice"] {
+    for directory in ["bin", "codex-path", "codex-resources"] {
         std::fs::create_dir_all(package.join(directory))?;
     }
     copy_executable(&codex_utils_cargo_bin::cargo_bin("codex")?, &codex)?;
@@ -40,14 +38,6 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
     });
     let manifest_bytes = serde_json::to_vec(&metadata)?;
     std::fs::write(package.join("codex-package.json"), &manifest_bytes)?;
-    let checksum = format!("{:x}", Sha256::digest(std::fs::read(&codex)?));
-    let voice_bytes = serde_json::to_vec(&serde_json::json!({
-        "sha256": { &entrypoint: checksum, "codex-resources/voice/runtime": "untouched" }
-    }))?;
-    std::fs::write(
-        package.join("codex-resources/voice/manifest.json"),
-        &voice_bytes,
-    )?;
 
     let current = home.join("packages/app-server-daemon/current");
     // Drop before temp so assertion failures also release the managed executable.
@@ -81,18 +71,6 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
         serde_json::from_slice(&std::fs::read(current.join("codex-package.json"))?)?;
     metadata["entrypoint"] = "bin/codex.exe".into();
     assert_eq!(selected_metadata, metadata);
-    let selected_voice: Value = serde_json::from_slice(&std::fs::read(
-        current.join("codex-resources/voice/manifest.json"),
-    )?)?;
-    assert_eq!(
-        selected_voice,
-        serde_json::json!({
-            "sha256": {
-                "bin/codex.exe": checksum,
-                "codex-resources/voice/runtime": "untouched"
-            }
-        })
-    );
     assert_eq!(
         std::fs::read(current.join("bin/codex-code-mode-host.exe"))?,
         b"runtime fixture"
@@ -111,10 +89,6 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
     assert_eq!(
         std::fs::read(package.join("codex-package.json"))?,
         manifest_bytes
-    );
-    assert_eq!(
-        std::fs::read(package.join("codex-resources/voice/manifest.json"))?,
-        voice_bytes
     );
     let stopped = daemon.0.output()?;
     ensure!(

@@ -346,8 +346,6 @@ pub(crate) struct NewTurnContextOptions {
 pub struct TurnContext {
     pub(crate) sub_id: String,
     pub(crate) trace_id: Option<String>,
-    /// Call state at turn creation; model requests use the `StepContext` snapshot.
-    pub(crate) realtime_active: bool,
     pub(crate) code_mode_available: bool,
     /// Turn-scoped configuration. Read step-specific settings such as service tier and
     /// approvals reviewer from the corresponding `StepContext` instead.
@@ -452,7 +450,6 @@ impl TurnContext {
         Self {
             sub_id,
             trace_id: current_span_trace_id(),
-            realtime_active: self.realtime_active,
             code_mode_available: self.code_mode_available,
             overridden_direct_only_tool_namespaces: None,
             configured_token_budget: config.token_budget.clone(),
@@ -891,7 +888,6 @@ impl TurnContext {
         Self {
             sub_id: self.sub_id.clone(),
             trace_id: self.trace_id.clone(),
-            realtime_active: self.realtime_active,
             code_mode_available: self.code_mode_available,
             config: Arc::new(config),
             overridden_direct_only_tool_namespaces: self
@@ -963,7 +959,6 @@ impl TurnContext {
             comp_hash: self.model_info().comp_hash.clone(),
             collaboration_mode: Some(self.collaboration_mode()),
             multi_agent_version: Some(self.multi_agent_version),
-            realtime_active: Some(self.realtime_active),
             cyber_access_program: self.cyber_access_program,
             effort: self.reasoning_effort().cloned(),
             summary: Some(ReasoningSummaryConfig::None),
@@ -1163,7 +1158,6 @@ impl Session {
         TurnContext {
             sub_id,
             trace_id: current_span_trace_id(),
-            realtime_active: false,
             code_mode_available: true,
             config: per_turn_config,
             overridden_direct_only_tool_namespaces: None,
@@ -1484,7 +1478,6 @@ impl Session {
                 })
                 .collect(),
         );
-        turn_context.realtime_active = self.conversation.running_state().await.is_some();
 
         turn_context.final_output_json_schema = options.final_output_json_schema;
         turn_context.prompt_cache_ttl = options.prompt_cache_ttl;
