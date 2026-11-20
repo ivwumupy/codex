@@ -186,7 +186,7 @@ async fn build_and_install_compaction(
         sess.record_rollout_budget_usage(&compaction_turn_context.sub_id, token_usage)
             .await?;
     }
-    let (compacted_history, retained_images) = build_v2_compacted_history(
+    let (compacted_history, _) = build_v2_compacted_history(
         prompt_input,
         prompt_input_metadata,
         compaction_output,

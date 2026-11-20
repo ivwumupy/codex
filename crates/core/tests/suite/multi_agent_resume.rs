@@ -2,14 +2,12 @@ use anyhow::Result;
 use codex_core::TurnInputRequest;
 use codex_core::config::AgentRoleConfig;
 use codex_features::Feature;
-use codex_login::CodexAuth;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
-use codex_thread_store::ReadThreadParams;
 use core_test_support::responses::assert_parent_turn;
 use core_test_support::responses::assert_root_turn;
 use core_test_support::responses::ev_assistant_message;
@@ -29,10 +27,6 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio::time::sleep;
-use wiremock::Mock;
-use wiremock::ResponseTemplate;
-use wiremock::matchers::method;
-use wiremock::matchers::path;
 
 #[path = "multi_agent_restore_tests.rs"]
 mod restore_tests;

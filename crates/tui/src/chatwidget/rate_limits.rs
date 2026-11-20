@@ -1,16 +1,8 @@
 //! Rate-limit warning, prompt, and notice surfaces, plus quota-aware account refresh cadence.
 
 use super::*;
-pub(super) const WORKSPACE_NUDGE_VIEW_ID: &str = "workspace-usage-nudge";
-use crate::bottom_pane::ActionableBanner;
 use crate::model_catalog::LUNA_RESERVE_MODEL;
 use codex_app_server_protocol::CodexErrorInfo as AppServerCodexErrorInfo;
-use uuid::Uuid;
-
-pub(super) struct PendingCreditsNudge {
-    request_id: Uuid,
-    credit_type: AddCreditsNudgeCreditType,
-}
 
 pub(super) const NUDGE_MODEL_SLUG: &str = crate::model_catalog::LUNA_MODEL;
 pub(super) const RATE_LIMIT_SWITCH_PROMPT_THRESHOLD: i32 = 90;
@@ -186,6 +178,7 @@ pub(super) fn is_app_server_cyber_policy_error(info: &AppServerCodexErrorInfo) -
 
 #[derive(Clone, Copy)]
 pub(super) enum RateLimitSnapshotSource {
+    #[cfg(test)]
     AccountUsage,
     RollingUpdate,
 }
@@ -195,35 +188,6 @@ fn has_usable_workspace_credits(credits: &CreditsSnapshot) -> bool {
 }
 
 impl ChatWidget {
-    /// Poll more often near exhaustion for every ChatGPT account, independently of experiments.
-    pub(crate) fn rate_limit_refresh_interval(&self) -> Option<std::time::Duration> {
-        if !self.should_prefetch_rate_limits() {
-            return None;
-        }
-        // Ignore unrelated model buckets; watch ordinary usage and the selected model's bucket.
-        let used_percent = self
-            .rate_limit_snapshots_by_limit_id
-            .iter()
-            .filter(|(limit_id, snapshot)| {
-                limit_id.as_str() == "codex" || snapshot.limit_name == self.current_model()
-            })
-            .flat_map(|(_, snapshot)| snapshot.primary.iter().chain(snapshot.secondary.iter()))
-            .map(|window| window.used_percent)
-            .filter(|percent| percent.is_finite())
-            .max_by(f64::total_cmp)
-            .unwrap_or_default();
-        let seconds = if used_percent >= 99.0 {
-            5
-        } else if used_percent >= 90.0 {
-            15
-        } else if used_percent >= 75.0 {
-            30
-        } else {
-            60
-        };
-        Some(std::time::Duration::from_secs(seconds))
-    }
-
     pub(crate) fn hold_rate_limit_recovery(&mut self) -> bool {
         std::mem::replace(&mut self.input_queue.rate_limit_recovery_pending, true)
     }
@@ -238,6 +202,7 @@ impl ChatWidget {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn on_rate_limit_snapshot(&mut self, snapshot: Option<RateLimitSnapshot>) {
         self.on_rate_limit_snapshot_from(snapshot, RateLimitSnapshotSource::AccountUsage);
     }
@@ -292,12 +257,12 @@ impl ChatWidget {
             self.plan_type = snapshot.plan_type.or(self.plan_type);
 
             if is_codex_limit
-                && (matches!(source, RateLimitSnapshotSource::AccountUsage)
+                && (!matches!(source, RateLimitSnapshotSource::RollingUpdate)
                     || snapshot.spend_control_reached.is_some())
             {
                 self.codex_spend_control_reached = snapshot.spend_control_reached;
             }
-            if (is_codex_limit && matches!(source, RateLimitSnapshotSource::AccountUsage))
+            if (is_codex_limit && !matches!(source, RateLimitSnapshotSource::RollingUpdate))
                 || snapshot.rate_limit_reached_type.is_some()
             {
                 self.codex_rate_limit_reached_type = snapshot.rate_limit_reached_type;
@@ -323,7 +288,7 @@ impl ChatWidget {
                 .chain(&snapshot.secondary)
                 .map(|window| window.used_percent)
                 .max();
-            let replenished = matches!(source, RateLimitSnapshotSource::AccountUsage)
+            let replenished = !matches!(source, RateLimitSnapshotSource::RollingUpdate)
                 && !self.usage_notice_state.applying_stale_read
                 && used_percent.is_some_and(|used| used < RATE_LIMIT_SWITCH_PROMPT_THRESHOLD);
             if is_codex_limit && (has_workspace_credits || replenished) {
@@ -386,7 +351,7 @@ impl ChatWidget {
 
             // /wham/usage identifies ordinary and additional model limits separately. Streamed
             // updates still drive warnings/recovery above, but must not overwrite status data.
-            if matches!(source, RateLimitSnapshotSource::AccountUsage) {
+            if !matches!(source, RateLimitSnapshotSource::RollingUpdate) {
                 let limit_label = snapshot
                     .limit_name
                     .clone()
@@ -594,111 +559,6 @@ impl ChatWidget {
             items,
             ..SelectionViewParams::picker()
         });
-    }
-
-    pub(super) fn open_workspace_owner_nudge_prompt(
-        &mut self,
-        credit_type: AddCreditsNudgeCreditType,
-    ) {
-        if self.add_credits_nudge_email_in_flight.is_some() {
-            return;
-        }
-
-        let (title, prompt) = match credit_type {
-            AddCreditsNudgeCreditType::Credits => (
-                "You've reached your workspace credit limit",
-                "Your workspace is out of credits. Ask your workspace owner to add more. Notify owner?",
-            ),
-            AddCreditsNudgeCreditType::UsageLimit => (
-                "Usage limit reached",
-                "Request a limit increase from your owner to continue using codex. Request increase?",
-            ),
-        };
-        let send_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-            tx.send(AppEvent::SendAddCreditsNudgeEmail { credit_type });
-        })];
-        let items = vec![
-            SelectionItem {
-                name: "Yes".to_string(),
-                display_shortcut: Some(key_hint::plain(KeyCode::Char('y')).into()),
-                actions: send_actions,
-                dismiss_on_select: true,
-                ..Default::default()
-            },
-            SelectionItem {
-                name: "No (default)".to_string(),
-                display_shortcut: Some(key_hint::plain(KeyCode::Char('n')).into()),
-                dismiss_on_select: true,
-                ..Default::default()
-            },
-        ];
-
-        self.bottom_pane.show_actionable_banner(ActionableBanner {
-            view_id: Some(WORKSPACE_NUDGE_VIEW_ID),
-            title: title.to_string(),
-            description: prompt.to_string(),
-            actions: items,
-            initial_selected_idx: Some(1),
-            ..Default::default()
-        });
-    }
-
-    pub(crate) fn start_add_credits_nudge_email_request(
-        &mut self,
-        credit_type: AddCreditsNudgeCreditType,
-    ) -> Option<Uuid> {
-        if self.add_credits_nudge_email_in_flight.is_some() {
-            return None;
-        }
-        let request_id = Uuid::new_v4();
-        self.add_credits_nudge_email_in_flight = Some(PendingCreditsNudge {
-            request_id,
-            credit_type,
-        });
-        Some(request_id)
-    }
-
-    pub(crate) fn finish_add_credits_nudge_email_request(
-        &mut self,
-        request_id: Uuid,
-        result: Result<AddCreditsNudgeEmailStatus, String>,
-    ) {
-        let Some(pending) = self
-            .add_credits_nudge_email_in_flight
-            .as_ref()
-            .filter(|pending| pending.request_id == request_id)
-        else {
-            return;
-        };
-        let credit_type = pending.credit_type;
-        self.add_credits_nudge_email_in_flight = None;
-        let message = match (credit_type, result) {
-            (AddCreditsNudgeCreditType::Credits, Ok(AddCreditsNudgeEmailStatus::Sent)) => {
-                "Workspace owner notified."
-            }
-            (
-                AddCreditsNudgeCreditType::Credits,
-                Ok(AddCreditsNudgeEmailStatus::CooldownActive),
-            ) => "Workspace owner was already notified recently.",
-            (AddCreditsNudgeCreditType::Credits, Err(_)) => {
-                "Could not notify your workspace owner. Please try again."
-            }
-            (AddCreditsNudgeCreditType::UsageLimit, Ok(AddCreditsNudgeEmailStatus::Sent)) => {
-                "Limit increase requested."
-            }
-            (
-                AddCreditsNudgeCreditType::UsageLimit,
-                Ok(AddCreditsNudgeEmailStatus::CooldownActive),
-            ) => "A limit increase was already requested recently.",
-            (AddCreditsNudgeCreditType::UsageLimit, Err(_)) => {
-                "Could not request a limit increase. Please try again."
-            }
-        };
-        self.add_to_history(history_cell::new_info_event(
-            message.to_string(),
-            /*hint*/ None,
-        ));
-        self.request_redraw();
     }
 
     pub(crate) fn set_rate_limit_switch_prompt_hidden(&mut self, hidden: bool) {

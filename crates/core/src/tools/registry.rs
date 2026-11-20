@@ -67,11 +67,6 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
         false
     }
 
-    /// Whether this built-in control tool needs a structured tool-call event.
-    fn is_builtin_control_tool(&self) -> bool {
-        false
-    }
-
     /// Returns a shared spec when both the spec and search metadata are immutable.
     fn immutable_spec(&self) -> Option<&Arc<ToolSpec>> {
         None

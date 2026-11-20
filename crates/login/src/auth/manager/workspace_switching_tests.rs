@@ -47,8 +47,6 @@ async fn session(server: &MockServer) -> anyhow::Result<(TempDir, AuthManager, A
         last_refresh: Some(Utc::now()),
         agent_identity: None,
         personal_access_token: None,
-        bedrock_api_key: None,
-        bedrock_access_keys: None,
     };
     create_auth_storage(
         home.path().to_path_buf(),
@@ -335,11 +333,10 @@ async fn workspace_switch_rejects_a_session_from_a_previous_login() -> anyhow::R
 async fn workspace_sso_only_commits_for_the_requesting_login_and_workspace() -> anyhow::Result<()> {
     let backend = MockServer::start().await;
     let (_home, manager, original) = session(&backend).await?;
-    let login = manager.auth_cached().unwrap().workspace_login(
-        "login-1",
-        "team".into(),
-        /*connection*/ None,
-    )?;
+    let login = manager
+        .auth_cached()
+        .unwrap()
+        .workspace_login("login-1", "team".into())?;
     let result = |workspace: &str, user: &str| -> anyhow::Result<AuthDotJson> {
         let mut updated = original.clone();
         let tokens = updated.tokens.as_mut().unwrap();

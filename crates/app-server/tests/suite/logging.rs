@@ -1,6 +1,5 @@
 use anyhow::Context;
 use anyhow::Result;
-use app_test_support::ChatGptIdTokenClaims;
 use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use app_test_support::app_server_json_shutdown_event;
@@ -8,17 +7,13 @@ use app_test_support::create_escalated_command_execution_sse_response;
 use app_test_support::create_exec_command_sse_response;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence;
-use app_test_support::encode_id_token;
 use app_test_support::write_models_cache;
 use codex_app_server_protocol::ApprovalsReviewer;
 use codex_app_server_protocol::AskForApproval;
-use codex_app_server_protocol::ClientInfo;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigValueWriteParams;
 use codex_app_server_protocol::ConfigWriteResponse;
-use codex_app_server_protocol::InitializeCapabilities;
 use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::MergeStrategy;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SandboxPolicy;
@@ -212,39 +207,14 @@ async fn credentials_stay_out_of_persisted_and_feedback_logs() -> Result<()> {
 
     let bearer = "synthetic-provider-bearer";
     let header = "synthetic-provider-header";
-    let attestation = "synthetic-attestation-token";
-    let account_id = "123e4567-e89b-42d3-a456-426614174011";
-    let initial_token = encode_id_token(
-        &ChatGptIdTokenClaims::new()
-            .email("initial@example.com")
-            .chatgpt_user_id("logging-user")
-            .chatgpt_account_id(account_id),
-    )?;
-    let refreshed_token = encode_id_token(
-        &ChatGptIdTokenClaims::new()
-            .email("refreshed@example.com")
-            .chatgpt_user_id("logging-user")
-            .chatgpt_account_id(account_id),
-    )?;
+    let api_key = "synthetic-openai-api-key";
     let server = MockServer::start().await;
     let success = responses::sse_response(create_final_assistant_message_sse_response("done")?);
-    let responses = responses::mount_response_sequence(
-        &server,
-        vec![success.clone(), ResponseTemplate::new(401), success],
-    )
-    .await;
-    Mock::given(method("GET"))
-        .and(path("/backend-api/wham/settings/user"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "commit_attribution_enabled": false,
-        })))
-        .mount(&server)
-        .await;
-
+    let responses =
+        responses::mount_response_sequence(&server, vec![success.clone(), success]).await;
     let codex_home = TempDir::new()?;
     let server_uri = server.uri();
     MockResponsesConfig::new(&server_uri)
-        .with_root_config(&format!("chatgpt_base_url = \"{server_uri}/backend-api\""))
         .with_provider_config("requires_openai_auth = true\nsupports_websockets = false")
         .with_extra_config(&format!(
             r#"
@@ -260,36 +230,10 @@ supports_websockets = false
     write_models_cache(codex_home.path()).await?;
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
-        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .with_env_overrides(&[("OPENAI_API_KEY", Some(api_key))])
         .build()
         .await?;
-    let initialized = app_server
-        .initialize_with_capabilities(
-            ClientInfo {
-                name: "codex_desktop".into(),
-                title: None,
-                version: "0.1.0".into(),
-            },
-            Some(InitializeCapabilities {
-                experimental_api: true,
-                request_attestation: true,
-                ..Default::default()
-            }),
-        )
-        .await?;
-    anyhow::ensure!(
-        matches!(initialized, JSONRPCMessage::Response(_)),
-        "initialization failed"
-    );
-    let login_id = app_server
-        .send_chatgpt_auth_tokens_login_request(
-            initial_token.clone(),
-            account_id.into(),
-            Some("pro".into()),
-        )
-        .await?;
-    let _: LoginAccountResponse = app_server.read_response(login_id).await?;
-
+    app_server.initialize().await?;
     let mut thread_ids = Vec::new();
     for provider in ["bearer_provider", "mock_provider"] {
         let config_id = app_server
@@ -322,23 +266,6 @@ supports_websockets = false
         timeout(Duration::from_secs(/*secs*/ 60), async {
             loop {
                 match app_server.read_next_message().await? {
-                    JSONRPCMessage::Request(request) => {
-                        let (request_id, result) = match ServerRequest::try_from(request)? {
-                            ServerRequest::AttestationGenerate { request_id, .. } => {
-                                (request_id, json!({ "token": attestation }))
-                            }
-                            ServerRequest::ChatgptAuthTokensRefresh { request_id, .. } => (
-                                request_id,
-                                json!({
-                                    "accessToken": refreshed_token,
-                                    "chatgptAccountId": account_id,
-                                    "chatgptPlanType": "pro",
-                                }),
-                            ),
-                            request => anyhow::bail!("unexpected request: {request:?}"),
-                        };
-                        app_server.send_response(request_id, result).await?;
-                    }
                     JSONRPCMessage::Notification(notification)
                         if notification.method == "turn/completed" =>
                     {
@@ -349,6 +276,9 @@ supports_websockets = false
                         break Ok::<_, anyhow::Error>(());
                     }
                     JSONRPCMessage::Error(error) => anyhow::bail!("unexpected error: {error:?}"),
+                    JSONRPCMessage::Request(request) => {
+                        anyhow::bail!("unexpected request: {request:?}")
+                    }
                     JSONRPCMessage::Response(_) | JSONRPCMessage::Notification(_) => {}
                 }
             }
@@ -364,16 +294,10 @@ supports_websockets = false
             .collect::<Vec<_>>(),
         vec![
             Some(format!("Bearer {bearer}")),
-            Some(format!("Bearer {initial_token}")),
-            Some(format!("Bearer {refreshed_token}")),
+            Some(format!("Bearer {api_key}")),
         ]
     );
     assert_eq!(requests[0].header("x-credential").as_deref(), Some(header));
-    assert_eq!(
-        requests[2].header("x-oai-attestation"),
-        Some(format!(r#"{{"v":1,"s":0,"t":"{attestation}"}}"#))
-    );
-
     // Wait for a later event so buffered logs cannot hide a leak.
     let barrier = "credential-log-barrier";
     app_server
@@ -402,13 +326,7 @@ supports_websockets = false
     // confirms earlier queued logs were persisted before we check for leaks.
     for (sink, logs) in [("SQLite", persisted), ("feedback", feedback)] {
         anyhow::ensure!(logs.contains(barrier), "missing log barrier in {sink} logs");
-        for secret in [
-            bearer,
-            header,
-            &initial_token,
-            &refreshed_token,
-            attestation,
-        ] {
+        for secret in [bearer, header, api_key] {
             anyhow::ensure!(
                 !logs.contains(secret),
                 "credential leaked into {sink} logs: {secret}"
@@ -465,13 +383,7 @@ async fn sqlite_log_metrics_exports_do_not_create_log_cycles() -> Result<()> {
 
         let _app_server = TestAppServer::builder()
             .with_codex_home(codex_home.path())
-            .with_env_overrides(&[
-                ("OTEL_METRIC_EXPORT_INTERVAL", Some("200")),
-                (
-                    codex_app_server_transport::REMOTE_CONTROL_DISABLED_ENV_VAR,
-                    Some("1"),
-                ),
-            ])
+            .with_env_overrides(&[("OTEL_METRIC_EXPORT_INTERVAL", Some("200"))])
             .build_initialized_with_timeout(export_timeout)
             .await?;
 
@@ -699,13 +611,7 @@ async fn sqlite_log_metrics_grpc_exports_do_not_create_log_cycles(grpc_status: &
     )?;
     let _app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
-        .with_env_overrides(&[
-            ("OTEL_METRIC_EXPORT_INTERVAL", Some("200")),
-            (
-                codex_app_server_transport::REMOTE_CONTROL_DISABLED_ENV_VAR,
-                Some("1"),
-            ),
-        ])
+        .with_env_overrides(&[("OTEL_METRIC_EXPORT_INTERVAL", Some("200"))])
         .build_initialized_with_timeout(export_timeout)
         .await?;
 

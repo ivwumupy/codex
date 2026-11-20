@@ -38,7 +38,6 @@ const SIDE_SLASH_COMMAND_UNAVAILABLE_HINT: &str =
     "Press Ctrl+C to return to the main thread first.";
 const GOAL_USAGE_HINT: &str = "Example: /goal improve benchmark coverage";
 const RAW_USAGE: &str = "Usage: /raw [on|off]";
-const USAGE_CHATGPT_LOGIN_REQUIRED: &str = "Sign in with ChatGPT to use /usage.";
 
 impl ChatWidget {
     /// Dispatch a bare slash command and record its staged local-history entry.
@@ -533,21 +532,7 @@ impl ChatWidget {
             }
             SlashCommand::Daemon => self.app_event_tx.send(AppEvent::OpenDaemonMenu),
             SlashCommand::Warnings => self.app_event_tx.send(AppEvent::OpenWarnings),
-            SlashCommand::Status => {
-                if self.should_prefetch_rate_limits() {
-                    let request_id = self.next_status_refresh_request_id;
-                    self.next_status_refresh_request_id =
-                        self.next_status_refresh_request_id.wrapping_add(1);
-                    self.add_status_output(/*refreshing_rate_limits*/ true, Some(request_id));
-                    self.app_event_tx.send(AppEvent::RefreshRateLimits {
-                        origin: RateLimitRefreshOrigin::StatusCommand { request_id },
-                    });
-                } else {
-                    self.add_status_output(
-                        /*refreshing_rate_limits*/ false, /*request_id*/ None,
-                    );
-                }
-            }
+            SlashCommand::Status => self.add_status_output(false, None),
             SlashCommand::Cd => {
                 self.dispatch_command_with_args(SlashCommand::Cd, "~".to_string(), Vec::new());
             }
@@ -557,11 +542,7 @@ impl ChatWidget {
                     /*hint*/ None,
                 );
             }
-            SlashCommand::Usage => {
-                if self.ensure_usage_command_available() {
-                    self.open_usage_menu();
-                }
-            }
+            SlashCommand::Usage => self.add_status_output(false, None),
             SlashCommand::Ide => {
                 self.handle_ide_command();
             }
@@ -832,18 +813,7 @@ impl ChatWidget {
             SlashCommand::Pwd => {
                 self.add_error_message("Usage: /pwd".to_string());
             }
-            SlashCommand::Usage => {
-                if self.ensure_usage_command_available() {
-                    match crate::analytics::TokenActivityView::parse(trimmed) {
-                        Some(view) => self
-                            .app_event_tx
-                            .send(AppEvent::OpenAnalytics { view: Some(view) }),
-                        None => self.add_error_message(
-                            "Usage: /usage [daily|weekly|cumulative]".to_string(),
-                        ),
-                    }
-                }
-            }
+            SlashCommand::Usage => self.add_status_output(false, None),
             SlashCommand::Ide => {
                 self.handle_ide_command_args(trimmed);
             }
@@ -1255,14 +1225,6 @@ impl ChatWidget {
             allow_elevate_sandbox,
             side_conversation_active: self.active_side_conversation,
         }
-    }
-
-    fn ensure_usage_command_available(&mut self) -> bool {
-        if self.has_codex_backend_auth {
-            return true;
-        }
-        self.add_error_message(USAGE_CHATGPT_LOGIN_REQUIRED.to_string());
-        false
     }
 
     fn queued_command_drain_result(&self, cmd: SlashCommand) -> QueueDrain {

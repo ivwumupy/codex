@@ -72,7 +72,6 @@ use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
 use codex_core::config::ConfigOverrides;
 use codex_core::config::ConfigTomlLoadResult;
-use codex_core::config::bootstrap_auth_config;
 use codex_core::config::edit::ConfigEditsBuilder;
 use codex_core::config::find_codex_home;
 use codex_core::config::load_config_toml_with_layer_stack;
@@ -82,7 +81,6 @@ use codex_core::path_utils;
 use codex_core::read_session_meta_line;
 use codex_features::Feature;
 use codex_feedback::CodexFeedback;
-use codex_git_utils::get_git_repo_root;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
 use codex_login::default_client::set_default_client_residency_requirement;
@@ -93,7 +91,6 @@ use codex_otel::set_parent_from_context;
 use codex_otel::traceparent_context_from_env;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
-use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::SandboxMode;
 use codex_protocol::config_types::TrustLevel;
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_KEY;
@@ -154,7 +151,6 @@ pub use exec_events::WebSearchItem;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::future::Future;
 use std::io::IsTerminal;
 use std::io::Read;
 use std::path::Path;
@@ -162,7 +158,6 @@ use std::path::PathBuf;
 use supports_color::Stream;
 use tokio::sync::mpsc;
 use tracing::Instrument;
-use tracing::error;
 use tracing::field;
 use tracing::info;
 use tracing::info_span;
@@ -284,7 +279,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         json: json_mode,
         prompt,
         output_schema: output_schema_path,
-        mut config_overrides,
+        config_overrides,
     } = cli;
     if cyber_access_program.is_some() {
         match command.as_ref() {
@@ -341,7 +336,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         .with_filter(exec_stderr_env_filter());
 
     // Parse `-c` overrides from the CLI.
-    let mut cli_kv_overrides = match config_overrides.parse_overrides() {
+    let cli_kv_overrides = match config_overrides.parse_overrides() {
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
         Err(e) => {
@@ -2084,15 +2079,6 @@ async fn handle_server_request(
                     "dynamic tool calls are not supported in exec mode for thread `{}`",
                     params.thread_id
                 ),
-            )
-            .await
-        }
-        ServerRequest::ChatgptAuthTokensRefresh { request_id, .. } => {
-            reject_server_request(
-                client,
-                request_id,
-                &method,
-                "chatgpt auth token refresh is not supported in exec mode".to_string(),
             )
             .await
         }

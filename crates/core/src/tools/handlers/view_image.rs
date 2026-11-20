@@ -214,10 +214,6 @@ impl CoreToolRuntime for ViewImageHandler {
     ) -> Result<ToolEnvironments, FunctionCallError> {
         function_tool_environment(invocation, |args: ToolEnvironmentArgs| args.environment_id)
     }
-
-    fn is_builtin_control_tool(&self) -> bool {
-        true
-    }
 }
 
 pub struct ViewImageOutput {

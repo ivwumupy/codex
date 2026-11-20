@@ -19,21 +19,16 @@ pub(crate) use codex_app_server_transport::ConnectionOrigin;
 pub(crate) use codex_app_server_transport::DaemonShutdownAccess;
 pub(crate) use codex_app_server_transport::OutgoingMessage;
 pub(crate) use codex_app_server_transport::QueuedOutgoingMessage;
-pub(crate) use codex_app_server_transport::RemoteControlEnableError;
-pub(crate) use codex_app_server_transport::RemoteControlHandle;
-pub(crate) use codex_app_server_transport::RemoteControlPolicy;
-pub(crate) use codex_app_server_transport::RemoteControlStartConfig;
-pub use codex_app_server_transport::RemoteControlStartupMode;
-pub(crate) use codex_app_server_transport::RemoteControlUnavailable;
+
 pub(crate) use codex_app_server_transport::TransportEvent;
 pub(crate) use codex_app_server_transport::acquire_app_server_startup_lock;
 pub use codex_app_server_transport::app_server_control_socket_path;
 pub(crate) use codex_app_server_transport::app_server_startup_lock_path;
 pub(crate) use codex_app_server_transport::start_control_socket_acceptor;
-pub(crate) use codex_app_server_transport::start_remote_control;
+
 pub(crate) use codex_app_server_transport::start_stdio_connection;
 pub(crate) use codex_app_server_transport::start_websocket_acceptor;
-pub use codex_app_server_transport::take_remote_control_disabled_env;
+
 pub use codex_app_server_transport::verified_local_daemon_socket;
 
 pub(crate) struct ConnectionState {
@@ -47,15 +42,11 @@ pub(crate) struct ConnectionState {
 impl ConnectionState {
     pub(crate) fn new(
         origin: ConnectionOrigin,
-        auth: Option<codex_app_server_transport::ConnectionAuth>,
         outbound_initialized: Arc<AtomicBool>,
         outbound_experimental_api_enabled: Arc<AtomicBool>,
         outbound_opted_out_notification_methods: Arc<RwLock<HashSet<String>>>,
     ) -> Self {
-        let mut session = ConnectionSessionState::new(origin);
-        let mut rpc_gate = crate::connection_rpc_gate::ConnectionRpcGate::new();
-        rpc_gate.auth = auth;
-        session.rpc_gate = Arc::new(rpc_gate);
+        let session = ConnectionSessionState::new(origin);
         Self {
             origin,
             outbound_initialized,

@@ -1,8 +1,6 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::authorization_path::is_safe_for_authorization;
-use crate::aws_sigv4::AwsSigV4Config;
-use crate::aws_sigv4::AwsSigV4Signer;
 use crate::config::NetworkProxyConfig;
 use crate::policy::normalize_host;
 use crate::secret_substitution::BodySecretSubstitution;
@@ -52,10 +50,9 @@ pub struct MitmHookMatchConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct MitmHookActionsConfig {
     pub body_secret_substitution: Option<BodySecretSubstitutionConfig>,
-    pub aws_sigv4: Option<AwsSigV4Config>,
     pub strip_request_headers: Vec<String>,
     pub inject_request_headers: Vec<InjectedHeaderConfig>,
 }
@@ -108,7 +105,6 @@ pub struct HeaderConstraint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MitmHookActions {
     pub(crate) body_secret_substitution: Option<Arc<BodySecretSubstitution>>,
-    pub(crate) aws_sigv4: Option<Arc<AwsSigV4Signer>>,
     pub strip_request_headers: Vec<HeaderName>,
     pub inject_request_headers: Vec<ResolvedInjectedHeader>,
 }
@@ -246,9 +242,6 @@ pub(crate) fn validate_mitm_hook_config(config: &NetworkProxyConfig) -> Result<(
         validate_strip_request_headers(&hook.actions.strip_request_headers).with_context(|| {
             format!("invalid network.mitm_hooks[{hook_index}].actions.strip_request_headers")
         })?;
-        if let Some(signing) = &hook.actions.aws_sigv4 {
-            signing.validate()?;
-        }
         if let Some(substitution) = &hook.actions.body_secret_substitution {
             substitution.validate()?;
         }
@@ -390,28 +383,12 @@ where
                                 .map(Arc::new)
                         })
                         .transpose()?,
-                    aws_sigv4: hook
-                        .actions
-                        .aws_sigv4
-                        .as_ref()
-                        .map(|signing| {
-                            signing
-                                .compile(&resolve_env_var, &read_secret_file)
-                                .map(Arc::new)
-                        })
-                        .transpose()?,
                     strip_request_headers,
                     inject_request_headers,
                 },
             });
     }
 
-    crate::aws_sigv4::validate_guest_placeholders(
-        hooks_by_host
-            .values()
-            .flatten()
-            .filter_map(|hook| hook.actions.aws_sigv4.as_deref()),
-    )?;
     Ok(hooks_by_host)
 }
 
@@ -821,7 +798,6 @@ mod tests {
             },
             actions: MitmHookActionsConfig {
                 body_secret_substitution: None,
-                aws_sigv4: None,
                 strip_request_headers: vec!["authorization".to_string()],
                 inject_request_headers: vec![InjectedHeaderConfig {
                     placeholder: None,

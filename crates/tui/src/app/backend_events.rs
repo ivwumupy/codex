@@ -2,12 +2,9 @@
 //! Connection-wide lifecycle and account events may only update the displayed conversation's UI.
 
 use super::App;
-use super::app_server_event_targets::ServerNotificationThreadTarget;
-use super::app_server_event_targets::server_notification_thread_target;
 use crate::app_server_session::AppServerSession;
 use crate::app_server_session::AppServerSessionEvent;
 use crate::backend_id::BackendId;
-use codex_app_server_client::AppServerEvent;
 
 impl App {
     pub(super) async fn handle_polled_backend_event(

@@ -3,7 +3,6 @@
 use super::*;
 use codex_core::TurnInputSubmission;
 use codex_protocol::openai_models::ToolMode;
-use pretty_assertions::assert_eq;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn yielded_skill_read_keeps_originating_turn_metadata() -> Result<()> {
@@ -100,9 +99,10 @@ async fn yielded_skill_read_keeps_originating_turn_metadata() -> Result<()> {
     else {
         anyhow::bail!("expected turn A to start, got {submitted:?}");
     };
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
+    wait_for_event(
+        &test.codex,
+        |event| matches!(event, EventMsg::TurnComplete(completed) if completed.turn_id == turn_a),
+    )
     .await;
     let (output, _) = yielded
         .single_request()
@@ -148,9 +148,10 @@ async fn yielded_skill_read_keeps_originating_turn_metadata() -> Result<()> {
     else {
         anyhow::bail!("expected turn B to start, got {submitted:?}");
     };
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
+    wait_for_event(
+        &test.codex,
+        |event| matches!(event, EventMsg::TurnComplete(completed) if completed.turn_id == turn_b),
+    )
     .await;
 
     Ok(())

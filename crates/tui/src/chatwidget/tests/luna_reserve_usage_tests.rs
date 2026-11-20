@@ -149,7 +149,6 @@ async fn luna_reserve_usage_survives_banner_dismissal_and_typing_during_a_turn()
         account_id: Some("account-preview".into()),
         rate_limits: snapshot(/*percent*/ 100.0),
         rate_limits_by_limit_id: None,
-        rate_limit_reset_credits: None,
         rate_limit_upsell: Some(json!({
             "banner_type": "luna_reserve", "presentation": "dismissible",
             "title": "You’re now using Luna, a faster model for simpler tasks.",

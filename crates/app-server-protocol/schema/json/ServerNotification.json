@@ -639,20 +639,6 @@
             "personalAccessToken"
           ],
           "type": "string"
-        },
-        {
-          "description": "Amazon Bedrock bearer token managed by Codex.",
-          "enum": [
-            "bedrockApiKey"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Amazon Bedrock AWS access keys managed by Codex.",
-          "enum": [
-            "bedrockAccessKeys"
-          ],
-          "type": "string"
         }
       ]
     },
@@ -2024,50 +2010,6 @@
         "sessionId"
       ],
       "type": "object"
-    },
-    "GatewayOAuthChangedNotification": {
-      "properties": {
-        "authUrl": {
-          "description": "Authorization handoff, sent only to the connection that started login.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "error": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "loginId": {
-          "description": "Identifies the completed device login attempt.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "providerId": {
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/definitions/GatewayOAuthStatus"
-        }
-      },
-      "required": [
-        "providerId",
-        "status"
-      ],
-      "type": "object"
-    },
-    "GatewayOAuthStatus": {
-      "enum": [
-        "notReady",
-        "started",
-        "succeeded",
-        "failed"
-      ],
-      "type": "string"
     },
     "GitInfo": {
       "properties": {
@@ -3842,41 +3784,6 @@
         "itemId",
         "threadId",
         "turnId"
-      ],
-      "type": "object"
-    },
-    "RemoteControlConnectionStatus": {
-      "enum": [
-        "disabled",
-        "connecting",
-        "connected",
-        "errored"
-      ],
-      "type": "string"
-    },
-    "RemoteControlStatusChangedNotification": {
-      "description": "Current remote-control connection status and remote identity exposed to clients.",
-      "properties": {
-        "environmentId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "installationId": {
-          "type": "string"
-        },
-        "serverName": {
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/definitions/RemoteControlConnectionStatus"
-        }
-      },
-      "required": [
-        "installationId",
-        "serverName",
-        "status"
       ],
       "type": "object"
     },
@@ -7908,26 +7815,6 @@
       "properties": {
         "method": {
           "enum": [
-            "account/gatewayOAuth/changed"
-          ],
-          "title": "Account/gatewayOAuth/changedNotificationMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/GatewayOAuthChangedNotification"
-        }
-      },
-      "required": [
-        "method",
-        "params"
-      ],
-      "title": "Account/gatewayOAuth/changedNotification",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "method": {
-          "enum": [
             "account/rateLimits/updated"
           ],
           "title": "Account/rateLimits/updatedNotificationMethod",
@@ -7962,26 +7849,6 @@
         "params"
       ],
       "title": "App/list/updatedNotification",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "method": {
-          "enum": [
-            "remoteControl/status/changed"
-          ],
-          "title": "RemoteControl/status/changedNotificationMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/RemoteControlStatusChangedNotification"
-        }
-      },
-      "required": [
-        "method",
-        "params"
-      ],
-      "title": "RemoteControl/status/changedNotification",
       "type": "object"
     },
     {

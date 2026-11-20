@@ -1,16 +1,7 @@
 use super::*;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::sandbox::SandboxOverride;
-use codex_sandboxing::FileContentsChecker;
-use codex_sandboxing::SandboxExecRequest;
 use codex_sandboxing::SandboxType;
-use core_test_support::PathBufExt;
-use core_test_support::PathExt;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::Duration;

@@ -1195,8 +1195,8 @@ async fn provider_setup_checks_versions_and_provider_write_uses_last_write_wins(
     let layers = service.load_config_layers(/*cwd*/ None).await?;
     let (write, _) = service.prepare_provider_config(
         &layers,
-        codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID,
-        [("aws.region", Some("us-west-2"))],
+        "gateway",
+        [("base_url", Some("https://example.com/v1"))],
     )?;
 
     let user_path = tmp.path().join(CONFIG_TOML_FILE);
@@ -3556,120 +3556,6 @@ async fn model_provider_list_allows_user_overrides_of_system_defaults() -> Resul
                 }
             ])
         );
-    }
-    Ok(())
-}
-
-#[tokio::test]
-async fn model_provider_list_checks_builtin_configuration_fields() -> Result<()> {
-    use codex_app_server_protocol::ModelProviderListParams;
-    use codex_app_server_protocol::ModelProviderSummary;
-    use codex_app_server_protocol::ProviderSettings;
-
-    let home = tempdir()?;
-    std::fs::write(
-        home.path().join(CONFIG_TOML_FILE),
-        "[model_providers.amazon-bedrock.aws]\nregion = 'us-east-1'\n[model_providers.amazon-bedrock-runtime.aws]\nregion = 'us-east-1'\n[model_providers.gcp]\nproject_id = 'test-project'\n",
-    )?;
-    let credential_file = home.path().join("credentials.json").display().to_string();
-    for (id, name, settings) in [
-        (
-            "amazon-bedrock",
-            "Amazon Bedrock Mantle",
-            &[("aws.profile", "default"), ("aws.region", "us-east-1")][..],
-        ),
-        (
-            "amazon-bedrock-runtime",
-            "Amazon Bedrock Runtime",
-            &[("aws.profile", "default"), ("aws.region", "us-east-1")][..],
-        ),
-        (
-            "gcp",
-            "Google Cloud Vertex AI",
-            &[
-                ("project_id", "test-project"),
-                ("location", "global"),
-                ("credential_file", credential_file.as_str()),
-            ][..],
-        ),
-    ] {
-        for pinned_fields in [1, settings.len()] {
-            let overrides = settings
-                .iter()
-                .take(pinned_fields)
-                .map(|(field, value)| {
-                    (
-                        format!("model_providers.{id}.{field}"),
-                        TomlValue::String((*value).to_owned()),
-                    )
-                })
-                .collect();
-            let service = ConfigManager::new_for_tests(
-                home.path().to_path_buf(),
-                overrides,
-                LoaderOverrides::without_managed_config_for_tests(),
-                CloudConfigBundleLoader::default(),
-            );
-            let list = service
-                .model_provider_list(ModelProviderListParams {})
-                .await?;
-            assert_eq!(
-                list.data.into_iter().find(|provider| provider.id == id),
-                Some(ModelProviderSummary {
-                    id: id.to_owned(),
-                    name: name.to_owned(),
-                    can_edit: pinned_fields < settings.len(),
-                    base_url: None,
-                    settings: if id == "gcp" {
-                        ProviderSettings::Gcp {
-                            project_id: Some("test-project".to_owned()),
-                            location: (pinned_fields == settings.len())
-                                .then(|| "global".to_owned()),
-                            credential_file: (pinned_fields == settings.len())
-                                .then(|| credential_file.clone()),
-                        }
-                    } else {
-                        ProviderSettings::Bedrock {
-                            profile: Some("default".to_owned()),
-                            region: Some("us-east-1".to_owned()),
-                        }
-                    },
-                })
-            );
-        }
-    }
-    for id in ["amazon-bedrock", "amazon-bedrock-runtime"] {
-        for (section, overrides) in [
-            ("auth", vec![]),
-            (
-                "aws.credential_export",
-                vec![(
-                    format!("model_providers.{id}.aws.region"),
-                    "us-east-1".into(),
-                )],
-            ),
-        ] {
-            std::fs::write(
-                home.path().join(CONFIG_TOML_FILE),
-                format!("[model_providers.{id}.{section}]\ncommand = 'helper'\n"),
-            )?;
-            let service = ConfigManager::new_for_tests(
-                home.path().to_path_buf(),
-                overrides,
-                LoaderOverrides::without_managed_config_for_tests(),
-                CloudConfigBundleLoader::default(),
-            );
-            let list = service
-                .model_provider_list(ModelProviderListParams {})
-                .await?;
-            assert_eq!(
-                list.data
-                    .into_iter()
-                    .find(|provider| provider.id == id)
-                    .map(|provider| provider.can_edit),
-                Some(false)
-            );
-        }
     }
     Ok(())
 }

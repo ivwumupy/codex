@@ -57,7 +57,6 @@ pub const DEFAULT_OTEL_ENVIRONMENT: &str = "dev";
 pub const DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP: usize = 2;
 pub const DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS: i64 = 10;
 pub const DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS: i64 = 6;
-pub const DEFAULT_MEMORIES_MIN_RATE_LIMIT_REMAINING_PERCENT: i64 = 25;
 pub const DEFAULT_MEMORIES_MAX_RAW_MEMORIES_FOR_CONSOLIDATION: usize = 256;
 pub const DEFAULT_MEMORIES_MAX_UNUSED_DAYS: i64 = 30;
 const MIN_MEMORIES_MAX_RAW_MEMORIES_FOR_CONSOLIDATION: usize = 1;
@@ -348,9 +347,6 @@ pub struct MemoriesToml {
     pub max_rollouts_per_startup: Option<usize>,
     /// Minimum idle time between last thread activity and memory creation (hours). > 12h recommended.
     pub min_rollout_idle_hours: Option<i64>,
-    /// Minimum remaining percentage required in Codex rate-limit windows before memory startup runs.
-    #[schemars(range(min = 0, max = 100))]
-    pub min_rate_limit_remaining_percent: Option<i64>,
     /// Model used for thread summarisation.
     pub extract_model: Option<String>,
     /// Model used for memory consolidation.
@@ -373,7 +369,6 @@ pub struct MemoriesConfig {
     pub max_rollout_age_days: i64,
     pub max_rollouts_per_startup: usize,
     pub min_rollout_idle_hours: i64,
-    pub min_rate_limit_remaining_percent: i64,
     pub extract_model: Option<String>,
     pub consolidation_model: Option<String>,
     pub consolidation_service_tier: String,
@@ -393,7 +388,6 @@ impl Default for MemoriesConfig {
             max_rollout_age_days: DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS,
             max_rollouts_per_startup: DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP,
             min_rollout_idle_hours: DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS,
-            min_rate_limit_remaining_percent: DEFAULT_MEMORIES_MIN_RATE_LIMIT_REMAINING_PERCENT,
             extract_model: None,
             consolidation_model: None,
             consolidation_service_tier: SERVICE_TIER_DEFAULT_REQUEST_VALUE.to_string(),
@@ -439,10 +433,6 @@ impl From<MemoriesToml> for MemoriesConfig {
                 .min_rollout_idle_hours
                 .unwrap_or(defaults.min_rollout_idle_hours)
                 .clamp(1, 48),
-            min_rate_limit_remaining_percent: toml
-                .min_rate_limit_remaining_percent
-                .unwrap_or(defaults.min_rate_limit_remaining_percent)
-                .clamp(0, 100),
             extract_model: toml.extract_model,
             consolidation_model: toml.consolidation_model,
             consolidation_service_tier: toml
@@ -1132,7 +1122,7 @@ pub struct PluginsConfigToml {
 
 impl PluginsConfigToml {
     /// Whether configuration permits a source-enabled plugin to remain active.
-    /// Without `_default`, preserve legacy source and account enablement.
+    /// Without `_default`, preserve source enablement.
     /// Otherwise, an explicit enablement setting overrides the configured default.
     pub fn allows_plugin(&self, plugin_id: &str) -> bool {
         let Some(default) = &self.default else {
@@ -1151,26 +1141,6 @@ pub struct PluginConfig {
     /// Explicit activation override. Omission inherits the installed-plugin default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-
-    /// Stable, unique identifier of a ChatGPT-hosted remote plugin.
-    /// Availability to the requesting user is determined by Plugin Service at
-    /// provisioning time.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remote_plugin_id: Option<String>,
-
-    /// Release identifier used to pin the remote plugin to a specific release.
-    /// Omission leaves release selection unchanged.
-    /// Core stores this metadata without selecting or fetching a release.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub release_id: Option<String>,
-
-    /// Provisioning metadata. Omission does not request provisioning.
-    /// Only applies with `remote_plugin_id` and Plugin Service availability to the
-    /// requesting user at provisioning time. Effective enablement, trusted
-    /// provisioning policy, and authentication and authorization restrictions still apply.
-    /// This value is not trusted authorization and does not trigger provisioning.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auto_provision: Option<bool>,
 
     /// Per-MCP-server policy overlays for MCP servers contributed by this plugin.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]

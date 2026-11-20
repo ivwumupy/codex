@@ -119,12 +119,7 @@ fn review_completion_uses_one_monotonic_duration(
 
     // Simulate tracking later: the captured interval must not be measured again.
     report.started_instant -= Duration::from_secs(1);
-    report.track(
-        &telemetry,
-        completed.analytics,
-        /*completed_at_ms*/ 1_792_141_011_000,
-        elapsed,
-    );
+    report.track(&telemetry, completed.analytics, elapsed);
 
     let snapshot = telemetry.snapshot_metrics().expect("metrics snapshot");
     let names = snapshot

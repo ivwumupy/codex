@@ -9,7 +9,6 @@ use codex_extension_api::ApprovalDecisionInput;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::ExtensionMetrics;
 use codex_extension_api::ExtensionRegistry;
-use codex_extension_api::GuardianV2Enabled;
 use codex_extension_api::SynchronousApprovalReviewer;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
@@ -180,14 +179,12 @@ impl<H: ReviewHost> ReviewRequest<'_, H> {
     }
 
     pub(super) async fn cached_approval(&self) -> ReviewDecision {
-        let (turn_id, item_id) = match self.host.validate_action() {
-            Ok(target) => target,
-            Err(decision) => return decision,
-        };
+        if let Err(decision) = self.host.validate_action() {
+            return decision;
+        }
         if self.cancellation.is_cancelled() {
             return ReviewDecision::Abort;
         }
-        if self.thread_store.get::<GuardianV2Enabled>().is_some() {}
         if let Some((turn_id, _)) = self.host.servicing_turn().await {
             ReviewDenials::for_thread(self.thread_store)
                 .record_non_denial(&turn_id)

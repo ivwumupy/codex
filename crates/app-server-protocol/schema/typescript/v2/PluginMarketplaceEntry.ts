@@ -7,7 +7,6 @@ import type { PluginSummary } from "./PluginSummary";
 
 export type PluginMarketplaceEntry = { name: string,
 /**
- * Local marketplace file path when the marketplace is backed by a local file.
- * Remote-only catalog marketplaces do not have a local path.
+ * Path to the marketplace manifest.
  */
 path: AbsolutePathBuf | null, interface: MarketplaceInterface | null, plugins: Array<PluginSummary>, };

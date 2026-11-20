@@ -21,7 +21,6 @@ fn banner_response(
         rate_limit_upsell: Some(banner),
         rate_limits: snapshot(/*percent*/ 25.0),
         rate_limits_by_limit_id: None,
-        rate_limit_reset_credits: None,
     }
 }
 
@@ -31,7 +30,7 @@ async fn backend_banner_presentation_and_cta_do_not_imply_recovery() {
         let (mut chat, mut rx, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
         let mut response = banner_response(
             presentation,
-            json!([{"action":"notify_owner","label":"Notify owner"}]),
+            json!([{"action":"view_usage","label":"View usage"}]),
         );
         if presentation == Some("inline") {
             use chrono::Timelike;
@@ -58,29 +57,8 @@ async fn backend_banner_presentation_and_cta_do_not_imply_recovery() {
         chat.handle_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
         assert!(
             rx.try_recv()
-                .is_ok_and(|event| matches!(event, AppEvent::SendAddCreditsNudgeEmail { .. }))
+                .is_ok_and(|event| matches!(event, AppEvent::OpenUrlInBrowser { .. }))
         );
-        assert_eq!(render_bottom_popup(&chat, /*width*/ 70), initial);
-        let request_id = chat
-            .start_add_credits_nudge_email_request(AddCreditsNudgeCreditType::Credits)
-            .expect("start notification");
-        if presentation == Some("inline") {
-            insta::assert_snapshot!(
-                "backend_banner_notification",
-                normalize_snapshot_paths(render_bottom_popup(&chat, /*width*/ 70))
-            );
-        }
-        chat.handle_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
-        assert!(
-            rx.try_recv()
-                .is_ok_and(|event| matches!(event, AppEvent::SendAddCreditsNudgeEmail { .. }))
-        );
-        assert_eq!(chat.composer_text_with_pending(), "");
-        assert!(
-            chat.start_add_credits_nudge_email_request(AddCreditsNudgeCreditType::Credits)
-                .is_none()
-        );
-        chat.finish_add_credits_nudge_email_request(request_id, Err("local failure".into()));
         chat.update_backend_banner(&response);
         assert_eq!(render_bottom_popup(&chat, /*width*/ 70), initial);
         chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -107,6 +85,7 @@ async fn backend_banner_zero_actions_preserve_guidance_and_composer_input() {
         for ctas in [
             json!([]),
             json!([{"action":"future_action","label":"Unsupported"}]),
+            json!([{"action":"notify_owner","label":"Notify owner"},{"action":"buy_reset","label":"Buy reset"}]),
         ] {
             let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
             chat.update_backend_banner(&banner_response(presentation, ctas));
@@ -231,34 +210,6 @@ async fn backend_banner_restores_only_programmatically_displaced_switch_prompt()
 }
 
 #[tokio::test]
-async fn owner_notification_completion_cannot_cross_account_change() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-    let previous = chat
-        .start_add_credits_nudge_email_request(AddCreditsNudgeCreditType::Credits)
-        .expect("start previous account request");
-    chat.update_account_state(
-        /*status_account_display*/ None, /*plan_type*/ None,
-        /*has_chatgpt_account*/ true, /*has_codex_backend_auth*/ true,
-    );
-    let current = chat
-        .start_add_credits_nudge_email_request(AddCreditsNudgeCreditType::UsageLimit)
-        .expect("new account must be actionable");
-    drain_insert_history(&mut rx);
-    chat.finish_add_credits_nudge_email_request(previous, Ok(AddCreditsNudgeEmailStatus::Sent));
-    assert!(drain_insert_history(&mut rx).is_empty());
-    assert!(
-        chat.start_add_credits_nudge_email_request(AddCreditsNudgeCreditType::UsageLimit)
-            .is_none()
-    );
-    chat.finish_add_credits_nudge_email_request(current, Ok(AddCreditsNudgeEmailStatus::Sent));
-    let rendered = drain_insert_history(&mut rx)
-        .into_iter()
-        .map(|lines| lines_to_single_string(&lines))
-        .collect::<String>();
-    insta::assert_snapshot!("owner_notification_after_account_change", rendered);
-}
-
-#[tokio::test]
 async fn backend_banner_new_turn_dismisses_only_shown_dismissible_content() {
     for (presentation, show_before_submit) in [
         (None, true),
@@ -296,7 +247,7 @@ async fn backend_banner_invalid_content_and_absence_restore_fallback() {
         json!({"presentation":null}),
         json!({"title":" "}),
     ] {
-        let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
+        let (mut chat, mut rx, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
         let mut response = banner_response(Some("inline"), json!([]));
         chat.update_backend_banner(&response);
         assert!(
@@ -313,8 +264,12 @@ async fn backend_banner_invalid_content_and_absence_restore_fallback() {
         assert!(!chat.has_applicable_backend_banner());
         chat.codex_rate_limit_reached_type =
             Some(RateLimitReachedType::WorkspaceMemberCreditsDepleted);
-        chat.on_rate_limit_error(RateLimitErrorKind::Generic, "limit".into());
-        assert!(render_bottom_popup(&chat, /*width*/ 90).contains("workspace owner"));
+        chat.on_rate_limit_error(RateLimitErrorKind::Generic, "Provider limit reached".into());
+        assert!(
+            drain_insert_history(&mut rx)
+                .iter()
+                .any(|lines| lines_to_single_string(lines).contains("Provider limit reached"))
+        );
     }
 }
 
@@ -402,10 +357,10 @@ async fn backend_banner_changed_remedy_keeps_fallback_until_applicable_replaceme
         chat.on_rate_limit_snapshot(Some(credits));
         let mut response = banner_response(
             Some("inline"),
-            json!([{"action":"notify_owner","label":"Notify owner"}]),
+            json!([{"action":"view_usage","label":"View usage"}]),
         );
         chat.update_backend_banner(&response);
-        assert!(render_bottom_popup(&chat, /*width*/ 90).contains("Notify owner"));
+        assert!(render_bottom_popup(&chat, /*width*/ 90).contains("View usage"));
         let mut cap = snapshot(/*percent*/ 100.0);
         cap.rate_limit_reached_type = Some(RateLimitReachedType::WorkspaceMemberUsageLimitReached);
         if rolling_update {
@@ -413,25 +368,25 @@ async fn backend_banner_changed_remedy_keeps_fallback_until_applicable_replaceme
         }
         chat.on_rate_limit_error(RateLimitErrorKind::UsageLimit, "Usage cap reached".into());
         assert!(
-            render_bottom_popup(&chat, /*width*/ 90)
+            !render_bottom_popup(&chat, /*width*/ 90)
                 .contains("Request a limit increase from your owner")
         );
         response.rate_limit_upsell.as_mut().unwrap()["title"] =
             json!("Workspace spending cap reached");
         response.rate_limit_upsell.as_mut().unwrap()["ctas"] =
-            json!([{"action":"request_increase","label":"Request more usage"}]);
+            json!([{"action":"view_usage","label":"View workspace usage"}]);
         chat.update_backend_banner(&response);
         let rendered = render_bottom_popup(&chat, /*width*/ 90);
         assert!(
             rendered.contains("Workspace spending cap reached"),
             "{rendered}"
         );
-        assert!(rendered.contains("Request more usage"));
+        assert!(rendered.contains("View workspace usage"));
         assert!(!rendered.contains("Request a limit increase from your owner"));
         chat.set_model("test-model-b");
         chat.on_rate_limit_error(RateLimitErrorKind::UsageLimit, "Usage cap reached".into());
         assert!(
-            render_bottom_popup(&chat, /*width*/ 90)
+            !render_bottom_popup(&chat, /*width*/ 90)
                 .contains("Request a limit increase from your owner")
         );
     }

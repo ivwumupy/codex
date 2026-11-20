@@ -72,7 +72,6 @@ use crate::turn_timing::record_turn_ttft_metric;
 use crate::util::error_or_panic;
 use codex_async_utils::OrCancelExt;
 use codex_connectors::AppToolPolicyEvaluator;
-use codex_core_plugins::RecommendedPluginCandidatesInput;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::TurnInputContext;
 use codex_extension_api::TurnInputEnvironment;
@@ -90,7 +89,6 @@ use codex_protocol::compaction::CompactionPhase;
 use codex_protocol::compaction::CompactionReason;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ServiceTier;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
@@ -119,7 +117,6 @@ use codex_protocol::protocol::SafetyBufferingEvent;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
-use codex_protocol::skill_invocation::InvocationType;
 use codex_protocol::user_input::UserInput;
 use codex_skills::ToolMentionKind;
 use codex_skills::app_id_from_path;
@@ -131,7 +128,6 @@ use codex_skills_extension::HostSkillsSnapshot;
 use codex_skills_extension::InjectedHostSkillPrompts;
 use codex_skills_extension::validate_required_skills;
 use codex_thread_store::PersistContext;
-use codex_tools::DiscoverableTool;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
@@ -1970,7 +1966,6 @@ async fn run_sampling_request(
 
 pub(crate) struct PreparedToolRecommendations {
     auth: Option<CodexAuth>,
-    endpoint_candidates: Option<Vec<DiscoverableTool>>,
 }
 
 #[instrument(level = "trace", skip_all)]
@@ -1978,38 +1973,13 @@ pub(crate) async fn prepare_tool_recommendations(
     sess: &Session,
     turn_context: &TurnContext,
 ) -> PreparedToolRecommendations {
-    let loaded_plugins = sess
-        .services
-        .plugins_manager
-        .plugins_for_config(&turn_context.config.plugins_config_input())
-        .await
-        .without_plugins(&turn_context.disabled_plugin_ids);
     let tool_suggest_is_enabled = tool_suggest_enabled(turn_context);
     let auth = if tool_suggest_is_enabled {
         sess.services.auth_manager.auth().await
     } else {
         None
     };
-    let endpoint_candidates = if tool_suggest_is_enabled {
-        let plugins_config = turn_context.config.plugins_config_input();
-        sess.services
-            .plugins_manager
-            .recommended_plugin_candidates_for_config(RecommendedPluginCandidatesInput {
-                plugins_config: &plugins_config,
-                loaded_plugins: &loaded_plugins,
-                auth: auth.as_ref(),
-                disabled_tools: &turn_context.config.tool_suggest.disabled_tools,
-                app_server_client_name: turn_context.app_server_client_name.as_deref(),
-            })
-            .await
-    } else {
-        None
-    };
-
-    PreparedToolRecommendations {
-        auth,
-        endpoint_candidates,
-    }
+    PreparedToolRecommendations { auth }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2038,59 +2008,50 @@ pub(crate) async fn built_tools(
     let accessible_connectors =
         apps_enabled.then(|| connectors::accessible_connectors_from_mcp_tools(all_mcp_tools));
     let tool_suggest_is_enabled = tool_suggest_enabled(turn_context);
-    let PreparedToolRecommendations {
-        auth,
-        endpoint_candidates: endpoint_recommended_plugin_candidates,
-    } = prepared_recommendations;
-    let tool_suggest_candidates =
-        if let Some(recommended_plugin_candidates) = endpoint_recommended_plugin_candidates {
-            Some(ToolSuggestCandidates {
-                tools: recommended_plugin_candidates,
-                presentation: ToolSuggestPresentation::RecommendationContext,
-            })
-        } else {
-            let loaded_plugin_app_connector_ids = connector_snapshot
-                .connector_ids()
-                .iter()
-                .map(|connector_id| connector_id.0.clone())
-                .collect::<Vec<_>>();
-            async {
-                if apps_enabled && tool_suggest_is_enabled {
-                    if let Some(accessible_connectors) = accessible_connectors.as_ref() {
-                        match connectors::list_tool_suggest_discoverable_tools_with_auth(
-                            &turn_context.config,
-                            sess.services.plugins_manager.as_ref(),
-                            auth.as_ref(),
-                            accessible_connectors.as_slice(),
-                            &loaded_plugin_app_connector_ids,
+    let PreparedToolRecommendations { auth } = prepared_recommendations;
+    let tool_suggest_candidates = {
+        let loaded_plugin_app_connector_ids = connector_snapshot
+            .connector_ids()
+            .iter()
+            .map(|connector_id| connector_id.0.clone())
+            .collect::<Vec<_>>();
+        async {
+            if apps_enabled && tool_suggest_is_enabled {
+                if let Some(accessible_connectors) = accessible_connectors.as_ref() {
+                    match connectors::list_tool_suggest_discoverable_tools_with_auth(
+                        &turn_context.config,
+                        sess.services.plugins_manager.as_ref(),
+                        auth.as_ref(),
+                        accessible_connectors.as_slice(),
+                        &loaded_plugin_app_connector_ids,
+                    )
+                    .await
+                    .map(|discoverable_tools| {
+                        filter_request_plugin_install_discoverable_tools_for_client(
+                            discoverable_tools,
+                            turn_context.app_server_client_name.as_deref(),
                         )
-                        .await
-                        .map(|discoverable_tools| {
-                            filter_request_plugin_install_discoverable_tools_for_client(
-                                discoverable_tools,
-                                turn_context.app_server_client_name.as_deref(),
-                            )
-                        }) {
-                            Ok(discoverable_tools) if discoverable_tools.is_empty() => None,
-                            Ok(discoverable_tools) => Some(ToolSuggestCandidates {
-                                tools: discoverable_tools,
-                                presentation: ToolSuggestPresentation::ListTool,
-                            }),
-                            Err(err) => {
-                                warn!("failed to load discoverable tool suggestions: {err:#}");
-                                None
-                            }
+                    }) {
+                        Ok(discoverable_tools) if discoverable_tools.is_empty() => None,
+                        Ok(discoverable_tools) => Some(ToolSuggestCandidates {
+                            tools: discoverable_tools,
+                            presentation: ToolSuggestPresentation::ListTool,
+                        }),
+                        Err(err) => {
+                            warn!("failed to load discoverable tool suggestions: {err:#}");
+                            None
                         }
-                    } else {
-                        None
                     }
                 } else {
                     None
                 }
+            } else {
+                None
             }
-            .instrument(trace_span!("built_tools.load_discoverable_tools"))
-            .await
-        };
+        }
+        .instrument(trace_span!("built_tools.load_discoverable_tools"))
+        .await
+    };
     Ok(Arc::new(build_tool_router(
         sess,
         turn_context,

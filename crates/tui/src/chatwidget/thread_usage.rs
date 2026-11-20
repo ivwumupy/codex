@@ -14,6 +14,7 @@ use codex_app_server_protocol::ThreadUsage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ThreadUsageOutcome {
+    #[cfg(test)]
     Available(ThreadUsage),
     Disabled,
 }
@@ -194,6 +195,7 @@ impl ChatWidget {
         self.thread_usage.pending_request_id = None;
         let mut usage_updated = false;
         self.thread_usage.status_requested = false;
+        #[cfg(test)]
         let post_turn_request = self.thread_usage.settlement_request_id == Some(request_id);
         match result {
             Ok(ThreadUsageOutcome::Disabled) => {
@@ -206,6 +208,7 @@ impl ChatWidget {
                 self.thread_usage.settlement_baseline_usd_micros = None;
                 self.thread_usage.settlement_request_id = None;
             }
+            #[cfg(test)]
             Ok(ThreadUsageOutcome::Available(usage))
                 if usage.thread_id != thread_id.to_string() =>
             {
@@ -216,6 +219,7 @@ impl ChatWidget {
                 );
                 self.schedule_thread_usage_retry();
             }
+            #[cfg(test)]
             Ok(ThreadUsageOutcome::Available(mut usage)) => {
                 usage_updated = true;
                 self.thread_usage.retry_attempts = 0;

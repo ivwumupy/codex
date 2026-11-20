@@ -13,9 +13,6 @@ use codex_extension_api::ExtensionData;
 use codex_features::Feature;
 use codex_file_system::EnvironmentAccess;
 use codex_mcp::McpBinding;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
-use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_otel::SessionTelemetry;
 use codex_plugin::ExecutorPluginHookSource;
 use codex_protocol::items::ModelInvocationContext;
@@ -56,15 +53,10 @@ pub(crate) struct StepContext {
 impl StepContext {
     /// Feature that selects the tool layout of new windows on this route.
     pub(crate) fn incremental_tools_feature(&self) -> Option<Feature> {
-        if self.settings.model_info.use_responses_lite {
-            Some(Feature::IncrementalTools)
-        } else {
-            matches!(
-                self.turn.config.model_provider_id.as_str(),
-                AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
-            )
-            .then_some(Feature::IncrementalToolsLegacy)
-        }
+        self.settings
+            .model_info
+            .use_responses_lite
+            .then_some(Feature::IncrementalTools)
     }
 
     /// Whether new context windows should record tool declarations in history.

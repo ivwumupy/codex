@@ -32,9 +32,11 @@ impl Default for TurnAdmission {
 }
 
 pub(crate) struct TurnPermit(TurnAdmission);
+#[cfg(test)]
 pub(crate) struct TurnAdmissionPause(TurnAdmission);
 
 impl TurnAdmission {
+    #[cfg(test)]
     pub(crate) async fn pause(&self) -> Result<TurnAdmissionPause, JSONRPCErrorError> {
         let mut active = self.subscribe_active();
         {
@@ -90,6 +92,7 @@ impl TurnAdmission {
     }
 }
 
+#[cfg(test)]
 impl Drop for TurnAdmissionPause {
     fn drop(&mut self) {
         self.0

@@ -81,7 +81,6 @@ async fn responses_stream_includes_subagent_header_on_review() {
         experimental_bearer_token: None,
         auth: None,
         gateway_oauth: None,
-        aws: None,
         wire_api: WireApi::Responses,
         query_params: None,
         http_headers: None,
@@ -94,9 +93,6 @@ async fn responses_stream_includes_subagent_header_on_review() {
         supports_websockets: false,
         supports_standalone_web_search: false,
         capabilities: None,
-        project_id: None,
-        location: None,
-        credential_file: None,
         include_internal_metadata: false,
     };
 
@@ -231,7 +227,6 @@ async fn responses_stream_includes_subagent_header_on_other() {
         experimental_bearer_token: None,
         auth: None,
         gateway_oauth: None,
-        aws: None,
         wire_api: WireApi::Responses,
         query_params: None,
         http_headers: None,
@@ -244,9 +239,6 @@ async fn responses_stream_includes_subagent_header_on_other() {
         supports_websockets: false,
         supports_standalone_web_search: false,
         capabilities: None,
-        project_id: None,
-        location: None,
-        credential_file: None,
         include_internal_metadata: false,
     };
 
@@ -362,7 +354,6 @@ async fn responses_respects_model_info_overrides_from_config() {
         experimental_bearer_token: None,
         auth: None,
         gateway_oauth: None,
-        aws: None,
         wire_api: WireApi::Responses,
         query_params: None,
         http_headers: None,
@@ -375,9 +366,6 @@ async fn responses_respects_model_info_overrides_from_config() {
         supports_websockets: false,
         supports_standalone_web_search: false,
         capabilities: None,
-        project_id: None,
-        location: None,
-        credential_file: None,
         include_internal_metadata: false,
     };
 

@@ -137,18 +137,8 @@ async fn luna_reserve_entry_dispatches_an_already_queued_turn_with_accepted_sett
             .expect("queued turn before the usage response");
         requests.lock().unwrap().clear();
         let mut tui = crate::tui::test_support::make_test_tui()?;
-        let generation = app.rate_limit_hard_stop_generation;
-        app.handle_event(
-            &mut tui,
-            &mut server,
-            AppEvent::RateLimitsLoaded {
-                request_id: 1,
-                origin: RateLimitRefreshOrigin::Periodic,
-                hard_stop_generation: generation,
-                result: Ok(reserve_response()),
-            },
-        )
-        .await?;
+        app.chat_widget.update_backend_banner(&reserve_response());
+        app.apply_backend_banner_fallback(&mut server).await;
         app.handle_event(&mut tui, &mut server, pending).await?;
         let sent = requests.lock().unwrap().clone();
         let methods: Vec<_> = sent.iter().map(|request| request.method.as_str()).collect();
@@ -195,18 +185,14 @@ async fn luna_reserve_recovery_restores_task_and_pending_turn_after_fresh_backen
         let original_mode = app.chat_widget.effective_collaboration_mode();
         let config_path = app.config.codex_home.join("config.toml");
         let saved_config = std::fs::read(&config_path).ok();
+        let thread_id = app.active_thread_id.expect("active reserve thread");
         let mut tui = crate::tui::test_support::make_test_tui()?;
         requests.lock().unwrap().clear();
-        let generation = app.rate_limit_hard_stop_generation;
+        app.chat_widget.update_backend_banner(&reserve_response());
         app.handle_event(
             &mut tui,
             &mut server,
-            AppEvent::RateLimitsLoaded {
-                request_id: 1,
-                origin: RateLimitRefreshOrigin::Periodic,
-                hard_stop_generation: generation,
-                result: Ok(reserve_response()),
-            },
+            AppEvent::ApplyBackendBannerFallback { thread_id },
         )
         .await?;
         assert_eq!(app.chat_widget.current_model(), "gpt-reserve");
@@ -236,24 +222,14 @@ async fn luna_reserve_recovery_restores_task_and_pending_turn_after_fresh_backen
         });
         recovered.rate_limit_upsell = None;
         // A rounded percentage is not an authorization decision; backend allowed=true wins.
-        for (request_id, hard_stop_generation, expected) in [
-            (2, generation.wrapping_sub(1), "gpt-reserve"),
-            (3, generation, "gpt-5.5"),
-            (4, generation, "gpt-5.5"),
-        ] {
-            app.handle_event(
-                &mut tui,
-                &mut server,
-                AppEvent::RateLimitsLoaded {
-                    request_id,
-                    origin: RateLimitRefreshOrigin::Periodic,
-                    hard_stop_generation,
-                    result: Ok(recovered.clone()),
-                },
-            )
-            .await?;
-            assert_eq!(app.chat_widget.current_model(), expected);
-        }
+        app.chat_widget.update_backend_banner(&recovered);
+        app.handle_event(
+            &mut tui,
+            &mut server,
+            AppEvent::ApplyBackendBannerFallback { thread_id },
+        )
+        .await?;
+        assert_eq!(app.chat_widget.current_model(), "gpt-5.5");
         assert_eq!(
             app.chat_widget.effective_collaboration_mode(),
             original_mode
@@ -271,7 +247,7 @@ async fn luna_reserve_recovery_restores_task_and_pending_turn_after_fresh_backen
         assert_eq!(
             restored,
             ThreadSettingsUpdateParams {
-                thread_id: app.active_thread_id.unwrap().to_string(),
+                thread_id: thread_id.to_string(),
                 model: Some("gpt-5.5".into()),
                 effort: Some(ReasoningEffortConfig::High),
                 collaboration_mode: Some(original_mode),
@@ -339,7 +315,6 @@ async fn luna_reserve_recovery_requires_permission_and_no_remaining_blocker() ->
         app.apply_backend_banner_fallback(&mut server).await;
         assert_eq!(app.chat_widget.current_model(), "gpt-reserve");
     }
-    // Reset redemption clears presentation before the authoritative follow-up read.
     app.chat_widget.clear_backend_banner();
     app.chat_widget.update_backend_banner(&recovered);
     app.apply_backend_banner_fallback(&mut server).await;

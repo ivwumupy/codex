@@ -78,7 +78,6 @@ use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
 use codex_prompts::ResolvedMessage;
-use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::ActivePermissionProfile;
@@ -326,7 +325,6 @@ max_unused_days = 21
 max_rollout_age_days = 42
 max_rollouts_per_startup = 9
 min_rollout_idle_hours = 24
-min_rate_limit_remaining_percent = 12
 extract_model = "gpt-5-mini"
 consolidation_model = "gpt-5.2"
 consolidation_service_tier = "fast"
@@ -346,7 +344,6 @@ consolidation_service_tier = "fast"
             max_rollout_age_days: Some(42),
             max_rollouts_per_startup: Some(9),
             min_rollout_idle_hours: Some(24),
-            min_rate_limit_remaining_percent: Some(12),
             extract_model: Some("gpt-5-mini".to_string()),
             consolidation_model: Some("gpt-5.2".to_string()),
             consolidation_service_tier: Some("fast".to_string()),
@@ -375,7 +372,6 @@ consolidation_service_tier = "fast"
             max_rollout_age_days: 42,
             max_rollouts_per_startup: 9,
             min_rollout_idle_hours: 24,
-            min_rate_limit_remaining_percent: 12,
             extract_model: Some("gpt-5-mini".to_string()),
             consolidation_model: Some("gpt-5.2".to_string()),
             consolidation_service_tier: "priority".to_string(),
@@ -1049,11 +1045,7 @@ profile = "codex-bedrock"
     )
     .unwrap_err();
 
-    assert!(
-        err.to_string().contains(
-            "model_providers.custom: provider aws is only supported for `amazon-bedrock`"
-        )
-    );
+    assert!(err.to_string().contains("unknown field `aws`"));
 }
 
 #[tokio::test]
@@ -1134,240 +1126,6 @@ env_http_headers = { "x-openai-internal-codex-residency" = "CODEX_TEST_UNSET_RES
     }
 
     Ok(())
-}
-
-#[test]
-fn accepts_amazon_bedrock_aws_profile_override() {
-    let cfg = toml::from_str::<ConfigToml>(
-        r#"
-[model_providers.amazon-bedrock.aws]
-profile = "codex-bedrock"
-region = "us-west-2"
-"#,
-    )
-    .expect("Amazon Bedrock AWS overrides should deserialize");
-
-    assert_eq!(
-        cfg.model_providers
-            .get("amazon-bedrock")
-            .and_then(|provider| provider.aws.as_ref())
-            .and_then(|aws| aws.profile.as_deref()),
-        Some("codex-bedrock")
-    );
-    assert_eq!(
-        cfg.model_providers
-            .get("amazon-bedrock")
-            .and_then(|provider| provider.aws.as_ref())
-            .and_then(|aws| aws.region.as_deref()),
-        Some("us-west-2")
-    );
-}
-
-#[tokio::test]
-async fn load_config_applies_amazon_bedrock_aws_profile_override() {
-    let cfg = toml::from_str::<ConfigToml>(
-        r#"
-model_provider = "amazon-bedrock"
-
-[model_providers.amazon-bedrock.aws]
-profile = "codex-bedrock"
-region = "us-west-2"
-"#,
-    )
-    .expect("Amazon Bedrock AWS overrides should deserialize");
-
-    let config = Config::load_from_base_config_with_overrides(
-        cfg,
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load config");
-
-    assert_eq!(config.model_provider_id, "amazon-bedrock");
-    assert_eq!(
-        config
-            .model_provider
-            .aws
-            .as_ref()
-            .and_then(|aws| aws.profile.as_deref()),
-        Some("codex-bedrock")
-    );
-    assert_eq!(
-        config
-            .model_provider
-            .aws
-            .as_ref()
-            .and_then(|aws| aws.region.as_deref()),
-        Some("us-west-2")
-    );
-}
-
-#[tokio::test]
-async fn load_config_applies_amazon_bedrock_transport_overrides() {
-    let cfg = toml::from_str::<ConfigToml>(
-        r#"
-model_provider = "amazon-bedrock"
-
-[model_providers.amazon-bedrock]
-base_url = "https://bedrock.example.com/v1"
-http_headers = { "X-Custom-Header" = "value" }
-
-[model_providers.amazon-bedrock.auth]
-command = "print-token"
-"#,
-    )
-    .expect("Amazon Bedrock transport overrides should deserialize");
-
-    let config = Config::load_from_base_config_with_overrides(
-        cfg,
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load config");
-
-    let mut expected_provider = built_in_model_providers(/*openai_base_url*/ None)
-        .remove("amazon-bedrock")
-        .expect("Amazon Bedrock provider should be built in");
-    expected_provider.base_url = Some("https://bedrock.example.com/v1".to_string());
-    expected_provider.auth = Some(ModelProviderAuthInfo {
-        command: "print-token".to_string(),
-        args: Vec::new(),
-        timeout_ms: std::num::NonZeroU64::new(5_000).expect("timeout should be non-zero"),
-        refresh_interval_ms: 300_000,
-        cwd: std::env::current_dir()
-            .expect("current directory should be available")
-            .try_into()
-            .expect("current directory should be absolute"),
-    });
-    expected_provider
-        .http_headers
-        .get_or_insert_default()
-        .insert("X-Custom-Header".to_string(), "value".into());
-
-    assert_eq!(config.model_provider_id, "amazon-bedrock");
-    assert_eq!(config.model_provider, expected_provider);
-}
-
-#[tokio::test]
-async fn load_config_uses_resolved_cwd_for_default_gcp_auth() {
-    let codex_home = tempdir().expect("tempdir");
-    let workspace = tempdir().expect("tempdir");
-    let cwd = workspace.abs();
-
-    for base_url in [None, Some("https://vertex.example.com/v1")] {
-        let mut cfg = ConfigToml {
-            model_provider: Some("gcp".to_string()),
-            ..Default::default()
-        };
-        if let Some(base_url) = base_url {
-            cfg.model_providers.insert(
-                "gcp".to_string(),
-                ModelProviderInfo {
-                    base_url: Some(base_url.to_string()),
-                    ..Default::default()
-                },
-            );
-        }
-        let config = Config::load_from_base_config_with_overrides(
-            cfg,
-            ConfigOverrides {
-                cwd: Some(cwd.to_path_buf()),
-                ..Default::default()
-            },
-            codex_home.abs(),
-        )
-        .await
-        .expect("load config");
-
-        let mut expected_provider = ModelProviderInfo::create_gcp_provider();
-        expected_provider.base_url = base_url.map(str::to_string);
-        expected_provider.auth = Some(ModelProviderAuthInfo {
-            command: if cfg!(windows) {
-                "gcloud.cmd"
-            } else {
-                "gcloud"
-            }
-            .to_string(),
-            args: vec![
-                "auth".into(),
-                "application-default".into(),
-                "print-access-token".into(),
-            ],
-            timeout_ms: std::num::NonZeroU64::new(30_000).expect("timeout should be non-zero"),
-            refresh_interval_ms: 3_000_000,
-            cwd: cwd.clone(),
-        });
-        assert_eq!(config.model_provider_id, "gcp");
-        assert_eq!(config.model_provider, expected_provider);
-        assert_eq!(config.model_providers.get("gcp"), Some(&expected_provider));
-    }
-}
-
-#[tokio::test]
-async fn load_config_applies_gcp_transport_overrides() {
-    let cfg = toml::from_str::<ConfigToml>(
-        r#"
-model_provider = "gcp"
-
-[model_providers.gcp]
-base_url = "https://vertex.example.com/v1"
-http_headers = { "X-Custom-Header" = "value" }
-
-[model_providers.gcp.auth]
-command = "print-token"
-"#,
-    )
-    .expect("GCP transport overrides should deserialize");
-
-    let config = Config::load_from_base_config_with_overrides(
-        cfg,
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load config");
-
-    let mut expected_provider = built_in_model_providers(/*openai_base_url*/ None)
-        .remove("gcp")
-        .expect("GCP provider should be built in");
-    expected_provider.base_url = Some("https://vertex.example.com/v1".to_string());
-    expected_provider.auth = Some(ModelProviderAuthInfo {
-        command: "print-token".to_string(),
-        args: Vec::new(),
-        timeout_ms: std::num::NonZeroU64::new(5_000).expect("timeout should be non-zero"),
-        refresh_interval_ms: 300_000,
-        cwd: std::env::current_dir()
-            .expect("current directory should be available")
-            .try_into()
-            .expect("current directory should be absolute"),
-    });
-    expected_provider.http_headers = Some(std::collections::HashMap::from([(
-        "X-Custom-Header".to_string(),
-        "value".into(),
-    )]));
-
-    assert_eq!(config.model_provider_id, "gcp");
-    assert_eq!(config.model_provider, expected_provider);
-}
-
-#[test]
-fn config_toml_rejects_unsupported_amazon_bedrock_overrides() {
-    let err = toml::from_str::<ConfigToml>(
-        r#"
-model_provider = "amazon-bedrock"
-
-[model_providers.amazon-bedrock]
-name = "Custom Bedrock"
-requires_openai_auth = true
-supports_websockets = true
-"#,
-    )
-    .expect_err("Amazon Bedrock unsupported overrides should fail validation");
-    assert!(err.to_string().contains(
-        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, and `aws.auth_refresh`; other non-default provider fields are not supported"
-    ));
 }
 
 #[test]
@@ -1682,7 +1440,6 @@ strip_request_headers = ["authorization"]
                                 "strip_auth".to_string(),
                                 NetworkMitmActionToml {
                                     body_secret_substitution: None,
-                                    aws_sigv4: None,
                                     strip_request_headers: vec!["authorization".to_string()],
                                     inject_request_headers: Vec::new(),
                                 },
@@ -1766,7 +1523,6 @@ fn permissions_profile_network_to_proxy_config_preserves_mitm_hooks() {
                 "strip_auth".to_string(),
                 NetworkMitmActionToml {
                     body_secret_substitution: None,
-                    aws_sigv4: None,
                     strip_request_headers: vec!["authorization".to_string()],
                     inject_request_headers: Vec::new(),
                 },
@@ -2161,53 +1917,6 @@ sandbox = "elevated"
         .expect("network_proxy should start the managed network proxy");
     assert_eq!(network.proxy_host_and_port(), "127.0.0.1:3128");
     assert!(!network.socks_enabled());
-    Ok(())
-}
-
-#[tokio::test]
-async fn respect_system_proxy_feature_resolves_enabled() -> std::io::Result<()> {
-    let codex_home = TempDir::new()?;
-    let config = Config::load_from_base_config_with_overrides(
-        ConfigToml {
-            features: Some(
-                toml::from_str(
-                    r#"
-respect_system_proxy = true
-"#,
-                )
-                .expect("valid features"),
-            ),
-            ..Default::default()
-        },
-        ConfigOverrides::default(),
-        codex_home.abs(),
-    )
-    .await?;
-
-    assert!(config.respect_system_proxy);
-    assert_eq!(
-        config.http_client_factory().outbound_proxy_policy(),
-        codex_http_client::OutboundProxyPolicy::RespectSystemProxy
-    );
-    assert_eq!(
-        config
-            .auth_route_config()
-            .http_client_factory()
-            .outbound_proxy_policy(),
-        codex_http_client::OutboundProxyPolicy::RespectSystemProxy
-    );
-    assert_eq!(
-        config
-            .plugins_config_input()
-            .remote_plugin_service_config(/*runtime_auth*/ None),
-        codex_core_plugins::remote::RemotePluginServiceConfig::new(
-            config.chatgpt_base_url,
-            codex_http_client::HttpClientFactory::new(
-                codex_http_client::OutboundProxyPolicy::RespectSystemProxy,
-            ),
-            /*product_sku*/ None,
-        )
-    );
     Ok(())
 }
 
@@ -10830,7 +10539,7 @@ async fn test_requirements_web_search_mode_allowlist_does_not_warn_when_unset() 
         application: None,
         allow_managed_hooks_only: None,
         allow_appshots: None,
-        allow_remote_control: None,
+
         allow_browser_and_computer_use: None,
         computer_use: None,
         browser_use: None,
@@ -11549,8 +11258,6 @@ async fn local_mxc_preference_preserves_configured_backend(
     let permission_selection = EffectivePermissionSelection {
         profiles: None,
         selected_profile_id: None,
-        persisted_profile_id_was_provided: false,
-        requirements_force_profile_selection: false,
     };
     for (prefer, resolved_preference, binding, allow_mxc, mode, expected) in [
         (true, true, true, true, "unelevated", WindowsMxc),

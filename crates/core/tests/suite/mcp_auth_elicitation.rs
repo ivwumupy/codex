@@ -2,18 +2,11 @@
 
 use anyhow::Result;
 
-use codex_app_server_protocol as app;
 use codex_core::RestrictRootCapabilities;
 use codex_core::StartThreadOptions;
 use codex_core::TurnInputRequest;
-use codex_core::TurnInputSubmission;
 use codex_core::config::Constrained;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_extension_api::McpToolResultInput;
-use codex_extension_api::ToolLifecycleContributor;
-use codex_extension_api::ToolLifecycleFuture;
 use codex_features::Feature;
-use codex_login::CodexAuth;
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_protocol::SessionId;
 use codex_protocol::approvals::ElicitationRequest;
@@ -34,7 +27,6 @@ use core_test_support::PathExt;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::apps_test_server::SEARCH_CALENDAR_CREATE_TOOL;
 use core_test_support::apps_test_server::SEARCH_CALENDAR_NAMESPACE;
-use core_test_support::apps_test_server::recorded_apps_tool_call_by_call_id;
 use core_test_support::apps_test_server::recorded_apps_tool_calls;
 use core_test_support::apps_test_server::search_capable_apps_builder;
 use core_test_support::responses;
@@ -44,8 +36,6 @@ use core_test_support::wait_for_mcp_server;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
-use std::sync::Arc;
-use std::time::Duration;
 use test_case::test_case;
 use wiremock::Mock;
 use wiremock::Request;
@@ -53,10 +43,8 @@ use wiremock::Respond;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::body_partial_json;
 use wiremock::matchers::method;
-use wiremock::matchers::path;
 use wiremock::matchers::path_regex;
 
-const CALL_ID: &str = "calendar-elicitation-call";
 const PRIVATE_SENTINEL: &str = "synthetic-private-value";
 
 #[derive(Clone, Copy)]
@@ -67,7 +55,6 @@ enum AuthFailureFormat {
 
 #[derive(Clone, Copy)]
 struct AuthFailureResponder {
-    scenario: Scenario,
     format: AuthFailureFormat,
 }
 
@@ -93,11 +80,6 @@ impl AuthFailureResponder {
                 },
             },
         });
-        if self.scenario == Scenario::AuthMetadataRemoved {
-            response["_meta"] = json!({"_codex_apps": {"connector_auth_failure": {
-                "is_auth_failure": true, "connector_id": "calendar",
-            }}});
-        }
         if matches!(self.format, AuthFailureFormat::Structured) {
             response["structuredContent"] = json!({
                 "error": "synthetic-structured-auth-failure",
@@ -117,24 +99,6 @@ impl Respond for AuthFailureResponder {
             "id": body.get("id").cloned().unwrap_or(Value::Null),
             "result": self.result(),
         }))
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Scenario {
-    DefaultAuth,
-    ModernAuth,
-    AuthMetadataRemoved,
-    LegacySuccess,
-    LegacyCancelled,
-    ModernDeclined,
-}
-
-struct RemoveAuthMetadata;
-
-impl ToolLifecycleContributor for RemoveAuthMetadata {
-    fn on_mcp_tool_result<'a>(&'a self, input: McpToolResultInput<'a>) -> ToolLifecycleFuture<'a> {
-        Box::pin(async move { input.result.meta = None })
     }
 }
 
@@ -167,10 +131,7 @@ async fn core_generated_mcp_elicitations_support_restricted_threads(
                 "method": "tools/call",
                 "params": {"name": "calendar_create_event"}
             })))
-            .respond_with(AuthFailureResponder {
-                scenario: Scenario::DefaultAuth,
-                format,
-            })
+            .respond_with(AuthFailureResponder { format })
             .with_priority(/*p*/ 1)
             .mount(&server)
             .await;
@@ -355,13 +316,8 @@ approvals_reviewer = "user"
         assert!(output_text.contains("parent agent"));
     }
     if let SubagentRequestKind::ConnectorAuth(format) = kind {
-        let original: CallToolResult = serde_json::from_value(
-            AuthFailureResponder {
-                scenario: Scenario::DefaultAuth,
-                format,
-            }
-            .result(),
-        )?;
+        let original: CallToolResult =
+            serde_json::from_value(AuthFailureResponder { format }.result())?;
         let expected_result = if decision == ElicitationAction::Accept {
             let text =
                 "Authentication for Calendar was requested and accepted. Retry this tool call now.";

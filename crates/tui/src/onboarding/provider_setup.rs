@@ -21,8 +21,6 @@ pub(crate) struct ProviderInput(Arc<Mutex<TextArea>>);
 pub(crate) enum FieldDisplay {
     Focused,
     Unfocused,
-    FocusedSecret,
-    UnfocusedSecret,
 }
 
 impl Default for ProviderInput {
@@ -72,7 +70,7 @@ impl ProviderInput {
             line.push_span(placeholder.to_owned().dim());
             return line;
         }
-        let focused = matches!(display, FieldDisplay::Focused | FieldDisplay::FocusedSecret);
+        let focused = matches!(display, FieldDisplay::Focused);
         let field_width = usize::from(width).saturating_sub(line.width());
         // When the label occupies a whole row, wrapping moves the value to the next row.
         let mut remaining = if field_width == 0 {
@@ -85,14 +83,8 @@ impl ProviderInput {
         } else {
             0
         };
-        let mut content = editor.text()[start..].grapheme_indices(true).peekable();
-        while let Some((offset, grapheme)) = content.next() {
-            let cell = match display {
-                FieldDisplay::Focused | FieldDisplay::Unfocused => grapheme,
-                FieldDisplay::FocusedSecret if content.peek().is_none() => grapheme,
-                FieldDisplay::FocusedSecret | FieldDisplay::UnfocusedSecret => "•",
-            };
-            let span = Span::raw(cell.to_owned());
+        for (offset, grapheme) in editor.text()[start..].grapheme_indices(true) {
+            let span = Span::raw(grapheme.to_owned());
             let span = if focused { span.cyan() } else { span };
             let Some(rest) = remaining.checked_sub(span.width()) else {
                 break;

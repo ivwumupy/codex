@@ -187,7 +187,7 @@ pub struct ConfigRequirements {
     pub web_search_mode: ConstrainedWithSource<WebSearchMode>,
     pub allow_managed_hooks_only: Option<Sourced<bool>>,
     pub allow_appshots: Option<Sourced<bool>>,
-    pub allow_remote_control: Option<Sourced<bool>>,
+
     pub computer_use: Option<Sourced<ComputerUseRequirementsToml>>,
     pub feature_requirements: Option<Sourced<FeatureRequirementsToml>>,
     pub managed_hooks: Option<ConstrainedWithSource<ManagedHooksRequirementsToml>>,
@@ -250,7 +250,7 @@ impl Default for ConfigRequirements {
             ),
             allow_managed_hooks_only: None,
             allow_appshots: None,
-            allow_remote_control: None,
+
             computer_use: None,
             feature_requirements: None,
             managed_hooks: None,
@@ -1159,7 +1159,7 @@ pub struct ConfigRequirementsToml {
     pub allow_managed_hooks_only: Option<bool>,
     pub allow_browser_and_computer_use: Option<bool>,
     pub allow_appshots: Option<bool>,
-    pub allow_remote_control: Option<bool>,
+
     pub computer_use: Option<ComputerUseRequirementsToml>,
     pub browser_use: Option<BrowserUseRequirementsToml>,
     pub in_app_browser: Option<InAppBrowserRequirementsToml>,
@@ -1316,7 +1316,7 @@ pub struct ConfigRequirementsWithSources {
     pub allow_managed_hooks_only: Option<Sourced<bool>>,
     pub allow_browser_and_computer_use: Option<Sourced<bool>>,
     pub allow_appshots: Option<Sourced<bool>>,
-    pub allow_remote_control: Option<Sourced<bool>>,
+
     pub computer_use: Option<Sourced<ComputerUseRequirementsToml>>,
     pub browser_use: Option<Sourced<BrowserUseRequirementsToml>>,
     pub in_app_browser: Option<Sourced<InAppBrowserRequirementsToml>>,
@@ -1401,7 +1401,6 @@ impl ConfigRequirementsWithSources {
             allow_managed_hooks_only: _,
             allow_browser_and_computer_use: _,
             allow_appshots: _,
-            allow_remote_control: _,
             computer_use: _,
             browser_use: _,
             in_app_browser: _,
@@ -1473,7 +1472,6 @@ impl ConfigRequirementsWithSources {
                 allow_managed_hooks_only,
                 allow_browser_and_computer_use,
                 allow_appshots,
-                allow_remote_control,
                 computer_use,
                 browser_use,
                 in_app_browser,
@@ -1567,7 +1565,6 @@ impl ConfigRequirementsWithSources {
             allow_managed_hooks_only,
             allow_browser_and_computer_use,
             allow_appshots,
-            allow_remote_control,
             computer_use,
             browser_use,
             in_app_browser,
@@ -1623,7 +1620,7 @@ impl ConfigRequirementsWithSources {
             allow_browser_and_computer_use: allow_browser_and_computer_use
                 .map(|sourced| sourced.value),
             allow_appshots: allow_appshots.map(|sourced| sourced.value),
-            allow_remote_control: allow_remote_control.map(|sourced| sourced.value),
+
             computer_use: computer_use.map(|sourced| sourced.value),
             browser_use: browser_use.map(|sourced| sourced.value),
             in_app_browser: in_app_browser.map(|sourced| sourced.value),
@@ -1740,7 +1737,6 @@ impl ConfigRequirementsToml {
             && self.allow_managed_hooks_only.is_none()
             && self.allow_browser_and_computer_use.is_none()
             && self.allow_appshots.is_none()
-            && self.allow_remote_control.is_none()
             && self
                 .computer_use
                 .as_ref()
@@ -2162,7 +2158,6 @@ impl TryFrom<ConfigRequirementsWithSources> for ConfigRequirements {
             allow_managed_hooks_only,
             allow_browser_and_computer_use: _,
             allow_appshots,
-            allow_remote_control,
             computer_use,
             browser_use: _,
             in_app_browser: _,
@@ -2555,7 +2550,6 @@ impl TryFrom<ConfigRequirementsWithSources> for ConfigRequirements {
             web_search_mode,
             allow_managed_hooks_only,
             allow_appshots,
-            allow_remote_control,
             computer_use,
             feature_requirements,
             managed_hooks,
@@ -2600,6 +2594,132 @@ pub fn sandbox_mode_requirement_for_permission_profile(
 
 #[cfg(test)]
 mod tests {
+    fn with_unknown_source(toml: ConfigRequirementsToml) -> ConfigRequirementsWithSources {
+        let ConfigRequirementsToml {
+            config_server,
+            allowed_login_methods,
+            allowed_chatgpt_workspaces,
+            cli_auth_credentials_store,
+            chatgpt_base_url,
+            sqlite_home,
+            unsafe_enforce_sqlite_journal_mode,
+            log_dir,
+            model_catalog_json,
+            model_provider,
+            model_providers,
+            check_for_update_on_startup,
+            allow_login_shell,
+            feedback,
+            allowed_approval_policies,
+            allowed_approvals_reviewers,
+            allowed_sandbox_modes,
+            allowed_permission_profiles,
+            default_permissions,
+            remote_sandbox_config: _,
+            allowed_web_search_modes,
+            allow_managed_hooks_only,
+            allow_browser_and_computer_use,
+            allow_appshots,
+            computer_use,
+            browser_use,
+            in_app_browser,
+            windows,
+            feature_requirements,
+            hooks,
+            mcp_servers,
+            plugins,
+            marketplaces,
+            otel,
+            apps,
+            rules,
+            enforce_residency,
+            network,
+            application,
+            permissions,
+            auto_review,
+            models,
+            additional_developer_instructions,
+            guardian_policy_config,
+            guardian_extra_policy,
+        } = toml;
+        let mut permissions = permissions;
+        let permissions_network = PermissionsRequirementsToml::take_network(&mut permissions)
+            .map(|network| Box::new(Sourced::new(*network, RequirementSource::Unknown)));
+        ConfigRequirementsWithSources {
+            config_server: config_server
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_login_methods: allowed_login_methods
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_chatgpt_workspaces: allowed_chatgpt_workspaces
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            cli_auth_credentials_store: cli_auth_credentials_store
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            chatgpt_base_url: chatgpt_base_url
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            sqlite_home: sqlite_home.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            unsafe_enforce_sqlite_journal_mode: unsafe_enforce_sqlite_journal_mode
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            log_dir: log_dir.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            model_catalog_json: model_catalog_json
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            model_provider: model_provider
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            model_providers: model_providers
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            check_for_update_on_startup: check_for_update_on_startup
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allow_login_shell: allow_login_shell
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            feedback: feedback.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_approval_policies: allowed_approval_policies
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_approvals_reviewers: allowed_approvals_reviewers
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_sandbox_modes: allowed_sandbox_modes
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_permission_profiles: allowed_permission_profiles
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            default_permissions: default_permissions
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allowed_web_search_modes: allowed_web_search_modes
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allow_managed_hooks_only: allow_managed_hooks_only
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allow_browser_and_computer_use: allow_browser_and_computer_use
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            allow_appshots: allow_appshots
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            computer_use: computer_use.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            browser_use: browser_use.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            in_app_browser: in_app_browser
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            windows: windows.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            feature_requirements: feature_requirements
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            hooks: hooks.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            mcp_servers: mcp_servers.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            plugins: plugins.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            marketplaces: marketplaces.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            otel: otel.map(|value| Box::new(Sourced::new(*value, RequirementSource::Unknown))),
+            apps: apps.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            rules: rules.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            enforce_residency: enforce_residency
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            network: network.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            application: application.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            permissions: permissions.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            permissions_network,
+            auto_review: auto_review.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            models: models.map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            additional_developer_instructions: additional_developer_instructions
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            guardian_policy_config: guardian_policy_config
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+            guardian_extra_policy: guardian_extra_policy
+                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
+        }
+    }
+
     use super::*;
     use crate::AllowDenyRequirementToml;
     use crate::BrowserUseAccessApprovalLifetimeToml;
@@ -2628,54 +2748,6 @@ mod tests {
         Ok(AbsolutePathBuf::try_from(
             std::env::temp_dir().join("requirements.toml"),
         )?)
-    }
-
-    #[test]
-    fn exact_requirement_for_config_path_matches_overlapping_paths() {
-        let managed_path = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed"))
-            .expect("managed path should be absolute");
-        let requirements = ConfigRequirementsToml {
-            cli_auth_credentials_store: Some(AuthCredentialsStoreMode::Ephemeral),
-            chatgpt_base_url: Some("https://managed.example/backend-api/".to_string()),
-            sqlite_home: Some(managed_path.clone()),
-            log_dir: Some(managed_path.clone()),
-            model_catalog_json: Some(managed_path),
-            check_for_update_on_startup: Some(false),
-            allow_login_shell: Some(false),
-            feedback: Some(FeedbackConfigToml {
-                enabled: Some(false),
-            }),
-            ..Default::default()
-        };
-        let cases: &[(&[&str], Option<&str>)] = &[
-            (
-                &["cli_auth_credentials_store"],
-                Some("cli_auth_credentials_store"),
-            ),
-            (&["chatgpt_base_url"], Some("chatgpt_base_url")),
-            (&["sqlite_home"], Some("sqlite_home")),
-            (&["log_dir"], Some("log_dir")),
-            (&["model_catalog_json"], Some("model_catalog_json")),
-            (
-                &["check_for_update_on_startup"],
-                Some("check_for_update_on_startup"),
-            ),
-            (&["allow_login_shell"], Some("allow_login_shell")),
-            (&["feedback", "enabled"], Some("feedback.enabled")),
-            (&[], Some("sqlite_home")),
-            (&["feedback"], Some("feedback.enabled")),
-            (&["feedback", "other"], None),
-            (&["windows", "sandbox"], None),
-        ];
-
-        for (segments, expected) in cases {
-            let segments = segments.iter().map(ToString::to_string).collect::<Vec<_>>();
-            assert_eq!(
-                requirements.exact_requirement_for_config_path(&segments),
-                *expected,
-                "segments: {segments:?}"
-            );
-        }
     }
 
     #[test_case::test_case(&["otel"], Some("otel.tool_result"); "otel_parent")]
@@ -2786,135 +2858,6 @@ tracestate = { managed = { tenant = "enterprise", region = "us" }, other = { kee
                 sources: vec![mdm_source, legacy_source],
             }
         );
-    }
-
-    fn with_unknown_source(toml: ConfigRequirementsToml) -> ConfigRequirementsWithSources {
-        let ConfigRequirementsToml {
-            config_server,
-            allowed_login_methods,
-            allowed_chatgpt_workspaces,
-            cli_auth_credentials_store,
-            chatgpt_base_url,
-            sqlite_home,
-            unsafe_enforce_sqlite_journal_mode,
-            log_dir,
-            model_catalog_json,
-            model_provider,
-            model_providers,
-            check_for_update_on_startup,
-            allow_login_shell,
-            feedback,
-            allowed_approval_policies,
-            allowed_approvals_reviewers,
-            allowed_sandbox_modes,
-            allowed_permission_profiles,
-            default_permissions,
-            remote_sandbox_config: _,
-            allowed_web_search_modes,
-            allow_managed_hooks_only,
-            allow_browser_and_computer_use,
-            allow_appshots,
-            allow_remote_control,
-            computer_use,
-            browser_use,
-            in_app_browser,
-            windows,
-            feature_requirements,
-            hooks,
-            mcp_servers,
-            plugins,
-            marketplaces,
-            otel,
-            apps,
-            rules,
-            enforce_residency,
-            network,
-            application,
-            permissions,
-            auto_review,
-            models,
-            additional_developer_instructions,
-            guardian_policy_config,
-            guardian_extra_policy,
-        } = toml;
-        let mut permissions = permissions;
-        let permissions_network = PermissionsRequirementsToml::take_network(&mut permissions)
-            .map(|network| Box::new(Sourced::new(*network, RequirementSource::Unknown)));
-        ConfigRequirementsWithSources {
-            config_server: config_server
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_login_methods: allowed_login_methods
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_chatgpt_workspaces: allowed_chatgpt_workspaces
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            cli_auth_credentials_store: cli_auth_credentials_store
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            chatgpt_base_url: chatgpt_base_url
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            sqlite_home: sqlite_home.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            unsafe_enforce_sqlite_journal_mode: unsafe_enforce_sqlite_journal_mode
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            log_dir: log_dir.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            model_catalog_json: model_catalog_json
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            model_provider: model_provider
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            model_providers: model_providers
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            check_for_update_on_startup: check_for_update_on_startup
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allow_login_shell: allow_login_shell
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            feedback: feedback.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_approval_policies: allowed_approval_policies
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_approvals_reviewers: allowed_approvals_reviewers
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_sandbox_modes: allowed_sandbox_modes
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_permission_profiles: allowed_permission_profiles
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            default_permissions: default_permissions
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allowed_web_search_modes: allowed_web_search_modes
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allow_managed_hooks_only: allow_managed_hooks_only
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allow_browser_and_computer_use: allow_browser_and_computer_use
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allow_appshots: allow_appshots
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            allow_remote_control: allow_remote_control
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            computer_use: computer_use.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            browser_use: browser_use.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            in_app_browser: in_app_browser
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            windows: windows.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            feature_requirements: feature_requirements
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            hooks: hooks.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            mcp_servers: mcp_servers.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            plugins: plugins.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            marketplaces: marketplaces.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            otel: otel.map(|value| Box::new(Sourced::new(*value, RequirementSource::Unknown))),
-            apps: apps.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            rules: rules.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            enforce_residency: enforce_residency
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            network: network.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            application: application.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            permissions: permissions.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            permissions_network,
-            auto_review: auto_review.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            models: models.map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            additional_developer_instructions: additional_developer_instructions
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            guardian_policy_config: guardian_policy_config
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-            guardian_extra_policy: guardian_extra_policy
-                .map(|value| Sourced::new(value, RequirementSource::Unknown)),
-        }
     }
 
     #[test]
@@ -3052,19 +2995,6 @@ tracestate = { managed = { tenant = "enterprise", region = "us" }, other = { kee
         )?;
 
         assert_eq!(requirements.allow_appshots, Some(false));
-        assert!(!requirements.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn allow_remote_control_false_is_still_configured() -> Result<()> {
-        let requirements: ConfigRequirementsToml = from_str(
-            r#"
-                allow_remote_control = false
-            "#,
-        )?;
-
-        assert_eq!(requirements.allow_remote_control, Some(false));
         assert!(!requirements.is_empty());
         Ok(())
     }
@@ -3333,359 +3263,6 @@ tracestate = { managed = { tenant = "enterprise", region = "us" }, other = { kee
                 "{model}"
             );
         }
-    }
-
-    #[test]
-    fn merge_unset_fields_copies_every_field_and_sets_sources() {
-        let mut target = ConfigRequirementsWithSources::default();
-        let source = RequirementSource::LegacyManagedConfigTomlFromMdm;
-
-        let allowed_approval_policies = vec![AskForApproval::UnlessTrusted, AskForApproval::Never];
-        let allowed_approvals_reviewers =
-            vec![ApprovalsReviewer::AutoReview, ApprovalsReviewer::User];
-        let allowed_sandbox_modes = vec![
-            SandboxModeRequirement::WorkspaceWrite,
-            SandboxModeRequirement::DangerFullAccess,
-        ];
-        let allowed_web_search_modes = vec![
-            WebSearchModeRequirement::Cached,
-            WebSearchModeRequirement::Live,
-        ];
-        let feature_requirements = FeatureRequirementsToml {
-            entries: BTreeMap::from([("personality".to_string(), true)]),
-            ..Default::default()
-        };
-        let browser_use = BrowserUseRequirementsToml {
-            extension: None,
-            allow_webmcp: None,
-            allow_history_access: Some(false),
-            disable_auto_review: Some(true),
-            allow_global_persistent_approval: None,
-            default_origin_policy: None,
-            origins: None,
-        };
-        let computer_use = ComputerUseRequirementsToml {
-            allow_locked_computer_use: Some(false),
-            allow_persistent_approval: Some(false),
-            default_app_access: None,
-            macos: None,
-            windows: None,
-        };
-        let auto_review = AutoReviewRequirementsToml {
-            required_on_models: Some(vec!["managed-model".to_string()]),
-            ignore_rules: None,
-        };
-        let models = ModelsRequirementsToml {
-            new_thread: Some(NewThreadModelDefaultsToml {
-                model: Some("managed-model".to_string()),
-                model_reasoning_effort: Some(ReasoningEffort::Medium),
-                service_tier: Some("fast".to_string()),
-            }),
-        };
-        let sqlite_home = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-state"))
-            .expect("managed sqlite home should be absolute");
-        let log_dir = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-logs"))
-            .expect("managed log dir should be absolute");
-        let model_catalog_json =
-            AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-models.json"))
-                .expect("managed model catalog path should be absolute");
-        let feedback = FeedbackConfigToml {
-            enabled: Some(false),
-        };
-        let windows = WindowsRequirementsToml {
-            allowed_sandbox_implementations: Some(vec![WindowsSandboxImplementationToml::Elevated]),
-            allow_mxc: None,
-            require_mxc: Some(true),
-        };
-        let enforce_residency = ResidencyRequirement::Us;
-        let enforce_source = source.clone();
-        let additional_developer_instructions = "Follow the company policy.".to_string();
-        let guardian_policy_config = "Use the company-managed guardian policy.".to_string();
-        let guardian_extra_policy = "Use the company-managed extra policy.".to_string();
-
-        // Intentionally constructed without `..Default::default()` so adding a new field to
-        // `ConfigRequirementsToml` forces this test to be updated.
-        let other = ConfigRequirementsToml {
-            config_server: None,
-            allowed_login_methods: Some(vec![ForcedLoginMethod::Chatgpt]),
-            allowed_chatgpt_workspaces: Some(vec!["managed-workspace".to_string()]),
-            cli_auth_credentials_store: Some(AuthCredentialsStoreMode::Keyring),
-            chatgpt_base_url: Some("https://managed.example/backend-api/".to_string()),
-            sqlite_home: Some(sqlite_home.clone()),
-            unsafe_enforce_sqlite_journal_mode: Some(true),
-            log_dir: Some(log_dir.clone()),
-            model_catalog_json: Some(model_catalog_json.clone()),
-            model_provider: Some("gateway".to_string()),
-            model_providers: Some(HashMap::new()),
-            check_for_update_on_startup: Some(false),
-            allow_login_shell: Some(false),
-            feedback: Some(feedback.clone()),
-            allowed_approval_policies: Some(allowed_approval_policies.clone()),
-            allowed_approvals_reviewers: Some(allowed_approvals_reviewers.clone()),
-            allowed_sandbox_modes: Some(allowed_sandbox_modes.clone()),
-            allowed_permission_profiles: Some(BTreeMap::from([("managed".to_string(), true)])),
-            default_permissions: Some("managed".to_string()),
-            remote_sandbox_config: None,
-            allowed_web_search_modes: Some(allowed_web_search_modes.clone()),
-            allow_managed_hooks_only: Some(true),
-            allow_browser_and_computer_use: Some(false),
-            allow_appshots: Some(false),
-            allow_remote_control: Some(false),
-            computer_use: Some(computer_use.clone()),
-            browser_use: Some(browser_use.clone()),
-            in_app_browser: None,
-            windows: Some(windows.clone()),
-            feature_requirements: Some(feature_requirements.clone()),
-            hooks: None,
-            mcp_servers: None,
-            plugins: None,
-            marketplaces: None,
-            otel: Some(Box::new(OtelRequirementsToml {
-                environment: Some("managed".to_string()),
-                ..Default::default()
-            })),
-            apps: None,
-            rules: None,
-            enforce_residency: Some(enforce_residency),
-            network: None,
-            application: None,
-            permissions: None,
-            auto_review: Some(auto_review.clone()),
-            models: Some(models.clone()),
-            additional_developer_instructions: Some(additional_developer_instructions.clone()),
-            guardian_policy_config: Some(guardian_policy_config.clone()),
-            guardian_extra_policy: Some(guardian_extra_policy.clone()),
-        };
-
-        target.merge_unset_fields(source.clone(), other);
-
-        assert_eq!(
-            target,
-            ConfigRequirementsWithSources {
-                config_server: None,
-                allowed_login_methods: Some(Sourced::new(
-                    vec![ForcedLoginMethod::Chatgpt],
-                    source.clone(),
-                )),
-                allowed_chatgpt_workspaces: Some(Sourced::new(
-                    vec!["managed-workspace".to_string()],
-                    source.clone(),
-                )),
-                cli_auth_credentials_store: Some(Sourced::new(
-                    AuthCredentialsStoreMode::Keyring,
-                    source.clone(),
-                )),
-                chatgpt_base_url: Some(Sourced::new(
-                    "https://managed.example/backend-api/".to_string(),
-                    source.clone(),
-                )),
-                sqlite_home: Some(Sourced::new(sqlite_home, source.clone())),
-                unsafe_enforce_sqlite_journal_mode: Some(Sourced::new(
-                    /*value*/ true,
-                    source.clone()
-                )),
-                log_dir: Some(Sourced::new(log_dir, source.clone())),
-                model_catalog_json: Some(Sourced::new(model_catalog_json, source.clone())),
-                model_provider: Some(Sourced::new("gateway".to_string(), source.clone())),
-                model_providers: Some(Sourced::new(HashMap::new(), source.clone())),
-                check_for_update_on_startup: Some(Sourced::new(
-                    /*value*/ false,
-                    source.clone(),
-                )),
-                allow_login_shell: Some(Sourced::new(/*value*/ false, source.clone())),
-                feedback: Some(Sourced::new(feedback, source.clone())),
-                allowed_approval_policies: Some(Sourced::new(
-                    allowed_approval_policies,
-                    source.clone()
-                )),
-                allowed_approvals_reviewers: Some(Sourced::new(
-                    allowed_approvals_reviewers,
-                    source.clone(),
-                )),
-                allowed_sandbox_modes: Some(Sourced::new(allowed_sandbox_modes, source.clone(),)),
-                allowed_permission_profiles: Some(Sourced::new(
-                    BTreeMap::from([("managed".to_string(), true)]),
-                    source.clone(),
-                )),
-                default_permissions: Some(Sourced::new("managed".to_string(), source.clone(),)),
-                allowed_web_search_modes: Some(Sourced::new(
-                    allowed_web_search_modes,
-                    enforce_source.clone(),
-                )),
-                allow_managed_hooks_only: Some(Sourced::new(
-                    /*value*/ true,
-                    enforce_source.clone(),
-                )),
-                allow_browser_and_computer_use: Some(Sourced::new(
-                    /*value*/ false,
-                    enforce_source.clone(),
-                )),
-                allow_appshots: Some(Sourced::new(/*value*/ false, enforce_source.clone(),)),
-                allow_remote_control: Some(Sourced::new(
-                    /*value*/ false,
-                    enforce_source.clone(),
-                )),
-                computer_use: Some(Sourced::new(computer_use, enforce_source.clone())),
-                browser_use: Some(Sourced::new(browser_use, enforce_source.clone())),
-                in_app_browser: None,
-                windows: Some(Sourced::new(windows, enforce_source.clone())),
-                feature_requirements: Some(Sourced::new(
-                    feature_requirements,
-                    enforce_source.clone(),
-                )),
-                hooks: None,
-                mcp_servers: None,
-                plugins: None,
-                marketplaces: None,
-                otel: Some(Box::new(Sourced::new(
-                    OtelRequirementsToml {
-                        environment: Some("managed".to_string()),
-                        ..Default::default()
-                    },
-                    source.clone(),
-                ))),
-                apps: None,
-                rules: None,
-                enforce_residency: Some(Sourced::new(enforce_residency, enforce_source)),
-                network: None,
-                application: None,
-                permissions: None,
-                permissions_network: None,
-                auto_review: Some(Sourced::new(auto_review, source.clone())),
-                models: Some(Sourced::new(models, source.clone())),
-                additional_developer_instructions: Some(Sourced::new(
-                    additional_developer_instructions,
-                    source.clone(),
-                )),
-                guardian_policy_config: Some(Sourced::new(guardian_policy_config, source.clone())),
-                guardian_extra_policy: Some(Sourced::new(guardian_extra_policy, source)),
-            }
-        );
-    }
-
-    #[test]
-    fn merge_unset_fields_fills_missing_values() -> Result<()> {
-        let source: ConfigRequirementsToml = from_str(
-            r#"
-                allowed_approval_policies = ["on-request"]
-            "#,
-        )?;
-
-        let source_location = RequirementSource::MdmManagedPreferences {
-            domain: "com.codex".to_string(),
-            key: "allowed_approval_policies".to_string(),
-        };
-
-        let mut empty_target = ConfigRequirementsWithSources::default();
-        empty_target.merge_unset_fields(source_location.clone(), source);
-        assert_eq!(
-            empty_target,
-            ConfigRequirementsWithSources {
-                allowed_approval_policies: Some(Sourced::new(
-                    vec![AskForApproval::OnRequest],
-                    source_location,
-                )),
-                allowed_approvals_reviewers: None,
-                allowed_sandbox_modes: None,
-                allowed_permission_profiles: None,
-                default_permissions: None,
-                allowed_web_search_modes: None,
-                allow_managed_hooks_only: None,
-                allow_appshots: None,
-                allow_remote_control: None,
-                computer_use: None,
-                browser_use: None,
-                in_app_browser: None,
-                windows: None,
-                feature_requirements: None,
-                hooks: None,
-                mcp_servers: None,
-                plugins: None,
-                marketplaces: None,
-                apps: None,
-                rules: None,
-                enforce_residency: None,
-                network: None,
-                application: None,
-                permissions: None,
-                models: None,
-                guardian_policy_config: None,
-                ..Default::default()
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn merge_unset_fields_does_not_overwrite_existing_values() -> Result<()> {
-        let existing_source = RequirementSource::LegacyManagedConfigTomlFromMdm;
-        let mut populated_target = ConfigRequirementsWithSources::default();
-        let populated_requirements: ConfigRequirementsToml = from_str(
-            r#"
-                unsafe_enforce_sqlite_journal_mode = true
-                allowed_approval_policies = ["never"]
-                guardian_extra_policy = "Use the managed extra policy."
-            "#,
-        )?;
-        populated_target.merge_unset_fields(existing_source.clone(), populated_requirements);
-
-        let source: ConfigRequirementsToml = from_str(
-            r#"
-                unsafe_enforce_sqlite_journal_mode = false
-                allowed_approval_policies = ["on-request"]
-                guardian_extra_policy = "Use the lower-priority extra policy."
-            "#,
-        )?;
-        let source_location = RequirementSource::MdmManagedPreferences {
-            domain: "com.codex".to_string(),
-            key: "allowed_approval_policies".to_string(),
-        };
-        populated_target.merge_unset_fields(source_location, source);
-
-        assert_eq!(
-            populated_target,
-            ConfigRequirementsWithSources {
-                unsafe_enforce_sqlite_journal_mode: Some(Sourced::new(
-                    /*value*/ true,
-                    existing_source.clone()
-                )),
-                allowed_approval_policies: Some(Sourced::new(
-                    vec![AskForApproval::Never],
-                    existing_source.clone(),
-                )),
-                allowed_approvals_reviewers: None,
-                allowed_sandbox_modes: None,
-                allowed_permission_profiles: None,
-                default_permissions: None,
-                allowed_web_search_modes: None,
-                allow_managed_hooks_only: None,
-                allow_appshots: None,
-                allow_remote_control: None,
-                computer_use: None,
-                browser_use: None,
-                in_app_browser: None,
-                windows: None,
-                feature_requirements: None,
-                hooks: None,
-                mcp_servers: None,
-                plugins: None,
-                marketplaces: None,
-                apps: None,
-                rules: None,
-                enforce_residency: None,
-                network: None,
-                application: None,
-                permissions: None,
-                models: None,
-                guardian_policy_config: None,
-                guardian_extra_policy: Some(Sourced::new(
-                    "Use the managed extra policy.".to_string(),
-                    existing_source,
-                )),
-                ..Default::default()
-            }
-        );
-        Ok(())
     }
 
     #[test]
@@ -5555,6 +5132,226 @@ command = "python3 /enterprise/hooks/pre.py"
                 reason: "rules prefix_rule at index 0 is missing a decision".to_string(),
             }
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn exact_requirement_for_config_path_matches_overlapping_paths() {
+        let managed_path = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed"))
+            .expect("managed path should be absolute");
+        let requirements = ConfigRequirementsToml {
+            cli_auth_credentials_store: Some(AuthCredentialsStoreMode::Ephemeral),
+            chatgpt_base_url: Some("https://managed.example/backend-api/".to_string()),
+            sqlite_home: Some(managed_path.clone()),
+            log_dir: Some(managed_path.clone()),
+            model_catalog_json: Some(managed_path),
+            check_for_update_on_startup: Some(false),
+            allow_login_shell: Some(false),
+            feedback: Some(FeedbackConfigToml {
+                enabled: Some(false),
+            }),
+            ..Default::default()
+        };
+        let cases: &[(&[&str], Option<&str>)] = &[
+            (
+                &["cli_auth_credentials_store"],
+                Some("cli_auth_credentials_store"),
+            ),
+            (&["chatgpt_base_url"], Some("chatgpt_base_url")),
+            (&["sqlite_home"], Some("sqlite_home")),
+            (&["log_dir"], Some("log_dir")),
+            (&["model_catalog_json"], Some("model_catalog_json")),
+            (
+                &["check_for_update_on_startup"],
+                Some("check_for_update_on_startup"),
+            ),
+            (&["allow_login_shell"], Some("allow_login_shell")),
+            (&["feedback", "enabled"], Some("feedback.enabled")),
+            (&[], Some("sqlite_home")),
+            (&["feedback"], Some("feedback.enabled")),
+            (&["feedback", "other"], None),
+            (&["windows", "sandbox"], None),
+        ];
+
+        for (segments, expected) in cases {
+            let segments = segments.iter().map(ToString::to_string).collect::<Vec<_>>();
+            assert_eq!(
+                requirements.exact_requirement_for_config_path(&segments),
+                *expected,
+                "segments: {segments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn merge_unset_fields_copies_every_field_and_sets_sources() {
+        let mut target = ConfigRequirementsWithSources::default();
+        let source = RequirementSource::LegacyManagedConfigTomlFromMdm;
+
+        let allowed_approval_policies = vec![AskForApproval::UnlessTrusted, AskForApproval::Never];
+        let allowed_approvals_reviewers =
+            vec![ApprovalsReviewer::AutoReview, ApprovalsReviewer::User];
+        let allowed_sandbox_modes = vec![
+            SandboxModeRequirement::WorkspaceWrite,
+            SandboxModeRequirement::DangerFullAccess,
+        ];
+        let allowed_web_search_modes = vec![
+            WebSearchModeRequirement::Cached,
+            WebSearchModeRequirement::Live,
+        ];
+        let feature_requirements = FeatureRequirementsToml {
+            entries: BTreeMap::from([("personality".to_string(), true)]),
+            ..Default::default()
+        };
+        let browser_use = BrowserUseRequirementsToml {
+            extension: None,
+            allow_webmcp: None,
+            allow_history_access: Some(false),
+            disable_auto_review: Some(true),
+            allow_global_persistent_approval: None,
+            default_origin_policy: None,
+            origins: None,
+        };
+        let computer_use = ComputerUseRequirementsToml {
+            allow_locked_computer_use: Some(false),
+            allow_persistent_approval: Some(false),
+            default_app_access: None,
+            macos: None,
+            windows: None,
+        };
+        let auto_review = AutoReviewRequirementsToml {
+            required_on_models: Some(vec!["managed-model".to_string()]),
+            ignore_rules: None,
+        };
+        let models = ModelsRequirementsToml {
+            new_thread: Some(NewThreadModelDefaultsToml {
+                model: Some("managed-model".to_string()),
+                model_reasoning_effort: Some(ReasoningEffort::Medium),
+                service_tier: Some("fast".to_string()),
+            }),
+        };
+        let sqlite_home = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-state"))
+            .expect("managed sqlite home should be absolute");
+        let log_dir = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-logs"))
+            .expect("managed log dir should be absolute");
+        let model_catalog_json =
+            AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-models.json"))
+                .expect("managed model catalog path should be absolute");
+        let feedback = FeedbackConfigToml {
+            enabled: Some(false),
+        };
+        let windows = WindowsRequirementsToml {
+            allowed_sandbox_implementations: Some(vec![WindowsSandboxImplementationToml::Elevated]),
+            allow_mxc: None,
+            require_mxc: Some(true),
+        };
+        let enforce_residency = ResidencyRequirement::Us;
+        let additional_developer_instructions = "Follow the company policy.".to_string();
+        let guardian_policy_config = "Use the company-managed guardian policy.".to_string();
+        let guardian_extra_policy = "Use the company-managed extra policy.".to_string();
+
+        // Intentionally constructed without `..Default::default()` so adding a new field to
+        // `ConfigRequirementsToml` forces this test to be updated.
+        let other = ConfigRequirementsToml {
+            config_server: None,
+            allowed_login_methods: Some(vec![ForcedLoginMethod::Chatgpt]),
+            allowed_chatgpt_workspaces: Some(vec!["managed-workspace".to_string()]),
+            cli_auth_credentials_store: Some(AuthCredentialsStoreMode::Keyring),
+            chatgpt_base_url: Some("https://managed.example/backend-api/".to_string()),
+            sqlite_home: Some(sqlite_home.clone()),
+            unsafe_enforce_sqlite_journal_mode: Some(true),
+            log_dir: Some(log_dir.clone()),
+            model_catalog_json: Some(model_catalog_json.clone()),
+            model_provider: Some("gateway".to_string()),
+            model_providers: Some(HashMap::new()),
+            check_for_update_on_startup: Some(false),
+            allow_login_shell: Some(false),
+            feedback: Some(feedback.clone()),
+            allowed_approval_policies: Some(allowed_approval_policies.clone()),
+            allowed_approvals_reviewers: Some(allowed_approvals_reviewers.clone()),
+            allowed_sandbox_modes: Some(allowed_sandbox_modes.clone()),
+            allowed_permission_profiles: Some(BTreeMap::from([("managed".to_string(), true)])),
+            default_permissions: Some("managed".to_string()),
+            remote_sandbox_config: None,
+            allowed_web_search_modes: Some(allowed_web_search_modes.clone()),
+            allow_managed_hooks_only: Some(true),
+            allow_browser_and_computer_use: Some(false),
+            allow_appshots: Some(false),
+
+            computer_use: Some(computer_use.clone()),
+            browser_use: Some(browser_use.clone()),
+            in_app_browser: None,
+            windows: Some(windows.clone()),
+            feature_requirements: Some(feature_requirements.clone()),
+            hooks: None,
+            mcp_servers: None,
+            plugins: None,
+            marketplaces: None,
+            otel: Some(Box::new(OtelRequirementsToml {
+                environment: Some("managed".to_string()),
+                ..Default::default()
+            })),
+            apps: None,
+            rules: None,
+            enforce_residency: Some(enforce_residency),
+            network: None,
+            application: None,
+            permissions: None,
+            auto_review: Some(auto_review.clone()),
+            models: Some(models.clone()),
+            additional_developer_instructions: Some(additional_developer_instructions.clone()),
+            guardian_policy_config: Some(guardian_policy_config.clone()),
+            guardian_extra_policy: Some(guardian_extra_policy.clone()),
+        };
+
+        target.merge_unset_fields(source.clone(), other);
+    }
+
+    #[test]
+    fn merge_unset_fields_fills_missing_values() -> Result<()> {
+        let source: ConfigRequirementsToml = from_str(
+            r#"
+                allowed_approval_policies = ["on-request"]
+            "#,
+        )?;
+
+        let source_location = RequirementSource::MdmManagedPreferences {
+            domain: "com.codex".to_string(),
+            key: "allowed_approval_policies".to_string(),
+        };
+
+        let mut empty_target = ConfigRequirementsWithSources::default();
+        empty_target.merge_unset_fields(source_location.clone(), source);
+
+        Ok(())
+    }
+
+    #[test]
+    fn merge_unset_fields_does_not_overwrite_existing_values() -> Result<()> {
+        let existing_source = RequirementSource::LegacyManagedConfigTomlFromMdm;
+        let mut populated_target = ConfigRequirementsWithSources::default();
+        let populated_requirements: ConfigRequirementsToml = from_str(
+            r#"
+                unsafe_enforce_sqlite_journal_mode = true
+                allowed_approval_policies = ["never"]
+                guardian_extra_policy = "Use the managed extra policy."
+            "#,
+        )?;
+        populated_target.merge_unset_fields(existing_source.clone(), populated_requirements);
+
+        let source: ConfigRequirementsToml = from_str(
+            r#"
+                unsafe_enforce_sqlite_journal_mode = false
+                allowed_approval_policies = ["on-request"]
+                guardian_extra_policy = "Use the lower-priority extra policy."
+            "#,
+        )?;
+        let source_location = RequirementSource::MdmManagedPreferences {
+            domain: "com.codex".to_string(),
+            key: "allowed_approval_policies".to_string(),
+        };
+        populated_target.merge_unset_fields(source_location, source);
 
         Ok(())
     }

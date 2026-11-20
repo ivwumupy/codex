@@ -2,8 +2,6 @@ use super::*;
 use crate::status::StatusAccountDisplay;
 use assert_matches::assert_matches;
 use codex_config::types::ModelAvailabilityNuxConfig;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::openai_models::ModelAvailabilityNux;
 use pretty_assertions::assert_eq;
@@ -11,16 +9,6 @@ use tokio::sync::mpsc::unbounded_channel;
 
 fn all_model_presets() -> Vec<ModelPreset> {
     crate::test_support::TEST_MODEL_PRESETS.clone()
-}
-
-fn bedrock_model_presets() -> Vec<ModelPreset> {
-    create_model_provider(
-        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
-        /*auth_manager*/ None,
-    )
-    .models_manager_without_cache(/*config_model_catalog*/ None)
-    .try_list_models()
-    .expect("Bedrock model catalog")
 }
 
 #[tokio::test]
@@ -462,12 +450,6 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
         ("gpt-5.6-luna", "gpt-6-luna", "openai", all_model_presets()),
         ("gpt-5.6-terra", "gpt-6-sol", "openai", all_model_presets()),
         ("gpt-5.6-sol", "gpt-6-sol", "openai", all_model_presets()),
-        (
-            "openai.gpt-5.4",
-            "openai.gpt-6-sol",
-            "amazon-bedrock",
-            bedrock_model_presets(),
-        ),
     ] {
         let codex_home = tempdir()?;
         std::fs::write(
@@ -584,10 +566,6 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
     Meet GPT-6 Sol
 
     Our latest Sol is more intelligent and more efficient so your usage limits go further. This model is a great daily driver for complex tasks, especially coding.
-
-    GPT-5.4 on Amazon Bedrock is no longer offered in Codex
-
-    Codex now uses GPT-6 Sol on Amazon Bedrock in place of GPT-5.4 on Amazon Bedrock. Switch to GPT-6 Sol on Amazon Bedrock to continue.
     ");
     Ok(())
 }
@@ -602,18 +580,8 @@ async fn model_migration_prompt_respects_hide_flag_and_self_target() {
             all_model_presets(),
         ),
         ("gpt-5.4", "gpt-5.6-terra", "gpt-6-sol", all_model_presets()),
-        (
-            "openai.gpt-5.4",
-            "openai.gpt-5.6-terra",
-            "openai.gpt-6-sol",
-            bedrock_model_presets(),
-        ),
     ] {
-        let provider_id = if model == "openai.gpt-5.4" {
-            "amazon-bedrock"
-        } else {
-            "openai"
-        };
+        let provider_id = "openai";
         // A previously acknowledged intermediate upgrade must not hide the new target.
         let mut seen = BTreeMap::from([(model.to_string(), previous_target.to_string())]);
         assert!(should_show_model_migration_prompt(
@@ -646,17 +614,8 @@ async fn model_migration_prompt_skips_when_target_missing_or_hidden() {
     for (model, target_model, mut available) in [
         ("gpt-5.4-mini", "gpt-6-luna", all_model_presets()),
         ("gpt-5.4", "gpt-6-sol", all_model_presets()),
-        (
-            "openai.gpt-5.4",
-            "openai.gpt-6-sol",
-            bedrock_model_presets(),
-        ),
     ] {
-        let provider_id = if model == "openai.gpt-5.4" {
-            "amazon-bedrock"
-        } else {
-            "openai"
-        };
+        let provider_id = "openai";
         let target = available
             .iter_mut()
             .find(|preset| preset.model == target_model)

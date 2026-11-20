@@ -33,7 +33,7 @@ pub(super) fn has_external_auth(config: &TomlValue) -> bool {
         .is_some_and(|url| {
             !url.username().is_empty() || url.password().is_some() || url.query().is_some()
         })
-        || ["auth", "gateway_oauth", "aws", "experimental_bearer_token"]
+        || ["auth", "gateway_oauth", "experimental_bearer_token"]
             .iter()
             .any(|key| config.get(key).is_some())
         || config

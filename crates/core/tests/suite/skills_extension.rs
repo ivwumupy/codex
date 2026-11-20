@@ -120,16 +120,13 @@ use opentelemetry_sdk::metrics::data::MetricData;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
-use sha1::Digest;
 use tempfile::TempDir;
 use test_case::test_case;
 use tokio::time::Duration;
-use tokio::time::Instant;
 use toml::toml;
 use tracing::Level;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_test::internal::MockWriter;
-use wiremock::MockServer;
 
 #[path = "skills_extension/cloud_skill_tests.rs"]
 mod cloud_skill_tests;

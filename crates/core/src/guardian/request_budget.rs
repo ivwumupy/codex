@@ -149,8 +149,7 @@ pub(crate) async fn prepare_prompt(
         }
         restored = session
             .prepare_annotated_conversation_items_for_history(step.turn.as_ref(), model, messages)
-            .await
-            .0;
+            .await;
         prompt
             .input
             .extend(restored.iter().map(|envelope| envelope.item.clone()));

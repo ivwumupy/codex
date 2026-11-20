@@ -333,7 +333,7 @@ pub async fn build_exec_request(
     params: ExecParams,
     permission_profile: &PermissionProfile,
     sandbox_cwd: &AbsolutePathBuf,
-    windows_sandbox_workspace_roots: &[PathUri],
+    _windows_sandbox_workspace_roots: &[PathUri],
     codex_linux_sandbox_exe: &Option<PathBuf>,
     codex_self_exe: &Option<PathBuf>,
     windows_sandbox_type: SandboxType,

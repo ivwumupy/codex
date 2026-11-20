@@ -90,7 +90,7 @@ impl UsageNoticeState {
         source: RateLimitSnapshotSource,
         plan_type: Option<PlanType>,
     ) -> bool {
-        if matches!(source, RateLimitSnapshotSource::AccountUsage) && self.applying_stale_read {
+        if !matches!(source, RateLimitSnapshotSource::RollingUpdate) && self.applying_stale_read {
             return false;
         }
         let previous = self.current();
@@ -175,10 +175,12 @@ impl ChatWidget {
             .line(width, Local::now(), self.clock_format)
     }
 
+    #[cfg(test)]
     pub(crate) fn start_usage_notice_read(&mut self, request_id: u64) {
         self.usage_notice_state.latest_read_id = request_id;
     }
 
+    #[cfg(test)]
     pub(crate) fn apply_usage_notice_read(&mut self, request_id: u64) {
         // A newer failed read does not invalidate an older successful one. Only rolling
         // updates received since that read began make it too old to confirm recovery.

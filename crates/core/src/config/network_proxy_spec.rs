@@ -19,8 +19,6 @@ use codex_network_proxy::NetworkProxyHandle;
 use codex_network_proxy::NetworkProxyState;
 use codex_network_proxy::build_config_state;
 use codex_network_proxy::host_and_port_from_network_addr;
-#[cfg(any(target_os = "windows", test))]
-use codex_network_proxy::managed_proxy_ports;
 use codex_network_proxy::normalize_host;
 use codex_network_proxy::validate_policy_against_constraints;
 use codex_protocol::models::PermissionProfile;
@@ -116,16 +114,6 @@ impl NetworkProxySpec {
         self.config.enable_socks5
     }
 
-    #[cfg(any(target_os = "windows", test))]
-    pub(crate) fn configured_proxy_ports(&self) -> std::io::Result<Vec<u16>> {
-        managed_proxy_ports(&self.config).map_err(std::io::Error::other)
-    }
-
-    #[cfg(any(target_os = "windows", test))]
-    pub(crate) fn allow_local_binding(&self) -> bool {
-        self.config.allow_local_binding()
-    }
-
     pub fn from_config_and_constraints(
         config: NetworkProxyConfig,
         requirements: Option<NetworkConstraints>,
@@ -145,19 +133,6 @@ impl NetworkProxySpec {
         } else {
             (config, NetworkProxyConstraints::default())
         };
-        if config.enabled
-            && config.mitm
-            && !config.credential_broker
-            && config
-                .mitm_hooks
-                .iter()
-                .any(|hook| hook.actions.aws_sigv4.is_some())
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "local AWS SigV4 hooks require features.credential_masking for protected shell snapshots",
-            ));
-        }
         validate_policy_against_constraints(&config, &constraints).map_err(|err| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

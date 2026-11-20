@@ -815,10 +815,7 @@ pub fn validate_reserved_model_provider_ids(
                         ..Default::default()
                     };
             }
-            !matches!(
-                key.as_str(),
-                AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
-            ) && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
+            RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
         })
         .map(|key| format!("`{key}`"))
         .collect::<Vec<_>>();
@@ -839,33 +836,10 @@ pub fn validate_model_providers(
 ) -> Result<(), String> {
     validate_reserved_model_provider_ids(model_providers)?;
     for (key, provider) in model_providers {
-        if matches!(
-            key.as_str(),
-            AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
-        ) {
-            provider
-                .validate_bedrock_override()
-                .map_err(|message| format!("model_providers.{key} {message}"))?;
-        } else if provider.aws.is_some() {
-            return Err(format!(
-                "model_providers.{key}: provider aws is only supported for \
-`{AMAZON_BEDROCK_PROVIDER_ID}` or `{AMAZON_BEDROCK_RUNTIME_PROVIDER_ID}`"
-            ));
-        }
-        if !matches!(
-            key.as_str(),
-            AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
-        ) && key != "openai"
-            && provider.name.trim().is_empty()
-        {
+        if key != OPENAI_PROVIDER_ID && provider.name.trim().is_empty() {
             return Err(format!(
                 "model_providers.{key}: provider name must not be empty"
             ));
-        }
-        if key == GCP_PROVIDER_ID {
-            provider
-                .validate_gcp_credential_file()
-                .map_err(|message| format!("model_providers.{key}: {message}"))?;
         }
         provider
             .validate()
@@ -884,10 +858,6 @@ where
     validate_model_providers(&model_providers).map_err(serde::de::Error::custom)?;
     Ok(model_providers)
 }
-
-#[cfg(test)]
-#[path = "bedrock_runtime_tests.rs"]
-mod bedrock_runtime_tests;
 
 #[cfg(test)]
 mod tests {
@@ -980,65 +950,5 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("TOML list of strings"));
         assert!(message.contains("comma-separated strings are not supported"));
-    }
-
-    #[test]
-    fn amazon_bedrock_auth_command_must_not_be_empty() {
-        let err = toml::from_str::<ConfigToml>(
-            r#"
-[model_providers.amazon-bedrock.auth]
-command = "   "
-"#,
-        )
-        .expect_err("empty Amazon Bedrock auth command should be rejected");
-
-        assert!(
-            err.to_string().contains(
-                "model_providers.amazon-bedrock: provider auth.command must not be empty"
-            )
-        );
-    }
-
-    #[test]
-    fn gcp_provider_accepts_partial_endpoint_and_auth_overrides() {
-        let config = toml::from_str::<ConfigToml>(
-            r#"
-[model_providers.gcp]
-base_url = "https://vertex.example.com/v1"
-
-[model_providers.gcp.auth]
-command = "print-token"
-"#,
-        )
-        .expect("partial GCP provider overrides should deserialize");
-
-        let provider = config
-            .model_providers
-            .get(GCP_PROVIDER_ID)
-            .expect("GCP overrides should be retained");
-        assert_eq!(
-            (
-                provider.base_url.as_deref(),
-                provider.auth.as_ref().map(|auth| auth.command.as_str()),
-            ),
-            (Some("https://vertex.example.com/v1"), Some("print-token"))
-        );
-    }
-
-    #[test]
-    fn gcp_provider_rejects_relative_credential_file() {
-        for credential_file in ["", "adc.json", "../adc.json"] {
-            let error = toml::from_str::<ConfigToml>(&format!(
-                r#"
-[model_providers.gcp]
-credential_file = "{credential_file}"
-"#,
-            ))
-            .expect_err("GCP overrides must validate credential paths before merging defaults");
-
-            assert!(error.to_string().contains(
-                "model_providers.gcp: provider credential_file must be an absolute path"
-            ));
-        }
     }
 }

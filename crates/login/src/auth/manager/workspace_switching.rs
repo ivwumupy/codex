@@ -26,22 +26,23 @@ impl std::fmt::Debug for WorkspaceSwitch {
     }
 }
 
+#[cfg(test)]
 /// Binds a browser callback to the managed login that requested the workspace.
 #[derive(Clone)]
 pub struct WorkspaceLogin {
     storage: Arc<dyn AuthStorageBackend>,
     original: AuthDotJson,
     pub(crate) workspace_id: String,
-    pub(crate) email: Option<String>,
-    pub(crate) connection: Option<String>,
 }
 
+#[cfg(test)]
 impl std::fmt::Debug for WorkspaceLogin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WorkspaceLogin").finish_non_exhaustive()
     }
 }
 
+#[cfg(test)]
 impl WorkspaceLogin {
     pub(crate) fn save(&self, mut updated: AuthDotJson) -> io::Result<()> {
         let previous = self
@@ -71,11 +72,11 @@ impl WorkspaceLogin {
 }
 
 impl CodexAuth {
+    #[cfg(test)]
     pub fn workspace_login(
         &self,
         session_id: &str,
         workspace_id: String,
-        connection: Option<String>,
     ) -> io::Result<WorkspaceLogin> {
         let Self::Chatgpt(auth) = self else {
             return Err(io::Error::other(
@@ -92,8 +93,6 @@ impl CodexAuth {
             storage: auth.storage().clone(),
             original,
             workspace_id,
-            email: self.get_account_email(),
-            connection,
         })
     }
 

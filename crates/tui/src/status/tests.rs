@@ -35,7 +35,6 @@ use codex_app_server_protocol::RateLimitWindow;
 use codex_app_server_protocol::SpendControlLimitSnapshot;
 use codex_config::LoaderOverrides;
 use codex_config::types::AuthCredentialsStoreMode;
-use codex_model_provider_info::ModelProviderAwsAuthInfo;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_models_manager::test_support::get_model_offline_for_tests;
@@ -773,16 +772,11 @@ async fn status_uses_server_provider_id_and_auth_requirement() {
     let mut config = test_config(&temp_home).await;
     config.model = Some("gpt-5.6-sol".to_string());
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
-    config.model_provider_id = "amazon-bedrock".to_string();
-    config.model_provider =
-        ModelProviderInfo::create_amazon_bedrock_provider(Some(ModelProviderAwsAuthInfo {
-            profile: None,
-            region: Some("eu-west-1".to_string()),
-            credential_export: None,
-            auth_refresh: None,
-        }));
-    config.model_provider.base_url =
-        Some("https://bedrock-mantle.us-east-1.api.aws/openai/v1".to_string());
+    config.model_provider_id = "local".to_string();
+    config.model_provider = ModelProviderInfo {
+        name: "Local".into(),
+        ..Default::default()
+    };
     let usage = TokenUsage::default();
     let captured_at = chrono::Local
         .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)

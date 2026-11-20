@@ -398,7 +398,6 @@ enum NetworkModeSchema {
 #[serde(default, deny_unknown_fields)]
 pub struct NetworkMitmActionToml {
     pub body_secret_substitution: Option<codex_network_proxy::BodySecretSubstitutionConfig>,
-    pub aws_sigv4: Option<codex_network_proxy::AwsSigV4Config>,
     pub strip_request_headers: Vec<String>,
     pub inject_request_headers: Vec<NetworkMitmInjectedHeaderToml>,
 }
@@ -448,9 +447,7 @@ impl NetworkMitmToml {
                     .iter()
                     .any(|header| header.placeholder.is_some());
                 if self.version.is_none()
-                    && (uses_placeholder
-                        || action.aws_sigv4.is_some()
-                        || action.body_secret_substitution.is_some())
+                    && (uses_placeholder || action.body_secret_substitution.is_some())
                 {
                     return Err("scoped MITM actions require network.mitm.version = 2".to_string());
                 }
@@ -467,21 +464,6 @@ impl NetworkMitmToml {
         };
 
         for (hook_name, hook) in hooks {
-            let signing_count = hook
-                .action
-                .iter()
-                .filter(|name| {
-                    self.actions
-                        .as_ref()
-                        .and_then(|actions| actions.get(*name))
-                        .is_some_and(|action| action.aws_sigv4.is_some())
-                })
-                .count();
-            if signing_count > 1 {
-                return Err(format!(
-                    "network.mitm.hooks.{hook_name} must select at most one AWS signing action"
-                ));
-            }
             let substitution_count = hook
                 .action
                 .iter()
@@ -529,7 +511,6 @@ impl NetworkMitmToml {
 impl NetworkMitmActionToml {
     pub fn is_empty(&self) -> bool {
         self.body_secret_substitution.is_none()
-            && self.aws_sigv4.is_none()
             && self.strip_request_headers.is_empty()
             && self.inject_request_headers.is_empty()
     }
@@ -631,9 +612,6 @@ impl NetworkMitmHookToml {
             if let Some(action) = actions_by_name.get(action_name) {
                 if action.body_secret_substitution.is_some() {
                     selected.body_secret_substitution = action.body_secret_substitution.clone();
-                }
-                if action.aws_sigv4.is_some() {
-                    selected.aws_sigv4 = action.aws_sigv4.clone();
                 }
                 selected
                     .strip_request_headers

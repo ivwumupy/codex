@@ -14,7 +14,6 @@ impl ChatWidget {
         started: codex_app_server_protocol::ItemStartedNotification,
         parts: Option<(Vec<String>, Vec<String>)>,
     ) {
-        let turn_id = started.turn_id;
         let ThreadItemPayload::Reasoning {
             id,
             summary,

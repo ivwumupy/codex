@@ -105,8 +105,6 @@ pub(crate) struct SkillAnalytics {
     telemetry: Option<Arc<SessionTelemetry>>,
     metrics: Option<Arc<dyn ExtensionMetrics>>,
     turn_metrics: Option<Arc<SkillTurnMetrics>>,
-    thread_id: String,
-    product_client_id: String,
 }
 
 impl SkillAnalytics {
@@ -114,7 +112,7 @@ impl SkillAnalytics {
         session_store: &ExtensionData,
         thread_store: &ExtensionData,
     ) -> Option<Self> {
-        let originator = thread_store.get::<ThreadOriginator>()?;
+        thread_store.get::<ThreadOriginator>()?;
 
         Some(Self {
             telemetry: session_store.get::<SessionTelemetry>(),
@@ -128,8 +126,6 @@ impl SkillAnalytics {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .upgrade(),
-            thread_id: thread_store.level_id().to_string(),
-            product_client_id: originator.0.clone(),
         })
     }
 

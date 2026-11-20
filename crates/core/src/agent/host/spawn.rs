@@ -14,7 +14,6 @@ use crate::agent::history::prepare_forked_history;
 use crate::agent::types::AgentMetadata;
 use crate::agent::types::LiveAgent;
 use crate::codex_thread::CodexThread;
-use crate::session::session::AppServerClientMetadata;
 use crate::thread_manager::StartThreadOptions;
 use crate::thread_spawn::ChildSpawnSettings;
 use crate::thread_spawn::ThreadSpawnError;
@@ -32,11 +31,7 @@ use std::sync::Arc;
 async fn prepare_spawn_inputs(
     parent: &CodexThread,
     request: ChildSpawnSettings,
-) -> Result<(
-    StartThreadOptions,
-    PreparedChildInheritance,
-    AppServerClientMetadata,
-)> {
+) -> Result<(StartThreadOptions, PreparedChildInheritance)> {
     let runtime = &parent.session.services.local_agent_runtime;
     let _membership = runtime.admit_start()?;
     let state = runtime.upgrade()?;
@@ -87,14 +82,13 @@ async fn prepare_spawn_inputs(
         .thread_extension_init
         .insert(HostToolInvocationLookup);
     thread_options.inherited_environments = options.environments;
-    let client_metadata = parent.session.app_server_client_metadata().await;
     let inheritance = PreparedChildInheritance {
         instructions,
         exec_policy,
         originator: parent.session.originator().await,
         attachment_source: options.fork_mode.is_some().then_some(caller),
     };
-    Ok((thread_options, inheritance, client_metadata))
+    Ok((thread_options, inheritance))
 }
 
 pub(super) async fn create_spawn(
@@ -104,8 +98,7 @@ pub(super) async fn create_spawn(
     task_name: AgentPath,
     reservation: HostThreadSpawnReservation,
 ) -> std::result::Result<ThreadSpawnResult, ThreadSpawnError> {
-    let (mut options, inheritance, client_metadata) =
-        Box::pin(prepare_spawn_inputs(parent, request)).await?;
+    let (mut options, inheritance) = Box::pin(prepare_spawn_inputs(parent, request)).await?;
     let caller = parent.session.thread_id;
     let session_id = parent.session.session_id();
     if reservation.control.identity() != session_id

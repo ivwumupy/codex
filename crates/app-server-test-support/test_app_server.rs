@@ -30,7 +30,6 @@ use codex_app_server_protocol::CommandExecWriteParams;
 use codex_app_server_protocol::ConfigBatchWriteParams;
 use codex_app_server_protocol::ConfigReadParams;
 use codex_app_server_protocol::ConfigValueWriteParams;
-use codex_app_server_protocol::ConsumeAccountRateLimitResetCreditParams;
 use codex_app_server_protocol::ExperimentalFeatureListParams;
 use codex_app_server_protocol::FsCopyParams;
 use codex_app_server_protocol::FsCreateDirectoryParams;
@@ -54,7 +53,6 @@ use codex_app_server_protocol::JSONRPCNotification;
 use codex_app_server_protocol::JSONRPCRequest;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::ListMcpServerStatusParams;
-use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::MarketplaceAddParams;
 use codex_app_server_protocol::MarketplaceRemoveParams;
 use codex_app_server_protocol::MarketplaceUpgradeParams;
@@ -69,17 +67,13 @@ use codex_app_server_protocol::PluginInstalledParams;
 use codex_app_server_protocol::PluginListParams;
 use codex_app_server_protocol::PluginReadParams;
 use codex_app_server_protocol::PluginSearchParams;
-use codex_app_server_protocol::PluginSkillReadParams;
 use codex_app_server_protocol::PluginUninstallParams;
 use codex_app_server_protocol::ProcessKillParams;
 use codex_app_server_protocol::ProcessSpawnParams;
 use codex_app_server_protocol::ProjectImportParams;
 use codex_app_server_protocol::ProjectListParams;
 use codex_app_server_protocol::ProjectReadParams;
-use codex_app_server_protocol::RemoteControlClientsListParams;
-use codex_app_server_protocol::RemoteControlClientsRevokeParams;
-use codex_app_server_protocol::RemoteControlPairingStartParams;
-use codex_app_server_protocol::RemoteControlPairingStatusParams;
+
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ReviewStartParams;
 use codex_app_server_protocol::SendAddCreditsNudgeEmailParams;
@@ -462,18 +456,6 @@ impl TestAppServer {
             .await
     }
 
-    /// Send an `account/rateLimitResetCredit/consume` JSON-RPC request.
-    pub async fn send_consume_account_rate_limit_reset_credit_request(
-        &mut self,
-        params: ConsumeAccountRateLimitResetCreditParams,
-    ) -> anyhow::Result<i64> {
-        self.send_request(
-            "account/rateLimitResetCredit/consume",
-            Some(serde_json::to_value(params)?),
-        )
-        .await
-    }
-
     /// Send an `account/sendAddCreditsNudgeEmail` JSON-RPC request.
     pub async fn send_add_credits_nudge_email_request(
         &mut self,
@@ -500,13 +482,13 @@ impl TestAppServer {
         chatgpt_account_id: String,
         chatgpt_plan_type: Option<String>,
     ) -> anyhow::Result<i64> {
-        let params = LoginAccountParams::ChatgptAuthTokens {
-            access_token,
-            chatgpt_account_id,
-            chatgpt_plan_type,
-        };
-        self.send_login_account_request(serde_json::to_value(params)?)
-            .await
+        self.send_login_account_request(serde_json::json!({
+            "type": "chatgptAuthTokens",
+            "accessToken": access_token,
+            "chatgptAccountId": chatgpt_account_id,
+            "chatgptPlanType": chatgpt_plan_type,
+        }))
+        .await
     }
 
     /// Send a `thread/start` JSON-RPC request.
@@ -796,81 +778,6 @@ impl TestAppServer {
             .await
     }
 
-    /// Send a `remoteControl/enable` JSON-RPC request.
-    pub async fn send_remote_control_enable_request(&mut self) -> anyhow::Result<i64> {
-        self.send_request("remoteControl/enable", /*params*/ None)
-            .await
-    }
-
-    /// Send a runtime-only `remoteControl/enable` JSON-RPC request.
-    pub async fn send_remote_control_ephemeral_enable_request(&mut self) -> anyhow::Result<i64> {
-        self.send_request(
-            "remoteControl/enable",
-            Some(serde_json::json!({ "ephemeral": true })),
-        )
-        .await
-    }
-
-    /// Send a `remoteControl/disable` JSON-RPC request.
-    pub async fn send_remote_control_disable_request(&mut self) -> anyhow::Result<i64> {
-        self.send_request("remoteControl/disable", /*params*/ None)
-            .await
-    }
-
-    /// Send a runtime-only `remoteControl/disable` JSON-RPC request.
-    pub async fn send_remote_control_ephemeral_disable_request(&mut self) -> anyhow::Result<i64> {
-        self.send_request(
-            "remoteControl/disable",
-            Some(serde_json::json!({ "ephemeral": true })),
-        )
-        .await
-    }
-
-    /// Send a `remoteControl/status/read` JSON-RPC request.
-    pub async fn send_remote_control_status_read_request(&mut self) -> anyhow::Result<i64> {
-        self.send_request("remoteControl/status/read", /*params*/ None)
-            .await
-    }
-
-    /// Send a `remoteControl/pairing/start` JSON-RPC request.
-    pub async fn send_remote_control_pairing_start_request(
-        &mut self,
-        params: RemoteControlPairingStartParams,
-    ) -> anyhow::Result<i64> {
-        let params = Some(serde_json::to_value(params)?);
-        self.send_request("remoteControl/pairing/start", params)
-            .await
-    }
-
-    /// Send a `remoteControl/pairing/status` JSON-RPC request.
-    pub async fn send_remote_control_pairing_status_request(
-        &mut self,
-        params: RemoteControlPairingStatusParams,
-    ) -> anyhow::Result<i64> {
-        let params = Some(serde_json::to_value(params)?);
-        self.send_request("remoteControl/pairing/status", params)
-            .await
-    }
-
-    /// Send a `remoteControl/client/list` JSON-RPC request.
-    pub async fn send_remote_control_clients_list_request(
-        &mut self,
-        params: RemoteControlClientsListParams,
-    ) -> anyhow::Result<i64> {
-        let params = Some(serde_json::to_value(params)?);
-        self.send_request("remoteControl/client/list", params).await
-    }
-
-    /// Send a `remoteControl/client/revoke` JSON-RPC request.
-    pub async fn send_remote_control_clients_revoke_request(
-        &mut self,
-        params: RemoteControlClientsRevokeParams,
-    ) -> anyhow::Result<i64> {
-        let params = Some(serde_json::to_value(params)?);
-        self.send_request("remoteControl/client/revoke", params)
-            .await
-    }
-
     /// Send an `app/list` JSON-RPC request.
     pub async fn send_apps_list_request(&mut self, params: AppsListParams) -> anyhow::Result<i64> {
         let params = Some(serde_json::to_value(params)?);
@@ -1016,15 +923,6 @@ impl TestAppServer {
     ) -> anyhow::Result<i64> {
         let params = Some(serde_json::to_value(params)?);
         self.send_request("plugin/read", params).await
-    }
-
-    /// Send a `plugin/skill/read` JSON-RPC request.
-    pub async fn send_plugin_skill_read_request(
-        &mut self,
-        params: PluginSkillReadParams,
-    ) -> anyhow::Result<i64> {
-        let params = Some(serde_json::to_value(params)?);
-        self.send_request("plugin/skill/read", params).await
     }
 
     /// Send an `mcpServerStatus/list` JSON-RPC request.
@@ -1392,20 +1290,6 @@ impl TestAppServer {
             "apiKey": api_key,
         });
         self.send_login_account_request(params).await
-    }
-
-    /// Send an `account/login/start` JSON-RPC request for managed Amazon Bedrock login.
-    pub async fn send_login_account_amazon_bedrock_request(
-        &mut self,
-        api_key: &str,
-        region: &str,
-    ) -> anyhow::Result<i64> {
-        let params = serde_json::json!({
-            "type": "amazonBedrock",
-            "apiKey": api_key,
-            "region": region,
-        });
-        self.send_request("account/login/start", Some(params)).await
     }
 
     /// Send an `account/login/start` JSON-RPC request for ChatGPT login.

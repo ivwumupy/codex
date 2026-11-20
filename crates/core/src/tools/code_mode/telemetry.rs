@@ -1,7 +1,6 @@
 //! Code-mode tool timing and tracing for handlers and queued nested dispatch.
 
 use codex_protocol::ThreadId;
-use codex_protocol::turn_timing::TurnAnalyticsMetadata;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::Span;

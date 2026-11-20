@@ -80,53 +80,44 @@ fn provider_edits(
 ) -> Result<(String, Vec<ApiConfigEdit>), ConfigManagerError> {
     let effective = layers.effective_config();
     let configured = effective.get("model_providers");
-    let (provider_id, mut fields) = match &params.settings {
-        ProviderSettingsPatch::CustomGateway(patch) => {
-            let target = patch.provider_id.as_deref();
-            if target
-                .is_some_and(|id| builtins.contains_key(id) || is_removed_cloud_provider_id(id))
-            {
-                return Err(invalid(
-                    "A custom provider or gateway cannot use a built-in provider ID.",
-                ));
-            }
-            let existing = target.and_then(|id| configured?.get(id));
-            if target.is_some() && existing.is_none() {
-                return Err(ConfigManagerError::write(
-                    ConfigWriteErrorCode::ConfigPathNotFound,
-                    "Unknown provider ID.",
-                ));
-            }
-            let name = validate_custom_patch(patch, existing)?;
-            let id = if let Some(id) = target {
-                id.to_owned()
-            } else {
-                if patch.base_url.as_ref().and_then(Option::as_deref).is_none() {
-                    return Err(invalid(
-                        "A base URL is required to create a custom provider.",
-                    ));
-                }
-                let default_id = layers
-                    .required_model_provider()
-                    .or_else(|| effective.get("model_provider")?.as_str());
-                allocate_custom_id(name, |id| {
-                    builtins.contains_key(id)
-                        || is_removed_cloud_provider_id(id)
-                        || configured.is_some_and(|table| table.get(id).is_some())
-                        || default_id == Some(id)
-                })
-            };
-            let mut fields =
-                patch_fields([("base_url", &patch.base_url), ("env_key", &patch.env_key)]);
-            if patch.name.is_some() {
-                fields.push(("name", Some(name)));
-            }
-            (id, fields)
+    let ProviderSettingsPatch::CustomGateway(patch) = &params.settings;
+    let target = patch.provider_id.as_deref();
+    if target.is_some_and(|id| builtins.contains_key(id) || is_removed_cloud_provider_id(id)) {
+        return Err(invalid(
+            "A custom provider or gateway cannot use a built-in provider ID.",
+        ));
+    }
+    let existing = target.and_then(|id| configured?.get(id));
+    if target.is_some() && existing.is_none() {
+        return Err(ConfigManagerError::write(
+            ConfigWriteErrorCode::ConfigPathNotFound,
+            "Unknown provider ID.",
+        ));
+    }
+    let name = validate_custom_patch(patch, existing)?;
+    let id = if let Some(id) = target {
+        id.to_owned()
+    } else {
+        if patch.base_url.as_ref().and_then(Option::as_deref).is_none() {
+            return Err(invalid(
+                "A base URL is required to create a custom provider.",
+            ));
         }
-        ProviderSettingsPatch::Bedrock(_) | ProviderSettingsPatch::Gcp(_) => {
-            return Err(invalid("Cloud provider configuration is unsupported."));
-        }
+        let default_id = layers
+            .required_model_provider()
+            .or_else(|| effective.get("model_provider")?.as_str());
+        allocate_custom_id(name, |id| {
+            builtins.contains_key(id)
+                || is_removed_cloud_provider_id(id)
+                || configured.is_some_and(|table| table.get(id).is_some())
+                || default_id == Some(id)
+        })
     };
+    let mut fields = patch_fields([("base_url", &patch.base_url), ("env_key", &patch.env_key)]);
+    if patch.name.is_some() {
+        fields.push(("name", Some(name)));
+    }
+    let provider_id = id;
     if fields.iter().any(|(_, value)| *value == Some("")) {
         return Err(invalid(
             "Configuration values must not be empty; use null to clear a field.",

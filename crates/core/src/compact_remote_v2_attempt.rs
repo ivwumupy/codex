@@ -106,13 +106,12 @@ pub(super) async fn run_remote_compact_v2_attempt(
             } else {
                 sess.get_prompt_base_instructions().await
             };
-            let (rewritten_outputs, estimated_deleted_tokens) =
-                trim_function_call_history_to_fit_context_window(
-                    &mut history,
-                    turn_context,
-                    turn_context.model_context_window(),
-                    &base_instructions,
-                );
+            let (rewritten_outputs, _) = trim_function_call_history_to_fit_context_window(
+                &mut history,
+                turn_context,
+                turn_context.model_context_window(),
+                &base_instructions,
+            );
             if rewritten_outputs > 0 {
                 info!(
                     turn_id = %turn_context.sub_id,

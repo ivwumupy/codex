@@ -10,6 +10,14 @@ pub enum OpenAiDestination {
 }
 
 pub fn classify_openai_api_url(destination: &str) -> OpenAiDestination {
+    classify_openai_url(destination, true)
+}
+
+pub fn is_openai_model_api_url(destination: &str) -> bool {
+    classify_openai_url(destination, false) == OpenAiDestination::Supported
+}
+
+fn classify_openai_url(destination: &str, include_chatgpt: bool) -> OpenAiDestination {
     let Ok(url) = reqwest::Url::parse(destination) else {
         return OpenAiDestination::Other;
     };
@@ -54,7 +62,7 @@ pub fn classify_openai_api_url(destination: &str) -> OpenAiDestination {
             | "mtls-eu.api.openai.com"
             | "api.openai.org"
             | "api.openai-staging.com"
-    ) || is_allowed_chatgpt_host(host);
+    ) || (include_chatgpt && is_allowed_chatgpt_host(host));
     if supported_host
         && url.scheme() == "https"
         && url.port_or_known_default() == Some(443)

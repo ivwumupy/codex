@@ -15,7 +15,6 @@ use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigBatchWriteParams;
 use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
 use codex_exec_server::LOCAL_FS;
 use codex_git_utils::resolve_root_git_project_for_trust;
 use crossterm::event::KeyCode;

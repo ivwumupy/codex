@@ -50,20 +50,10 @@ impl Client {
         turn_ids: &[String],
         provider_headers: &HeaderMap,
     ) -> Result<Vec<ApiKeyTurnCost>, RequestError> {
-        let mut url =
-            url::Url::parse(&self.base_url).map_err(|error| RequestError::Other(error.into()))?;
-        let analytics_host = match url.host_str() {
-            Some("chatgpt.com" | "chat.openai.com") => Some("api.chatgpt.com"),
-            Some("chatgpt-staging.com") => Some("api.chatgpt-staging.com"),
-            _ => None,
-        };
-        if let Some(host) = analytics_host {
-            url.set_host(Some(host))
-                .map_err(|error| RequestError::Other(error.into()))?;
-        }
-        url.set_path("/v1/analytics/codex/turn-costs");
-        url.set_query(None);
-        url.set_fragment(None);
+        let url = format!(
+            "{}/analytics/codex/turn-costs",
+            self.base_url.trim_end_matches('/')
+        );
         let provider_scope_headers = provider_headers
             .iter()
             .filter(|(name, _)| {
@@ -158,7 +148,7 @@ mod tests {
 
         let auth = CodexAuth::from_api_key("sk-test");
         let client = Client::from_auth(
-            format!("{}/backend-api", server.uri()),
+            format!("{}/v1", server.uri()),
             &auth,
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         );
@@ -209,7 +199,6 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/analytics/codex/turn-costs"))
             .and(header("authorization", "Bearer sk-test"))
-            .and(header("chatgpt-account-id", "account-test"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "turns": []
             })))
@@ -222,16 +211,11 @@ mod tests {
             server.uri(),
             &auth,
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
-        )
-        .with_chatgpt_account_id("account-test");
+        );
         let mut provider_headers = HeaderMap::new();
         provider_headers.insert(
             "authorization",
             HeaderValue::from_static("Bearer provider-override"),
-        );
-        provider_headers.insert(
-            "chatgpt-account-id",
-            HeaderValue::from_static("provider-account-override"),
         );
         let costs = client
             .query_api_key_turn_costs_at(

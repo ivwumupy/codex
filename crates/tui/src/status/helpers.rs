@@ -98,9 +98,7 @@ pub(crate) fn compose_account_display(
 }
 
 pub(crate) fn plan_type_display_name(plan_type: PlanType) -> String {
-    crate::subscription::SubscriptionDisplay::Status
-        .label(plan_type)
-        .to_string()
+    crate::subscription::status_plan_label(plan_type).to_string()
 }
 
 pub(crate) fn format_tokens_compact(value: i64) -> String {

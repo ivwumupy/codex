@@ -89,9 +89,6 @@ pub(super) fn same_owner(previous: Option<&CodexAuth>, current: Option<&CodexAut
     if previous.api_auth_mode() != current.api_auth_mode() {
         return false;
     }
-    if let Some(subject) = previous.api_workload_identity() {
-        return current.api_workload_identity() == Some(subject);
-    }
     let (Some(user), Some(workspace)) = (previous.get_chatgpt_user_id(), previous.get_account_id())
     else {
         return false;

@@ -2,9 +2,6 @@
 
 use anyhow::Result;
 use app_test_support::TestAppServer;
-use codex_app_server_protocol::Account;
-use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::RequestId;
 use codex_protocol::config_types::ForcedLoginMethod;
 use pretty_assertions::assert_eq;
@@ -14,7 +11,6 @@ use std::time::Duration;
 use tempfile::TempDir;
 use test_case::test_case;
 use tokio::time::timeout;
-use wiremock::MockServer;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 60);
 
@@ -52,7 +48,6 @@ async fn config_requirements_read_preserves_unrestricted_default(config: &str) -
     Ok(())
 }
 
-#[test_case("allow_remote_control = false", "", &[ForcedLoginMethod::Api, ForcedLoginMethod::Chatgpt]; "unrestricted_with_other_requirements")]
 #[test_case("allowed_login_methods = ['api']", "", &[ForcedLoginMethod::Api]; "managed_api")]
 #[test_case("allowed_login_methods = ['chatgpt']", "", &[ForcedLoginMethod::Chatgpt]; "managed_chatgpt")]
 #[test_case("allowed_login_methods = ['chatgpt', 'api', 'api']", "", &[ForcedLoginMethod::Api, ForcedLoginMethod::Chatgpt]; "both_normalized")]
@@ -129,57 +124,6 @@ async fn config_requirements_read_rejects_invalid_login_method() -> Result<()> {
     assert!(
         error.error.message.contains("allowed_login_methods"),
         "{error:?}"
-    );
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_requirements_read_preserves_api_only_bedrock_without_chatgpt_requests() -> Result<()>
-{
-    let backend = MockServer::start().await;
-    let (_home, mut server) = start_server(
-        &format!(
-            r#"
-forced_login_method = "api"
-chatgpt_base_url = "{}/backend-api"
-model_provider = "amazon-bedrock"
-[model_providers.amazon-bedrock]
-base_url = "https://bedrock.example.com/v1"
-[model_providers.amazon-bedrock.auth]
-command = "print-token"
-"#,
-            backend.uri()
-        ),
-        /*requirements*/ None,
-    )
-    .await?;
-    assert_eq!(
-        read_requirements(&mut server).await?["requirements"]["allowedLoginMethods"],
-        json!(["api"])
-    );
-    let id = server
-        .send_get_account_request(GetAccountParams {
-            refresh_token: false,
-        })
-        .await?;
-    let account: GetAccountResponse = timeout(READ_TIMEOUT, server.read_response(id)).await??;
-    assert_eq!(
-        account,
-        GetAccountResponse {
-            user_id: None,
-            account: Some(Account::AmazonBedrock {
-                uses_codex_managed_credentials: false
-            }),
-            requires_openai_auth: false,
-            workspace_routing: None,
-        }
-    );
-    assert!(
-        backend
-            .received_requests()
-            .await
-            .expect("recorded requests")
-            .is_empty()
     );
     Ok(())
 }

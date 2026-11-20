@@ -131,27 +131,9 @@ async fn non_startup_history_dismisses_logo_until_a_new_thread() -> Result<()> {
     app.insert_history_cell(
         &mut tui,
         Box::new(history_cell::SessionNoticeCell(
-            history_cell::PlainHistoryCell::new(vec!["Rate limit reset notice".into()]),
+            history_cell::PlainHistoryCell::new(vec!["Session notice".into()]),
         )),
     );
-    draw(&mut app, &mut tui, size)?;
-    assert!(has_blossom(&tui));
-
-    crate::chatwidget::tests::set_chatgpt_auth(&mut app.chat_widget);
-    let request = app.chat_widget.start_rate_limit_reset_startup_check();
-    assert!(app.chat_widget.finish_rate_limit_reset_hint_refresh(
-        request,
-        Vec::new(),
-        Ok(codex_app_server_protocol::RateLimitResetCreditsSummary {
-            available_count: 1,
-            credits: None,
-        }),
-    ));
-    // The same startup notice stays eligible both pending and committed to history.
-    assert!(app.chat_widget.empty_state_composer().is_some());
-    draw(&mut app, &mut tui, size)?;
-    assert!(has_blossom(&tui));
-    app.insert_pending_usage_output_if_ready(&mut tui);
     draw(&mut app, &mut tui, size)?;
     assert!(has_blossom(&tui));
 

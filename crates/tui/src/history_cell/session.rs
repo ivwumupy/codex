@@ -89,7 +89,7 @@ impl HistoryCell for TooltipHistoryCell {
     }
 }
 
-/// Startup metadata, including prior-session summaries and available usage resets.
+/// A notice displayed as part of session startup.
 #[derive(Debug)]
 pub(crate) struct SessionNoticeCell(pub(crate) PlainHistoryCell);
 

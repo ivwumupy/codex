@@ -50,6 +50,7 @@ pub(crate) struct BackendBannerCta {
 }
 
 impl BackendBanner {
+    #[cfg(test)]
     /// Parse supported, bounded content before constructing rendered copy or CTA closures.
     pub(crate) fn parse(raw: &serde_json::Value) -> Option<Self> {
         serde_json::from_value::<Self>(raw.clone())

@@ -1,12 +1,7 @@
-use crate::config::edit::ConfigEdit;
-use crate::config::edit::ConfigEditsBuilder;
 use crate::context::world_state::validate_managed_developer_instructions;
 use crate::path_utils::normalize_for_native_workdir;
 use crate::unified_exec::DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS;
 use crate::unified_exec::MIN_EMPTY_YIELD_TIME_MS;
-use crate::windows_sandbox::WindowsSandboxLevelExt;
-use crate::windows_sandbox::resolve_windows_sandbox_mode;
-use crate::windows_sandbox::windows_sandbox_level_for_legacy_checks;
 use codex_agent_roles::load_agent_roles;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::ConfigLayerSource;
@@ -19,14 +14,12 @@ use codex_config::FeatureRequirementsToml;
 use codex_config::ManagedAuthPolicy;
 use codex_config::McpEnterpriseManagedAuthConfig;
 use codex_config::McpServerRequirement;
-use codex_config::PermissionConfig;
 use codex_config::PluginRequirementsToml;
 use codex_config::ProfileV2Name;
 use codex_config::ResidencyRequirement;
 use codex_config::SandboxModeRequirement;
 use codex_config::Sourced;
 use codex_config::ThreadConfigLoader;
-use codex_config::apply_default_gcp_auth;
 use codex_config::config_toml::CircuitBreakAction;
 use codex_config::config_toml::ConfigToml;
 use codex_config::config_toml::DEFAULT_PROJECT_DOC_MAX_BYTES;
@@ -37,9 +30,7 @@ use codex_config::loader::load_config_layers_state;
 use codex_config::loader::project_trust_key;
 use codex_config::permissions_toml::PermissionProfileToml;
 use codex_config::permissions_toml::PermissionsToml;
-use codex_config::resolve_permission_config;
 use codex_config::sandbox_mode_requirement_for_permission_profile;
-use codex_config::translate_legacy_permissions;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_config::types::AuthKeyringBackendKind;
@@ -94,7 +85,6 @@ use codex_mcp::ResolvedMcpCatalog;
 use codex_model_provider::ChatgptBaseUrl;
 use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
 use codex_model_provider::ProviderCapabilities;
-use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::GatewayOAuthConfig;
 
 use codex_model_provider_info::ModelProviderInfo;
@@ -117,6 +107,7 @@ use codex_protocol::config_types::TrustLevel;
 use codex_protocol::config_types::Verbosity;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
+#[cfg(test)]
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BaseInstructionsProvenance;
@@ -126,11 +117,7 @@ use codex_protocol::models::ProfileWorkspaceRoot;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::permissions::DenyReadValidator;
-use codex_protocol::permissions::DenyReadViolation;
-use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::MultiAgentVersion;
@@ -140,9 +127,7 @@ use codex_sandboxing::SandboxType;
 pub use codex_thread_store::ExtraConfig;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
-use codex_utils_path_uri::PathConvention;
 use codex_utils_path_uri::PathUri;
-use codex_utils_path_uri::Platform;
 use http::HeaderValue;
 use rmcp::model::ElicitationCapability;
 use rmcp::model::FormElicitationCapability;
@@ -162,7 +147,6 @@ use std::time::Duration;
 
 use crate::config::permissions::BUILT_IN_READ_ONLY_PROFILE;
 use crate::config::permissions::BUILT_IN_WORKSPACE_PROFILE;
-use crate::config::permissions::default_builtin_permission_profile_name;
 use crate::config::permissions::network_proxy_config_for_profile_selection;
 use crate::config::permissions::validate_user_permission_profile_names;
 use crate::responses_metadata::validate_extra_metadata;
@@ -211,13 +195,10 @@ pub use network_config::NetworkConfigInputs;
 pub use network_config::PreparedNetworkConfig;
 pub use network_config::project_environment_profile_network;
 pub use network_config::validate_environment_network_policy;
-#[cfg(test)]
-pub(crate) use network_proxy_spec::McpNetworkRoute;
 pub use network_proxy_spec::NetworkProxySpec;
 pub use network_proxy_spec::StartedNetworkProxy;
 pub use permission_profile_catalog::PermissionProfileCatalogEntry;
 pub use permission_profile_catalog::permission_profile_catalog;
-use permission_profile_catalog::permission_profile_catalog_from_permissions;
 use permission_profile_catalog::permission_profile_is_allowed;
 pub use permission_profile_catalog::validate_permission_profile_for_deny_read;
 pub use permission_profile_selection::ResolvedPermissionProfileSelection;
@@ -231,9 +212,9 @@ pub use permissions::resolve_permission_profile;
 pub(crate) use resolved_permission_profile::PermissionProfileState;
 pub use token_budget_startup::TokenBudgetStartupConfig;
 pub use windows_sandbox_config::PreparedWindowsSandboxConfig;
+#[cfg(test)]
 use windows_sandbox_config::config_allows_mxc;
 pub use windows_sandbox_config::prepare_windows_sandbox_config;
-use windows_sandbox_config::resolve_windows_sandbox_type;
 pub use windows_sandbox_config::windows_mxc_allowed_by_config;
 
 const DEFAULT_IGNORE_LARGE_UNTRACKED_DIRS: i64 = 200;
@@ -1858,18 +1839,7 @@ impl Config {
         PluginsConfigInput::new(
             self.config_layer_stack.clone(),
             self.plugins.clone(),
-            self.model_provider_id.clone(),
             self.features.enabled(Feature::Plugins),
-            self.features.enabled(Feature::RemotePlugin),
-            self.chatgpt_base_url.clone(),
-            self.http_client_factory(),
-            self.apps_mcp_product_sku.clone(),
-        )
-        .with_plugin_recommendations_enabled(self.features.plugin_recommendations_enabled())
-        .with_runtime_auth_mode(
-            (self.features.enabled(Feature::RuntimeAgentInstances)
-                && codex_runtime_agent_instance::is_openai_api_url(&self.chatgpt_base_url))
-            .then_some(self.runtime_auth_mode),
         )
     }
 
@@ -2667,28 +2637,6 @@ fn is_session_layer(source: &ConfigLayerSource) -> bool {
 struct EffectivePermissionSelection<'a> {
     profiles: Option<PermissionsToml>,
     selected_profile_id: Option<&'a str>,
-    persisted_profile_id_was_provided: bool,
-    requirements_force_profile_selection: bool,
-}
-
-impl EffectivePermissionSelection<'_> {
-    fn has_profiles(&self) -> bool {
-        self.profiles
-            .as_ref()
-            .is_some_and(|profiles| !profiles.is_empty())
-    }
-
-    fn profiles_are_active(
-        &self,
-        default_permissions_override: Option<&str>,
-        permission_config: Option<PermissionConfig<'_>>,
-    ) -> bool {
-        self.persisted_profile_id_was_provided
-            || self.requirements_force_profile_selection
-            || default_permissions_override.is_some()
-            || matches!(permission_config, Some(PermissionConfig::Named { .. }))
-            || permission_config.is_none()
-    }
 }
 
 /// Optional overrides for user configuration (e.g., from CLI flags).
@@ -3410,7 +3358,6 @@ impl Config {
             web_search_mode: mut constrained_web_search_mode,
             allow_managed_hooks_only: _,
             allow_appshots: _,
-            allow_remote_control: _,
             computer_use: _,
             feature_requirements,
             managed_hooks: _,
@@ -3673,13 +3620,9 @@ impl Config {
             .clone()
             .filter(|value| !value.is_empty());
 
-        let mut model_providers =
+        let model_providers =
             merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
-
-        if let Some(provider) = model_providers.get_mut(GCP_PROVIDER_ID) {
-            apply_default_gcp_auth(provider, &resolved_cwd);
-        }
 
         let model_provider_id = config_layer_stack.required_model_provider().map(str::to_string)
             .or(model_provider)
@@ -4578,11 +4521,6 @@ fn resolve_effective_permission_selection<'a>(
     Ok(EffectivePermissionSelection {
         profiles,
         selected_profile_id,
-        persisted_profile_id_was_provided: default_permissions_override.is_none()
-            && valid_persisted_profile_id.is_some(),
-        requirements_force_profile_selection: requirements_toml
-            .allowed_permission_profiles
-            .is_some(),
     })
 }
 

@@ -35,7 +35,7 @@ use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::ModelProvider;
 use codex_model_provider::ModelProviderFuture;
-use codex_model_provider::ProviderAccountResult;
+use codex_model_provider::ProviderAccountState;
 use codex_model_provider::ProviderAuthRecoveryMessages;
 use codex_model_provider::ProviderUnauthorizedRecovery;
 use codex_model_provider::SharedModelProvider;
@@ -307,7 +307,7 @@ impl ModelProvider for SetupRefreshProvider {
         self.inner.auth()
     }
 
-    fn account_state(&self) -> ProviderAccountResult {
+    fn account_state(&self) -> ProviderAccountState {
         self.inner.account_state()
     }
 
@@ -1845,44 +1845,6 @@ async fn response_stream_records_last_model_feedback_ids() {
     );
 }
 
-#[tokio::test]
-async fn bedrock_unauthorized_error_uses_provider_mapping() {
-    let provider = create_model_provider(
-        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
-        /*auth_manager*/ None,
-    );
-    let mut auth_recovery = None;
-    let mut provider_auth_recovery_attempted = false;
-    let url = "https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses";
-    let error = super::handle_unauthorized(
-        TransportError::Http {
-            retry_after: None,
-            status: http::StatusCode::UNAUTHORIZED,
-            url: Some(url.to_string()),
-            headers: None,
-            body: Some(
-                "Signature expired: 20260609T133205Z is now earlier than 20260614T062525Z"
-                    .to_string(),
-            ),
-        },
-        &mut auth_recovery,
-        &mut provider_auth_recovery_attempted,
-        &test_session_telemetry(),
-        &provider,
-        /*event_sender*/ None,
-        /*turn_id*/ None,
-    )
-    .await
-    .expect_err("expired Bedrock signature should fail");
-
-    assert_eq!(
-        error.to_string(),
-        format!(
-            "Amazon Bedrock rejected the request because its AWS signature has expired. Refresh your AWS credentials and retry. If `AWS_BEARER_TOKEN_BEDROCK` is set, update or unset it, then restart Codex, url: {url}"
-        )
-    );
-}
-
 #[derive(Debug)]
 struct TestRecoveryProvider {
     inner: SharedModelProvider,
@@ -1903,7 +1865,7 @@ impl ModelProvider for TestRecoveryProvider {
         self.inner.auth()
     }
 
-    fn account_state(&self) -> ProviderAccountResult {
+    fn account_state(&self) -> ProviderAccountState {
         self.inner.account_state()
     }
 

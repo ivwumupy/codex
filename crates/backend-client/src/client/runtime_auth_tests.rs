@@ -16,6 +16,7 @@ use codex_runtime_agent_instance::AgentHostAuthorization;
 use codex_runtime_agent_instance::RuntimeAuthManager;
 use codex_runtime_agent_instance::RuntimeRegistrationMetadata;
 use codex_runtime_agent_instance::RuntimeRole;
+use http::header::HeaderName;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -48,7 +49,7 @@ fn runtime_provider(
 }
 
 #[tokio::test]
-async fn account_runtime_auth_signs_each_request_and_strips_credentials_on_redirect() {
+async fn api_key_runtime_auth_signs_each_request_and_strips_credentials_on_redirect() {
     for mode in [RuntimeAuthMode::DualHeader, RuntimeAuthMode::AssertionOnly] {
         let server = MockServer::start().await;
         let destination = MockServer::start().await;
@@ -62,10 +63,9 @@ async fn account_runtime_auth_signs_each_request_and_strips_credentials_on_redir
                 }))
             })
             .expect(2).mount(&server).await;
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"accounts": [], "account_ordering": []})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"turns": []})),
             )
             .expect(2)
             .mount(&destination)
@@ -77,7 +77,7 @@ async fn account_runtime_auth_signs_each_request_and_strips_credentials_on_redir
             .expect(1)
             .mount(&server)
             .await;
-        Mock::given(method("GET"))
+        Mock::given(path("/redirect"))
             .respond_with(ResponseTemplate::new(307).insert_header("location", destination.uri()))
             .expect(2)
             .mount(&server)
@@ -99,16 +99,13 @@ async fn account_runtime_auth_signs_each_request_and_strips_credentials_on_redir
         )
         .await
         .unwrap();
-        client.get_accounts_check().await.unwrap();
-        client.get_accounts_check().await.unwrap();
-        assert!(
+        let redirect_url = format!("{}/redirect", server.uri());
+        for _ in 0..2 {
             client
-                .clone()
-                .with_chatgpt_account_id("different-workspace")
-                .get_accounts_check()
+                .query_api_key_turn_costs_at(&redirect_url, &[], &HeaderMap::new())
                 .await
-                .is_err()
-        );
+                .unwrap();
+        }
         let stale_headers = HeaderMap::from_iter([
             (
                 HeaderName::from_static("openai-organization"),
@@ -285,7 +282,7 @@ async fn authenticated_clients_without_redirects_return_the_redirect_response() 
             .expect(1)
             .mount(&server)
             .await;
-        Mock::given(method("GET"))
+        Mock::given(path("/redirect"))
             .respond_with(ResponseTemplate::new(307).insert_header("location", destination.uri()))
             .expect(2)
             .mount(&server)
@@ -307,7 +304,11 @@ async fn authenticated_clients_without_redirects_return_the_redirect_response() 
         .unwrap();
         assert_eq!(
             custom_backend
-                .get_accounts_check()
+                .query_api_key_turn_costs_at(
+                    &format!("{}/redirect", server.uri()),
+                    &[],
+                    &HeaderMap::new()
+                )
                 .await
                 .unwrap_err()
                 .status(),
@@ -324,13 +325,20 @@ async fn authenticated_clients_without_redirects_return_the_redirect_response() 
         .await
         .unwrap();
 
-        let error = client.get_accounts_check().await.unwrap_err();
+        let error = client
+            .query_api_key_turn_costs_at(
+                &format!("{}/redirect", server.uri()),
+                &[],
+                &HeaderMap::new(),
+            )
+            .await
+            .unwrap_err();
         assert_eq!(error.status(), Some(StatusCode::TEMPORARY_REDIRECT));
         assert!(destination.received_requests().await.unwrap().is_empty());
         let requests = server.received_requests().await.unwrap();
         let requests: Vec<_> = requests
             .iter()
-            .filter(|request| request.method == Method::GET)
+            .filter(|request| request.url.path() == "/redirect")
             .collect();
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0].headers["authorization"], "Bearer key-a");
@@ -535,11 +543,11 @@ async fn reusable_runtime_client_keeps_the_selected_accounts_transport_policy() 
     server.verify().await;
 }
 
-struct RotatingAuth(std::sync::RwLock<CodexAuth>);
+struct ExternalAccount(CodexAuth);
 
-impl codex_login::ExternalAuth for RotatingAuth {
+impl codex_login::ExternalAuth for ExternalAccount {
     fn resolve(&self) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
-        Box::pin(async { Ok(self.0.read().unwrap().clone()) })
+        Box::pin(async { Ok(self.0.clone()) })
     }
 
     fn refresh(
@@ -551,123 +559,20 @@ impl codex_login::ExternalAuth for RotatingAuth {
 }
 
 #[tokio::test]
-async fn reusable_runtime_client_refreshes_credentials_without_accepting_a_new_session() {
-    use base64::Engine;
-
-    let oauth = |session, token| {
-        let claims = serde_json::json!({
-            "iss": "https://auth.openai.com/", "session_id": session, "jti": token,
-            "https://api.openai.com/auth": {
-                "user_id": "user-a", "chatgpt_account_id": "workspace-a"
-            }
-        });
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
-        CodexAuth::from_external_chatgpt_tokens(
-            &format!("header.{payload}.signature"),
-            "workspace-a",
-            /*chatgpt_plan_type*/ None,
-        )
-        .unwrap()
-    };
-    for mode in [RuntimeAuthMode::DualHeader, RuntimeAuthMode::AssertionOnly] {
-        let server = MockServer::start().await;
-        Mock::given(path("/register"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "runtime_agent_instance_id": "runtime-refresh", "agent_host_id": "host-a",
-                "actor": {"kind": "chatgpt", "user_id": "user-a", "account_id": "workspace-a"}
-            })))
-            .mount(&server)
-            .await;
-        Mock::given(path("/api/codex/usage"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "plan_type": "plus",
-                "rate_limit": {
-                    "allowed": true, "limit_reached": false,
-                    "primary_window": {
-                        "used_percent": 0, "limit_window_seconds": 300,
-                        "reset_after_seconds": 60, "reset_at": 2000000000
-                    }
-                }
-            })))
-            .expect(2)
-            .mount(&server)
-            .await;
-        let initial = oauth("login-a", "initial");
-        let refreshed = oauth("login-a", "refreshed");
-        let credentials = AuthManager::from_auth_for_testing(initial.clone());
-        let source = Arc::new(RotatingAuth(std::sync::RwLock::new(initial.clone())));
-        credentials.set_external_auth(source.clone()).await.unwrap();
-        let runtime = runtime_provider(&server, credentials, mode);
-        let client = Client::from_auth_with_selected_runtime(
-            server.uri(),
-            &initial,
-            HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
-            Some(&runtime),
-            &HeaderMap::new(),
-            Client::new,
-        )
+async fn external_chatgpt_credentials_cannot_replace_an_api_key() {
+    let api_key = CodexAuth::from_api_key("sk-test");
+    let credentials = AuthManager::from_auth_for_testing(api_key.clone());
+    let account = ExternalAccount(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let error = credentials
+        .set_external_auth(Arc::new(account))
         .await
-        .unwrap();
-
-        assert!(
-            client
-                .clone()
-                .with_bearer_token("replacement-bearer".into())
-                .is_err()
-        );
-        assert!(
-            client
-                .clone()
-                .with_auth_provider(Arc::new(codex_model_provider::BearerAuthProvider::new(
-                    "replacement-provider".to_string(),
-                )))
-                .is_err()
-        );
-        client.get_rate_limits().await.unwrap();
-        *source.0.write().unwrap() = refreshed.clone();
-        client.get_rate_limits().await.unwrap();
-        let requests = server.received_requests().await.unwrap();
-        assert_eq!(
-            requests
-                .iter()
-                .filter(|r| r.url.path() == "/register")
-                .count(),
-            1
-        );
-        let requests: Vec<_> = requests
-            .iter()
-            .filter(|r| r.url.path() == "/api/codex/usage")
-            .collect();
-        assert_eq!(requests.len(), 2);
-        let mut proofs = Vec::new();
-        for (request, expected) in requests.iter().zip([initial, refreshed]) {
-            let authorization = request.headers["authorization"].to_str().unwrap();
-            let proof = match mode {
-                RuntimeAuthMode::DualHeader => {
-                    assert_eq!(
-                        authorization,
-                        format!("Bearer {}", expected.get_token().unwrap())
-                    );
-                    request.headers["x-openai-agent-assertion"]
-                        .to_str()
-                        .unwrap()
-                }
-                RuntimeAuthMode::AssertionOnly => {
-                    authorization.strip_prefix("AgentAssertion ").unwrap()
-                }
-            };
-            let claims: serde_json::Value = serde_json::from_slice(
-                &base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .decode(proof.split('.').nth(2).unwrap())
-                    .unwrap(),
-            )
-            .unwrap();
-            assert_eq!(claims["runtime_agent_instance"], "runtime-refresh");
-            proofs.push(proof);
-        }
-        assert_ne!(proofs[0], proofs[1]);
-
-        *source.0.write().unwrap() = oauth("another-login", "replacement");
-        assert!(client.get_rate_limits().await.is_err());
-    }
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("API key login is required"),
+        "{error}"
+    );
+    assert_eq!(
+        credentials.auth_cached().unwrap().get_token().unwrap(),
+        api_key.get_token().unwrap()
+    );
 }

@@ -1,9 +1,6 @@
 //! Shared composer geometry keeps rendering, measurement, and the cursor aligned.
 
 use super::*;
-use crate::render::renderable::Renderable;
-use crate::tui::FrameRequester;
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 pub(super) const MAX_FOOTER_ROWS: u16 = 4;

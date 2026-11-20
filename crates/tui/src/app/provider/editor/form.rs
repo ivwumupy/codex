@@ -2,17 +2,11 @@
 
 use super::super::Field;
 use super::super::provider_fields;
-use codex_app_server_protocol::BedrockProviderId;
-use codex_app_server_protocol::BedrockSettingsParams;
 use codex_app_server_protocol::CustomGatewaySettingsParams;
-use codex_app_server_protocol::GcpProviderId;
-use codex_app_server_protocol::GcpSettingsParams;
 use codex_app_server_protocol::ModelProviderConfigWriteParams;
 use codex_app_server_protocol::ModelProviderSummary;
 use codex_app_server_protocol::ProviderSettings;
 use codex_app_server_protocol::ProviderSettingsPatch;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -50,12 +44,7 @@ impl Draft {
         };
         provider_fields(p)
             .into_iter()
-            .filter(|(field, value)| match field {
-                // With no reported profile, preserve possible credential-export authentication.
-                Field::Profile => value.is_some(),
-                Field::ManagedUrl | Field::ExternalAuth => false,
-                _ => true,
-            })
+            .filter(|(field, _)| !matches!(field, Field::ManagedUrl | Field::ExternalAuth))
             .collect()
     }
 
@@ -111,25 +100,6 @@ impl Draft {
                     env_key: changed(Field::Variable),
                 })
             }
-            Some(ProviderSettings::Bedrock { .. }) => {
-                ProviderSettingsPatch::Bedrock(BedrockSettingsParams {
-                    provider_id: match provider.map(|p| p.id.as_str()) {
-                        Some(AMAZON_BEDROCK_PROVIDER_ID) => BedrockProviderId::AmazonBedrock,
-                        Some(AMAZON_BEDROCK_RUNTIME_PROVIDER_ID) => {
-                            BedrockProviderId::AmazonBedrockRuntime
-                        }
-                        _ => return Err("Unrecognized Bedrock provider."),
-                    },
-                    profile: changed(Field::Profile),
-                    region: changed(Field::Region),
-                })
-            }
-            Some(ProviderSettings::Gcp { .. }) => ProviderSettingsPatch::Gcp(GcpSettingsParams {
-                provider_id: GcpProviderId::Gcp,
-                project_id: changed(Field::Project),
-                location: changed(Field::Location),
-                credential_file: changed(Field::Credentials),
-            }),
             Some(ProviderSettings::OpenAi) => {
                 return Err("This provider configuration is read-only.");
             }

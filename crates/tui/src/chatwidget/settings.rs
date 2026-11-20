@@ -219,20 +219,6 @@ impl ChatWidget {
         self.model_catalog.clone()
     }
 
-    pub(crate) fn on_account_email_loaded(
-        &mut self,
-        current_email: Option<String>,
-        current_workspace: Option<String>,
-    ) {
-        if let Some(StatusAccountDisplay::ChatGpt {
-            email, workspace, ..
-        }) = &mut self.status_account_display
-        {
-            *email = current_email;
-            *workspace = current_workspace;
-        }
-    }
-
     pub(crate) fn current_plan_type(&self) -> Option<PlanType> {
         self.plan_type
     }
@@ -260,12 +246,11 @@ impl ChatWidget {
         self.invalidate_permission_discovery();
         self.permission_discovery = None;
         self.invalidate_connector_scope();
-        self.clear_pending_rate_limit_reset_requests();
+        self.rate_limit_snapshots_by_limit_id.clear();
         self.clear_backend_banner();
         self.luna_reserve_notice_account_id = None;
         self.automatic_model_switch_state = backend_banners::AutomaticModelSwitchState::default();
         self.input_queue.rate_limit_recovery_pending = false;
-        self.add_credits_nudge_email_in_flight = None;
         self.codex_rate_limit_reached_type = None;
         self.codex_spend_control_reached = None;
         self.rate_limit_warnings = RateLimitWarningState::default();

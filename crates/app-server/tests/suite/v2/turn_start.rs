@@ -14,7 +14,6 @@ use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::create_request_user_input_sse_response;
 use app_test_support::format_with_current_shell_display;
 use app_test_support::write_chatgpt_auth;
-use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
 use app_test_support::write_models_cache;
 use app_test_support::write_models_cache_with_models;
 use codex_app_server::INPUT_TOO_LARGE_ERROR_CODE;
@@ -1482,7 +1481,7 @@ async fn thread_start_omits_empty_instruction_overrides_from_model_request() -> 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn turn_profile_tracks_blocking_tool_and_follow_up_sampling() -> Result<()> {
+async fn blocking_user_input_allows_follow_up_control_tools() -> Result<()> {
     let control_tools = [
         ("call1", "request_user_input", json!({})),
         (
@@ -1525,10 +1524,8 @@ async fn turn_profile_tracks_blocking_tool_and_follow_up_sampling() -> Result<()
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::Goals)
-        .with_root_config(&format!(
-            "chatgpt_base_url = \"{}\"\ntools.update_plan.enabled = true",
-            server.uri()
-        ))
+        .with_sandbox_mode("danger-full-access")
+        .with_root_config("tools.update_plan.enabled = true")
         .write(codex_home.path())?;
 
     let mut mcp = TestAppServer::builder()
@@ -1586,11 +1583,13 @@ async fn turn_profile_tracks_blocking_tool_and_follow_up_sampling() -> Result<()
     )
     .await?;
 
-    timeout(
+    let completed: TurnCompletedNotification = timeout(
         DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_notification_message("turn/completed"),
+        mcp.read_notification("turn/completed"),
     )
     .await??;
+    assert_eq!(completed.turn.id, first_turn.id);
+    assert_eq!(completed.turn.status, TurnStatus::Completed);
 
     let second_turn = mcp
         .start_turn_and_wait_for_completion(TurnStartParams {
@@ -1611,14 +1610,7 @@ async fn turn_profile_tracks_blocking_tool_and_follow_up_sampling() -> Result<()
         })
         .await?;
 
-    for (call_id, tool_name, _) in control_tools {
-        let success = tool_name != "view_image";
-        let turn_id = if call_id == "call1" {
-            &first_turn.id
-        } else {
-            &second_turn.turn.id
-        };
-    }
+    assert_eq!(second_turn.turn.status, TurnStatus::Completed);
 
     Ok(())
 }
@@ -5339,7 +5331,6 @@ async fn command_execution_notifications_include_trusted_plugin_id(
         .with_sandbox_mode("danger-full-access")
         .enable_feature(Feature::Plugins)
         .enable_feature(Feature::UnifiedExec)
-        .disable_feature(Feature::RemotePlugin)
         .disable_feature(Feature::ShellSnapshot)
         .with_extra_config("[plugins.\"google-calendar@openai-api-curated\"]\nenabled = true")
         .write(codex_home.path())?;

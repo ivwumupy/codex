@@ -8,6 +8,7 @@ use codex_tools::DiscoverableTool;
 // characters. With the curated marketplace suffix, 50 rows, a 500-byte introduction and
 // fragment markers, the final item is at most 17,946 UTF-8 bytes. Revisit this bound if
 // upstream identity limits or the marketplace suffix change; never truncate these facts.
+#[cfg(test)]
 const MAX_RECOMMENDED_PLUGINS: usize = 50;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +18,7 @@ pub(crate) struct RecommendedPluginsInstructions {
 }
 
 impl RecommendedPluginsInstructions {
+    #[cfg(test)]
     pub(crate) fn from_plugins(
         plugins: &[DiscoverableTool],
         messages: &codex_prompts::ResolvedPluginRecommendationMessages,

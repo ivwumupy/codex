@@ -16,7 +16,6 @@ use crate::state::ActiveTurn;
 use crate::test_support::models_manager_with_provider;
 use crate::tools::hook_names::HookToolName;
 use crate::turn_metadata::ExecutionMetadata;
-use codex_app_server_protocol as app_server_protocol;
 use codex_config::CONFIG_TOML_FILE;
 use codex_config::config_toml::ConfigToml;
 use codex_config::types::AppConfig;

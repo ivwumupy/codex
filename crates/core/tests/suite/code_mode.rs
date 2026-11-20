@@ -2195,11 +2195,6 @@ fn assert_result_metadata_call(
     assert!(metadata.get("tool_result_metadata").is_none());
 }
 
-enum ResultMetadataAnalytics {
-    Config(Option<bool>),
-    HostDisabled(Option<bool>),
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn direct_result_metadata_retained_budget_preserves_resource_access() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2569,21 +2564,21 @@ async fn result_metadata_preserves_results_within_request_budget(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "copies_full_metadata_without_rules")]
-#[test_case(true, true, true, true, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "accepted_error_keeps_metadata")]
-#[test_case(true, true, false, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "missing_metadata_stays_absent")]
-#[test_case(false, true, true, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "feature_off_does_not_record")]
-#[test_case(true, false, true, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "extension_owned_apps_do_not_record")]
-#[test_case(true, true, true, false, "employee@openai.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(None); "employee_keeps_metadata")]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(None); "direct_keeps_metadata")]
-#[test_case(true, true, true, true, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(None); "direct_accepted_error_keeps_metadata")]
-#[test_case(true, true, false, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(None); "direct_missing_metadata_stays_absent")]
-#[test_case(false, true, true, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(None); "direct_feature_off_does_not_record")]
-#[test_case(true, false, true, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(None); "direct_extension_owned_apps_do_not_record")]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(Some(true)); "analytics_enabled_keeps_metadata")]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, ResultMetadataAnalytics::Config(Some(false)); "analytics_disabled_omits_metadata")]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(Some(true)); "direct_analytics_enabled_keeps_metadata")]
-#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, ResultMetadataAnalytics::Config(Some(false)); "direct_analytics_disabled_omits_metadata")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, None; "copies_full_metadata_without_rules")]
+#[test_case(true, true, true, true, "user@example.com", ToolMode::CodeModeOnly, None; "accepted_error_keeps_metadata")]
+#[test_case(true, true, false, false, "user@example.com", ToolMode::CodeModeOnly, None; "missing_metadata_stays_absent")]
+#[test_case(false, true, true, false, "user@example.com", ToolMode::CodeModeOnly, None; "feature_off_does_not_record")]
+#[test_case(true, false, true, false, "user@example.com", ToolMode::CodeModeOnly, None; "extension_owned_apps_do_not_record")]
+#[test_case(true, true, true, false, "employee@openai.com", ToolMode::CodeModeOnly, None; "employee_keeps_metadata")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, None; "direct_keeps_metadata")]
+#[test_case(true, true, true, true, "user@example.com", ToolMode::Direct, None; "direct_accepted_error_keeps_metadata")]
+#[test_case(true, true, false, false, "user@example.com", ToolMode::Direct, None; "direct_missing_metadata_stays_absent")]
+#[test_case(false, true, true, false, "user@example.com", ToolMode::Direct, None; "direct_feature_off_does_not_record")]
+#[test_case(true, false, true, false, "user@example.com", ToolMode::Direct, None; "direct_extension_owned_apps_do_not_record")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, Some(true); "analytics_enabled_keeps_metadata")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::CodeModeOnly, Some(false); "analytics_disabled_omits_metadata")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, Some(true); "direct_analytics_enabled_keeps_metadata")]
+#[test_case(true, true, true, false, "user@example.com", ToolMode::Direct, Some(false); "direct_analytics_disabled_omits_metadata")]
 async fn result_metadata_follows_call_binding(
     metadata_enabled: bool,
     host_owned: bool,
@@ -2591,13 +2586,9 @@ async fn result_metadata_follows_call_binding(
     is_error: bool,
     account_email: &str,
     tool_mode: ToolMode,
-    analytics: ResultMetadataAnalytics,
+    analytics_enabled: Option<bool>,
 ) -> Result<()> {
     skip_if_no_network!(Ok(()));
-    let (analytics_enabled, host_disables_analytics) = match analytics {
-        ResultMetadataAnalytics::Config(enabled) => (enabled, false),
-        ResultMetadataAnalytics::HostDisabled(enabled) => (enabled, true),
-    };
     let effective_analytics_enabled = false;
     let direct = matches!(tool_mode, ToolMode::Direct);
     let server = responses::start_mock_server().await;

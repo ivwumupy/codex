@@ -604,15 +604,6 @@ impl AuthModeWidget {
                     *error.write().unwrap() = None;
                     *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured;
                 }
-                Ok(other) => {
-                    *error.write().unwrap() = Some(format!(
-                        "Unexpected account/login/start response: {other:?}"
-                    ));
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
-                        value: api_key,
-                        prepopulated_from_env: false,
-                    });
-                }
                 Err(err) => {
                     *error.write().unwrap() = Some(format!("Failed to save API key: {err}"));
                     *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
@@ -671,12 +662,9 @@ mod tests {
     use codex_app_server_client::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY;
     use codex_app_server_client::InProcessAppServerClient;
     use codex_app_server_client::InProcessClientStartArgs;
-    use codex_app_server_client::RemoteAppServerEndpoint;
     use codex_arg0::Arg0DispatchPaths;
     use codex_config::CloudConfigBundleLoader;
     use codex_config::LoaderOverrides;
-    use codex_features::Feature;
-    use codex_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use tempfile::TempDir;

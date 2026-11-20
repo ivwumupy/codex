@@ -1,6 +1,5 @@
 mod workspace_routing;
 mod workspace_switching;
-pub use workspace_switching::WorkspaceLogin;
 pub use workspace_switching::WorkspaceSwitch;
 
 #[path = "account_grant.rs"]
@@ -41,7 +40,6 @@ use codex_agent_identity::ChatGptEnvironment;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::ModelProviderAuthInfo;
-use codex_workload_identity::ApiTokenMetadata;
 
 use super::access_token::CodexAccessToken;
 use super::access_token::classify_codex_access_token;
@@ -62,8 +60,6 @@ use super::external_bearer::BearerTokenRefresher;
 use crate::auth::AuthHeaders;
 pub use crate::auth::agent_identity::AgentIdentityAuth;
 pub use crate::auth::agent_identity::AgentIdentityAuthError;
-pub use crate::auth::bedrock_access_keys::BedrockAccessKeysAuth;
-pub use crate::auth::bedrock_api_key::BedrockApiKeyAuth;
 pub use crate::auth::personal_access_token::PersonalAccessTokenAuth;
 pub use crate::auth::storage::AgentIdentityAuthRecord;
 pub use crate::auth::storage::AgentIdentityStorage;
@@ -112,8 +108,6 @@ pub enum CodexAuth {
     Headers(AuthHeaders),
     AgentIdentity(AgentIdentityAuth),
     PersonalAccessToken(PersonalAccessTokenAuth),
-    BedrockApiKey(BedrockApiKeyAuth),
-    BedrockAccessKeys(BedrockAccessKeysAuth),
 }
 
 /// Policy for resolving Agent Identity auth from a broader Codex auth snapshot.
@@ -187,8 +181,6 @@ impl PartialEq for CodexAuth {
         match (self, other) {
             (Self::Headers(a), Self::Headers(b)) => a == b,
             (Self::PersonalAccessToken(a), Self::PersonalAccessToken(b)) => a == b,
-            (Self::BedrockApiKey(a), Self::BedrockApiKey(b)) => a == b,
-            (Self::BedrockAccessKeys(a), Self::BedrockAccessKeys(b)) => a == b,
             _ => self.api_auth_mode() == other.api_auth_mode(),
         }
     }
@@ -197,7 +189,6 @@ impl PartialEq for CodexAuth {
 #[derive(Clone)]
 pub struct ApiKeyAuth {
     pub(super) api_key: String,
-    pub(super) workload_identity: Option<ApiTokenMetadata>,
 }
 
 impl Debug for ApiKeyAuth {
@@ -235,7 +226,6 @@ const REFRESH_TOKEN_UNKNOWN_MESSAGE: &str =
     "Your access token could not be refreshed. Please log out and sign in again.";
 const REFRESH_TOKEN_ACCOUNT_MISMATCH_MESSAGE: &str = "Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.";
 const REFRESH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
-pub(super) const REVOKE_TOKEN_URL: &str = "https://auth.openai.com/oauth/revoke";
 pub const REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR: &str = "CODEX_REFRESH_TOKEN_URL_OVERRIDE";
 pub const REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR: &str = "CODEX_REVOKE_TOKEN_URL_OVERRIDE";
 pub const CLIENT_ID_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_CLIENT_ID";
@@ -444,8 +434,6 @@ impl CodexAuth {
             Self::Headers(_) => AuthMode::Headers,
             Self::AgentIdentity(_) => AuthMode::AgentIdentity,
             Self::PersonalAccessToken(_) => AuthMode::PersonalAccessToken,
-            Self::BedrockApiKey(_) => AuthMode::BedrockApiKey,
-            Self::BedrockAccessKeys(_) => AuthMode::BedrockAccessKeys,
         }
     }
 
@@ -458,8 +446,6 @@ impl CodexAuth {
             Self::Headers(_) => AuthMode::Headers,
             Self::AgentIdentity(_) => AuthMode::AgentIdentity,
             Self::PersonalAccessToken(_) => AuthMode::PersonalAccessToken,
-            Self::BedrockApiKey(_) => AuthMode::BedrockApiKey,
-            Self::BedrockAccessKeys(_) => AuthMode::BedrockAccessKeys,
         }
     }
 
@@ -498,17 +484,7 @@ impl CodexAuth {
             | Self::ChatgptAuthTokens(_)
             | Self::Headers(_)
             | Self::AgentIdentity(_)
-            | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_)
-            | Self::BedrockAccessKeys(_) => None,
-        }
-    }
-
-    pub(super) fn api_workload_identity(&self) -> Option<&ApiTokenMetadata> {
-        if let Self::ApiKey(auth) = self {
-            auth.workload_identity.as_ref()
-        } else {
-            None
+            | Self::PersonalAccessToken(_) => None,
         }
     }
 
@@ -540,9 +516,6 @@ impl CodexAuth {
                 "header auth does not expose a bearer token",
             )),
             Self::PersonalAccessToken(auth) => Ok(auth.access_token().to_string()),
-            Self::BedrockApiKey(_) | Self::BedrockAccessKeys(_) => Err(std::io::Error::other(
-                "Bedrock API key auth does not expose a Codex bearer token",
-            )),
         }
     }
 
@@ -644,9 +617,7 @@ impl CodexAuth {
             Self::ApiKey(_)
             | Self::Headers(_)
             | Self::AgentIdentity(_)
-            | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_)
-            | Self::BedrockAccessKeys(_) => return None,
+            | Self::PersonalAccessToken(_) => return None,
         };
         #[expect(clippy::unwrap_used)]
         state.auth_dot_json.lock().unwrap().clone()
@@ -692,9 +663,7 @@ impl CodexAuth {
             Self::ApiKey(_)
             | Self::ChatgptAuthTokens(_)
             | Self::Headers(_)
-            | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_)
-            | Self::BedrockAccessKeys(_) => Ok(None),
+            | Self::PersonalAccessToken(_) => Ok(None),
             Self::Chatgpt(_) => {
                 if policy == AgentIdentityAuthPolicy::JwtOnly {
                     return Ok(None);
@@ -768,8 +737,6 @@ impl CodexAuth {
             last_refresh: Some(Utc::now()),
             agent_identity: None,
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         };
 
         let state = ChatgptAuthState {
@@ -806,7 +773,6 @@ impl CodexAuth {
     pub fn from_api_key(api_key: &str) -> Self {
         Self::ApiKey(ApiKeyAuth {
             api_key: api_key.to_owned(),
-            workload_identity: None,
         })
     }
 }
@@ -977,8 +943,6 @@ pub fn login_with_api_key(
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
-        bedrock_api_key: None,
-        bedrock_access_keys: None,
     };
     save_auth(
         codex_home,
@@ -1012,8 +976,6 @@ pub async fn login_with_access_token(
                 last_refresh: None,
                 agent_identity: None,
                 personal_access_token: Some(access_token.to_string()),
-                bedrock_api_key: None,
-                bedrock_access_keys: None,
             }
         }
         CodexAccessToken::AgentIdentityJwt(jwt) => {
@@ -1031,8 +993,6 @@ pub async fn login_with_access_token(
                 last_refresh: None,
                 agent_identity: Some(AgentIdentityStorage::Jwt(jwt.to_string())),
                 personal_access_token: None,
-                bedrock_api_key: None,
-                bedrock_access_keys: None,
             }
         }
     };
@@ -1060,25 +1020,6 @@ fn ensure_auth_workspace_allowed(
         ));
     }
     Ok(())
-}
-
-fn ensure_agent_identity_workspace_allowed(
-    expected_workspace_ids: Option<&[String]>,
-    agent_identity: &AgentIdentityStorage,
-) -> std::io::Result<()> {
-    let Some(expected_workspace_ids) = expected_workspace_ids else {
-        return Ok(());
-    };
-
-    match agent_identity {
-        AgentIdentityStorage::Jwt(jwt) => {
-            let record = AgentIdentityAuthRecord::from_agent_identity_jwt(jwt)?;
-            ensure_auth_workspace_allowed(Some(expected_workspace_ids), &record.account_id)
-        }
-        AgentIdentityStorage::Record(record) => {
-            ensure_auth_workspace_allowed(Some(expected_workspace_ids), &record.account_id)
-        }
-    }
 }
 
 /// Writes an in-memory auth payload for externally managed ChatGPT tokens.
@@ -1248,10 +1189,7 @@ fn validate_auth_restrictions(
     let Some(expected_workspaces) = expected_workspaces else {
         return Ok(());
     };
-    if matches!(
-        auth,
-        CodexAuth::ApiKey(_) | CodexAuth::BedrockApiKey(_) | CodexAuth::BedrockAccessKeys(_)
-    ) {
+    if matches!(auth, CodexAuth::ApiKey(_)) {
         return Ok(());
     }
 
@@ -1314,9 +1252,7 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
 
     if let Some(required_method) = config.forced_login_method {
         let method_violation = match (required_method, auth.auth_mode()) {
-            (ForcedLoginMethod::Api, AuthMode::ApiKey)
-            | (ForcedLoginMethod::Api, AuthMode::BedrockApiKey)
-            | (ForcedLoginMethod::Api, AuthMode::BedrockAccessKeys) => None,
+            (ForcedLoginMethod::Api, AuthMode::ApiKey) => None,
             (ForcedLoginMethod::Chatgpt, AuthMode::Chatgpt)
             | (ForcedLoginMethod::Chatgpt, AuthMode::ChatgptAuthTokens)
             | (ForcedLoginMethod::Chatgpt, AuthMode::Headers)
@@ -1330,9 +1266,7 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
                 "API key login is required, but ChatGPT is currently being used. Logging out."
                     .to_string(),
             ),
-            (ForcedLoginMethod::Chatgpt, AuthMode::ApiKey)
-            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockApiKey)
-            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockAccessKeys) => Some(
+            (ForcedLoginMethod::Chatgpt, AuthMode::ApiKey) => Some(
                 "ChatGPT login is required, but an API key is currently being used. Logging out."
                     .to_string(),
             ),
@@ -1350,9 +1284,7 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
 
     if let Some(expected_account_ids) = config.forced_chatgpt_workspace_id.as_deref() {
         let chatgpt_account_id = match &auth {
-            CodexAuth::ApiKey(_)
-            | CodexAuth::BedrockApiKey(_)
-            | CodexAuth::BedrockAccessKeys(_) => {
+            CodexAuth::ApiKey(_) => {
                 return Ok(());
             }
             CodexAuth::Headers(_)
@@ -1708,8 +1640,6 @@ impl AuthDotJson {
             last_refresh: Some(Utc::now()),
             agent_identity: None,
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         })
     }
 
@@ -1720,27 +1650,10 @@ impl AuthDotJson {
         if self.personal_access_token.is_some() {
             return AuthMode::PersonalAccessToken;
         }
-        if self.bedrock_api_key.is_some() {
-            return AuthMode::BedrockApiKey;
-        }
-        if self.bedrock_access_keys.is_some() {
-            return AuthMode::BedrockAccessKeys;
-        }
         if self.openai_api_key.is_some() {
             return AuthMode::ApiKey;
         }
         AuthMode::Chatgpt
-    }
-
-    fn storage_mode(
-        &self,
-        auth_credentials_store_mode: AuthCredentialsStoreMode,
-    ) -> AuthCredentialsStoreMode {
-        if self.resolved_mode() == AuthMode::ChatgptAuthTokens {
-            AuthCredentialsStoreMode::Ephemeral
-        } else {
-            auth_credentials_store_mode
-        }
     }
 }
 
@@ -2789,10 +2702,7 @@ impl AuthManager {
         match (a, b) {
             (None, None) => true,
             (Some(a), Some(b)) => match (a.api_auth_mode(), b.api_auth_mode()) {
-                (AuthMode::ApiKey, AuthMode::ApiKey) => {
-                    a.api_key() == b.api_key()
-                        && a.api_workload_identity() == b.api_workload_identity()
-                }
+                (AuthMode::ApiKey, AuthMode::ApiKey) => a.api_key() == b.api_key(),
                 (AuthMode::Chatgpt, AuthMode::Chatgpt) => {
                     a.get_current_auth_json() == b.get_current_auth_json()
                 }
@@ -2807,8 +2717,6 @@ impl AuthManager {
                     _ => false,
                 },
                 (AuthMode::PersonalAccessToken, AuthMode::PersonalAccessToken) => a == b,
-                (AuthMode::BedrockApiKey, AuthMode::BedrockApiKey) => a == b,
-                (AuthMode::BedrockAccessKeys, AuthMode::BedrockAccessKeys) => a == b,
                 _ => false,
             },
             _ => false,
@@ -3343,9 +3251,7 @@ impl AuthManager {
                     | CodexAuth::ChatgptAuthTokens(_)
                     | CodexAuth::Headers(_)
                     | CodexAuth::AgentIdentity(_)
-                    | CodexAuth::PersonalAccessToken(_)
-                    | CodexAuth::BedrockApiKey(_)
-                    | CodexAuth::BedrockAccessKeys(_),
+                    | CodexAuth::PersonalAccessToken(_),
                 )
                 | None => Ok(()),
             }

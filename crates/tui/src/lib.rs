@@ -96,7 +96,6 @@ pub(crate) use worktree_startup::ManagedTuiWorktree;
 
 mod activation_key_guard;
 mod additional_dirs;
-mod analytics;
 mod app;
 mod app_backtrack;
 mod app_command;
@@ -130,7 +129,6 @@ mod image_decode;
 mod markdown_copy;
 mod permission_discovery;
 mod pets;
-mod security_setup;
 mod worktree_browser;
 pub use custom_terminal::Terminal;
 mod assistant_directives;
@@ -2292,10 +2290,7 @@ async fn get_login_status(
     let account = app_server.read_account().await?;
     let login_status = match &account.account {
         Some(AppServerAccount::ApiKey {}) => LoginStatus::AuthMode(AuthMode::ApiKey),
-        Some(AppServerAccount::Chatgpt { .. }) => LoginStatus::AuthMode(AuthMode::Chatgpt),
-        Some(AppServerAccount::AmazonBedrock { .. } | AppServerAccount::Gcp {}) | None => {
-            LoginStatus::NotAuthenticated
-        }
+        None => LoginStatus::NotAuthenticated,
     };
     Ok((login_status, account))
 }

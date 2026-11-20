@@ -63,7 +63,6 @@ mod external_agent_memory_concurrency;
 mod feedback;
 mod frozen_cloud_skills;
 mod fs;
-mod git_attribution;
 mod guardian_v2;
 mod history_notes_extension;
 mod hooks_list;
@@ -95,7 +94,6 @@ mod model_provider_config_tests;
 mod model_provider_enforcement;
 mod model_provider_list_tests;
 mod multi_agent_v2_developer_instructions;
-mod otel;
 mod output_schema;
 mod permission_profile_list;
 mod plan_item;
@@ -103,17 +101,11 @@ mod plugin_install;
 mod plugin_list;
 mod plugin_manifest_cache;
 mod plugin_read;
-mod plugin_reconcile;
 mod plugin_search;
-mod plugin_share;
 mod plugin_uninstall;
 mod process_exec;
 mod projects;
-mod rate_limits;
-#[path = "rate_limits_identity_tests.rs"]
-mod rate_limits_identity;
-mod recommended_plugins;
-mod remote_control;
+
 #[cfg(debug_assertions)]
 mod remote_thread_store;
 mod request_permissions;

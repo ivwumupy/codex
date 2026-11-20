@@ -11,11 +11,6 @@ pub(super) enum Field {
     ManagedUrl,
     Variable,
     ExternalAuth,
-    Profile,
-    Region,
-    Project,
-    Location,
-    Credentials,
 }
 
 impl Field {
@@ -25,11 +20,6 @@ impl Field {
             Self::Url | Self::ManagedUrl => "Base URL",
             Self::Variable => "API key variable",
             Self::ExternalAuth => "External authentication",
-            Self::Profile => "AWS profile",
-            Self::Region => "AWS region",
-            Self::Project => "Project ID",
-            Self::Location => "Location",
-            Self::Credentials => "Credential file (server)",
         }
     }
 }
@@ -59,22 +49,6 @@ pub(super) fn provider_fields(provider: &ModelProviderSummary) -> Vec<(Field, Op
                 auth_field,
             ];
         }
-        ProviderSettings::Bedrock { profile, region } => vec![
-            (
-                Field::Profile,
-                profile.as_deref().filter(|p| !p.trim().is_empty()),
-            ),
-            (Field::Region, region.as_deref()),
-        ],
-        ProviderSettings::Gcp {
-            project_id,
-            location,
-            credential_file,
-        } => vec![
-            (Field::Project, project_id.as_deref()),
-            (Field::Location, location.as_deref()),
-            (Field::Credentials, credential_file.as_deref()),
-        ],
     };
     if let Some(url) = url {
         fields.push((Field::ManagedUrl, Some(url)));

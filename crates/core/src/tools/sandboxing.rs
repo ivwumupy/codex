@@ -175,6 +175,10 @@ pub(crate) enum ExecApprovalRequirement {
         proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
     },
     /// A fresh human decision is required for each execution attempt.
+    #[expect(
+        dead_code,
+        reason = "managed policy is disabled in this fork; retain the explicit human-only approval path"
+    )]
     NeedsHumanApproval { reason: Option<String> },
     /// Execution forbidden for this tool call.
     Forbidden { reason: String },

@@ -665,7 +665,6 @@ source = {:?}
     let request_id = mcp
         .send_plugin_list_request(PluginListParams {
             cwds: None,
-            marketplace_kinds: None,
             force_refetch: false,
         })
         .await?;
@@ -1683,7 +1682,6 @@ async fn external_agent_config_import_reinstalls_plugins_from_known_marketplaces
     let request_id = mcp
         .send_plugin_list_request(PluginListParams {
             cwds: None,
-            marketplace_kinds: None,
             force_refetch: false,
         })
         .await?;

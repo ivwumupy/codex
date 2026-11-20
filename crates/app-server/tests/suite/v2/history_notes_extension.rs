@@ -17,11 +17,8 @@ use tokio::time::timeout;
 use wiremock::Mock;
 use wiremock::Request;
 use wiremock::ResponseTemplate;
-use wiremock::matchers::body_partial_json;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
-
-const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 const THREAD_HINT: &str =
     "Recent notes (up to 5, most-recent first):\n- /root/notes/latest.md (2 lines, 14 UTF-8 bytes)";

@@ -184,8 +184,6 @@ pub(crate) async fn run_codex_thread_interactive(
             return Err(error.into());
         }
     };
-    let thread_config = session.thread_config_snapshot().await;
-    let client_metadata = parent_session.app_server_client_metadata().await;
 
     let caller_io = forward_session_io(Arc::new(io), cancel_token);
     startup.release_membership();

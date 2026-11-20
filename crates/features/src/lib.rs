@@ -310,8 +310,6 @@ pub enum Feature {
     CommandSessionsWorldState,
     /// Track top-level tool definitions in world state and emit incremental context updates.
     IncrementalTools,
-    /// Publish incremental tool declarations on regular Amazon Bedrock and GCP Responses.
-    IncrementalToolsLegacy,
     /// Suppress the model ID announcement in incremental context after a model switch.
     SuppressModelChangeAnnouncements,
     /// Preserve inherited tool declarations in MCP-disabled prediction forks.
@@ -373,12 +371,10 @@ pub enum Feature {
     ///
     /// Requirements-only gate: this should be set from requirements, not user config.
     ComputerUse,
-    /// Enable the PS-backed remote plugin catalog.
-    RemotePlugin,
+
     /// Removed compatibility flag for plugin discovery prefetch.
     PluginDiscoveryPrefetch,
-    /// Enable remote plugin sharing flows.
-    PluginSharing,
+
     /// Removed compatibility flag retained as a no-op.
     ExternalMigration,
     /// Enable extension-backed image generation.
@@ -540,8 +536,7 @@ pub enum Feature {
     /// Enable collaboration modes (Plan, Default).
     /// Kept for config backward compatibility; behavior is always collaboration-modes-enabled.
     CollaborationModes,
-    /// Removed compatibility flag for the deleted remote control feature.
-    RemoteControl,
+
     /// Removed compatibility flag retained as a no-op so old wrappers can
     /// still pass `--enable image_detail_original`.
     ImageDetailOriginal,
@@ -750,9 +745,7 @@ impl Features {
                 "js_repl_tools_only" => {
                     continue;
                 }
-                "remote_control" | "remote_compaction_v2" => {
-                    continue;
-                }
+
                 "apply_patch_freeform" => {
                     continue;
                 }
@@ -1804,12 +1797,6 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: true,
     },
     FeatureSpec {
-        id: Feature::IncrementalToolsLegacy,
-        key: "incremental_tools_legacy",
-        stage: Stage::UnderDevelopment,
-        default_enabled: false,
-    },
-    FeatureSpec {
         id: Feature::SuppressModelChangeAnnouncements,
         key: "suppress_model_change_announcements",
         stage: Stage::Stable,
@@ -1942,22 +1929,10 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: true,
     },
     FeatureSpec {
-        id: Feature::RemotePlugin,
-        key: "remote_plugin",
-        stage: Stage::Stable,
-        default_enabled: true,
-    },
-    FeatureSpec {
         id: Feature::PluginDiscoveryPrefetch,
         key: "plugin_discovery_prefetch",
         stage: Stage::Removed,
         default_enabled: false,
-    },
-    FeatureSpec {
-        id: Feature::PluginSharing,
-        key: "plugin_sharing",
-        stage: Stage::Stable,
-        default_enabled: true,
     },
     FeatureSpec {
         id: Feature::ExternalMigration,
@@ -2275,12 +2250,6 @@ pub const FEATURES: &[FeatureSpec] = &[
         id: Feature::StepModelSwitching,
         key: "step_model_switching",
         stage: Stage::UnderDevelopment,
-        default_enabled: false,
-    },
-    FeatureSpec {
-        id: Feature::RemoteControl,
-        key: "remote_control",
-        stage: Stage::Removed,
         default_enabled: false,
     },
     FeatureSpec {

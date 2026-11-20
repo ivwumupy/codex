@@ -78,9 +78,7 @@ impl AccountRequestProcessor {
         let config = self.load_latest_config().await;
         let provider =
             create_model_provider(config.model_provider, Some(self.auth_manager.clone()));
-        let state = provider
-            .account_state()
-            .map_err(|err| invalid_request(err.to_string()))?;
+        let state = provider.account_state();
         Ok(Some(
             GetAccountResponse {
                 account: state.account.map(Account::from),
@@ -137,56 +135,12 @@ impl AccountRequestProcessor {
     async fn maybe_refresh_plugin_caches_for_current_config(
         config_manager: &ConfigManager,
         thread_manager: &Arc<ThreadManager>,
-        auth: Option<CodexAuth>,
     ) {
-        thread_manager
-            .plugins_manager()
-            .clear_recommended_plugins_cache();
-
-        match config_manager
-            .load_latest_config(/*fallback_cwd*/ None)
-            .await
-        {
-            Ok(config) => {
-                let runtime_auth = thread_manager.runtime_auth_for_config(&config);
-                Self::spawn_effective_plugins_changed_task(
-                    Arc::clone(thread_manager),
-                    config_manager.clone(),
-                    McpRefreshReason::AccountPluginCacheChanged,
-                );
-                let plugins_config = config.plugins_config_input();
-                let refresh_thread_manager = Arc::clone(thread_manager);
-                let refresh_config_manager = config_manager.clone();
-                let on_effective_plugins_changed: Arc<
-                    dyn Fn(codex_core_plugins::EffectivePluginsChange) + Send + Sync,
-                > = Arc::new(move |change| {
-                    Self::spawn_effective_plugins_changed_task(
-                        Arc::clone(&refresh_thread_manager),
-                        refresh_config_manager.clone(),
-                        change.metadata_change_id.map_or(
-                            McpRefreshReason::AccountPluginCacheChanged,
-                            McpRefreshReason::InstalledPluginMetadata,
-                        ),
-                    );
-                });
-                if let Err(err) = runtime_auth {
-                    warn!("failed to initialize runtime auth for remote plugin refresh: {err}");
-                    return;
-                }
-                thread_manager
-                    .plugins_manager()
-                    .maybe_start_remote_plugin_caches_refresh(
-                        &plugins_config,
-                        auth,
-                        Some(on_effective_plugins_changed),
-                    );
-            }
-            Err(err) => {
-                warn!(
-                    "failed to reload config after account changed, skipping remote installed plugins cache refresh: {err}"
-                );
-            }
-        }
+        Self::spawn_effective_plugins_changed_task(
+            Arc::clone(thread_manager),
+            config_manager.clone(),
+            McpRefreshReason::AccountPluginCacheChanged,
+        );
     }
 
     fn spawn_effective_plugins_changed_task(
@@ -212,21 +166,9 @@ impl AccountRequestProcessor {
             return Err(self.configured_auth_owned_by_host_error());
         }
         self.enterprise_login.cancel(/*login_id*/ None).await;
-        match params {
-            LoginAccountParams::ApiKey { api_key } => {
-                self.login_api_key_v2(request_id, LoginApiKeyParams { api_key })
-                    .await;
-            }
-            LoginAccountParams::Chatgpt { .. }
-            | LoginAccountParams::ChatgptDeviceCode
-            | LoginAccountParams::ChatgptAuthTokens { .. } => {
-                return Err(invalid_request("ChatGPT account login is unsupported."));
-            }
-            LoginAccountParams::AmazonBedrock { .. }
-            | LoginAccountParams::AmazonBedrockAccessKeys { .. } => {
-                return Err(invalid_request("Amazon Bedrock login is unsupported."));
-            }
-        }
+        let LoginAccountParams::ApiKey { api_key } = params;
+        self.login_api_key_v2(request_id, LoginApiKeyParams { api_key })
+            .await;
         Ok(())
     }
 
@@ -321,7 +263,6 @@ impl AccountRequestProcessor {
             Self::maybe_refresh_plugin_caches_for_current_config(
                 &self.config_manager,
                 &self.thread_manager,
-                self.auth_manager.auth_cached(),
             )
             .await;
         }
@@ -367,7 +308,6 @@ impl AccountRequestProcessor {
         Self::maybe_refresh_plugin_caches_for_current_config(
             &self.config_manager,
             &self.thread_manager,
-            self.auth_manager.auth_cached(),
         )
         .await;
 

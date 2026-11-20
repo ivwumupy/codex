@@ -15,27 +15,13 @@ pub(crate) struct SessionAccount {
 
 impl From<GetAccountResponse> for SessionAccount {
     fn from(response: GetAccountResponse) -> Self {
-        let mut account = Self {
+        Self {
+            display: response
+                .account
+                .map(|Account::ApiKey {}| StatusAccountDisplay::ApiKey),
             requires_openai_auth: response.requires_openai_auth,
-            ..Self::default()
-        };
-        account.display = match response.account {
-            Some(Account::Chatgpt {
-                email,
-                plan_type,
-                workspace_name,
-            }) => {
-                account.plan = Some(plan_type);
-                Some(StatusAccountDisplay::ChatGpt {
-                    email,
-                    plan: Some(plan_type_display_name(plan_type)),
-                    workspace: workspace_display(workspace_name, response.workspace_routing),
-                })
-            }
-            Some(Account::ApiKey {}) => Some(StatusAccountDisplay::ApiKey),
-            Some(Account::AmazonBedrock { .. } | Account::Gcp {}) | None => None,
-        };
-        account
+            ..Default::default()
+        }
     }
 }
 

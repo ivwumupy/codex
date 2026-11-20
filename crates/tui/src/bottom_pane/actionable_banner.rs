@@ -174,20 +174,6 @@ impl From<ActionableBanner> for SelectionViewParams {
 }
 
 impl BottomPane {
-    pub(crate) fn transfer_inline_banner_from(&mut self, previous: &mut Self) {
-        self.inline_banner = previous.inline_banner.take();
-        if let Some(banner) = &mut self.inline_banner
-            && let InlineBannerContent::Actions(view) = &mut banner.content
-        {
-            view.app_event_tx = self.app_event_tx.clone();
-        }
-        self.request_redraw();
-    }
-
-    pub(crate) fn show_actionable_banner(&mut self, banner: ActionableBanner) {
-        self.show_selection_view(banner.into());
-    }
-
     /// Display a banner above the composer without interrupting active dialogs or losing a draft.
     pub(crate) fn set_inline_banner(&mut self, banner: Option<ActionableBanner>) {
         self.inline_banner = banner.map(|banner| {

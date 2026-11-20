@@ -1,7 +1,7 @@
 use super::*;
-use crate::app_info::connector_metadata_to_api;
+use codex_app_server_protocol::ConnectorMetadata;
 
-pub(in crate::request_processors) const APP_READ_MAX_IDS: usize = 100;
+const APP_READ_MAX_IDS: usize = 100;
 const APPS_READ_DURATION_METRIC: &str = "codex.apps.read.duration_ms";
 
 impl AppsRequestProcessor {
@@ -26,67 +26,31 @@ impl AppsRequestProcessor {
             .into_iter()
             .filter(|app_id| seen_app_ids.insert(app_id.clone()))
             .collect::<Vec<_>>();
-        let (mut config, mcp_manager) = self.load_apps_config(thread_id.as_deref()).await?;
-        let auth = match mcp_manager
-            .auth_manager()
-            .auth_with_http_client_factory()
-            .await
-        {
-            Some((auth, factory)) => {
-                config.application_network_policy = factory.network_policy().clone();
-                Some(auth)
-            }
-            None => None,
-        };
-        let runtime = self
-            .thread_manager
-            .runtime_auth_for_mcp_manager(&config, &mcp_manager)
-            .map_err(|error| internal_error(error.to_string()))?;
-        if !config
-            .features
-            .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
-        {
-            let response = AppsReadResponse {
-                apps: Vec::new(),
-                missing_app_ids: app_ids,
-            };
-            record_apps_read_duration(started_at, include_tools);
-            return Ok(Some(response.into()));
-        }
-        let auth = auth
-            .as_ref()
-            .ok_or_else(|| internal_error("app/read requires ChatGPT auth".to_string()))?;
-
-        let connectors::ConnectorMetadataReadResult {
-            apps,
-            missing_app_ids,
-        } = connectors::read_connector_metadata(
-            &config,
-            auth,
-            runtime.as_ref(),
-            &app_ids,
-            include_tools,
-        )
-        .await
-        .map_err(|err| internal_error(format!("failed to read app metadata: {err}")))?;
-        let loaded_plugins = mcp_manager
-            .plugins_manager()
-            .plugins_for_config(&config.plugins_config_input())
-            .await;
-        let connector_snapshot =
-            codex_connectors::ConnectorSnapshot::from_plugin_capability_summaries(
-                loaded_plugins.capability_summaries(),
-            );
-        let apps = apps
+        let mut available: HashMap<_, _> = self
+            .accessible_apps(thread_id.as_deref(), false)
+            .await?
             .into_iter()
-            .map(|metadata| {
-                let mut app = connector_metadata_to_api(metadata);
-                app.plugin_display_names = connector_snapshot
-                    .plugin_display_names_for_connector_id(app.id.as_str())
-                    .to_vec();
-                app
-            })
+            .map(|app| (app.id.clone(), app))
             .collect();
+        let mut apps = Vec::new();
+        let mut missing_app_ids = Vec::new();
+        for id in app_ids {
+            if let Some(app) = available.remove(&id) {
+                apps.push(ConnectorMetadata {
+                    id,
+                    name: app.name,
+                    description: app.description,
+                    icon_url: app.logo_url,
+                    icon_url_dark: app.logo_url_dark,
+                    distribution_channel: app.distribution_channel,
+                    install_url: app.install_url,
+                    plugin_display_names: app.plugin_display_names,
+                    tool_summaries: None,
+                });
+            } else {
+                missing_app_ids.push(id);
+            }
+        }
         let response = AppsReadResponse {
             apps,
             missing_app_ids,

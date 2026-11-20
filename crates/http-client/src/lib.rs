@@ -53,6 +53,7 @@ pub use crate::network_policy::NetworkPolicyRevision;
 pub use crate::openai_endpoints::OpenAiDestination;
 pub use crate::openai_endpoints::classify_openai_api_url;
 pub use crate::openai_endpoints::is_openai_api_url;
+pub use crate::openai_endpoints::is_openai_model_api_url;
 pub use crate::openai_headers::CHATGPT_ACCOUNT_ID_HEADER;
 pub use crate::openai_headers::OPENAI_ORGANIZATION_HEADER;
 pub use crate::openai_headers::OPENAI_PROJECT_HEADER;

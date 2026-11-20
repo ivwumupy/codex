@@ -95,9 +95,7 @@ impl ChatWidget {
         self.turn_lifecycle.start(Instant::now());
         self.transcript.reset_turn_flags();
         self.adaptive_chunking.reset();
-        if self.plan_stream_controller.take().is_some() {
-            self.request_pending_usage_output_insertion_after_stream_shutdown();
-        }
+        self.plan_stream_controller = None;
         self.turn_runtime_metrics = RuntimeMetricsSummary::default();
         self.session_telemetry.reset_runtime_metrics();
         self.bottom_pane.clear_quit_shortcut_hint();
@@ -379,7 +377,7 @@ impl ChatWidget {
         self.adaptive_chunking.reset();
         self.stream_controller = None;
         self.plan_stream_controller = None;
-        self.request_pending_usage_output_insertion_after_stream_shutdown();
+
         self.status_state.pending_status_indicator_restore = false;
         self.safety_buffering_prompt = None;
         self.request_status_line_branch_refresh();
@@ -478,8 +476,6 @@ impl ChatWidget {
 
     pub(super) fn on_rate_limit_error(&mut self, error_kind: RateLimitErrorKind, message: String) {
         self.invalidate_ordinary_usage_recovery();
-        // on_error can drain queued input, before the asynchronous recovery read completes.
-        self.input_queue.rate_limit_recovery_pending = self.has_chatgpt_account;
         let usage_limit_error = matches!(error_kind, RateLimitErrorKind::UsageLimit);
         let rate_limit_reached_type = self.codex_rate_limit_reached_type.map(|kind| {
             if usage_limit_error {
@@ -501,34 +497,14 @@ impl ChatWidget {
         }
         self.codex_rate_limit_reached_type = rate_limit_reached_type;
         // Keep owner remediation in history even when the optional backend banner is unavailable.
-        let (message, nudge) = match rate_limit_reached_type {
-            Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) => (
-                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex."
-                        .to_string(),
-                    None,
-            ),
-            Some(RateLimitReachedType::WorkspaceOwnerUsageLimitReached) => (
-                    "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex."
-                        .to_string(),
-                    None,
-            ),
-            Some(RateLimitReachedType::WorkspaceMemberCreditsDepleted) =>
-                (message, Some(AddCreditsNudgeCreditType::Credits)),
-            Some(RateLimitReachedType::WorkspaceMemberUsageLimitReached) =>
-                (message, Some(AddCreditsNudgeCreditType::UsageLimit)),
-            Some(RateLimitReachedType::RateLimitReached) | None => (message, None),
+        let message = match rate_limit_reached_type {
+            Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) =>
+                "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex.".to_string(),
+            Some(RateLimitReachedType::WorkspaceOwnerUsageLimitReached) =>
+                "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex.".to_string(),
+            _ => message,
         };
         self.on_error(message);
-        if !self.has_applicable_backend_banner()
-            && let Some(credit_type) = nudge
-        {
-            self.open_workspace_owner_nudge_prompt(credit_type);
-        }
-        if self.has_chatgpt_account {
-            self.app_event_tx.send(AppEvent::RefreshRateLimits {
-                origin: crate::app_event::RateLimitRefreshOrigin::Recovery,
-            });
-        }
     }
 
     pub(super) fn handle_non_retry_error(

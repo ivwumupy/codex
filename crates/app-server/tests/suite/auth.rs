@@ -2,24 +2,18 @@ use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
-use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use chrono::Duration;
 use chrono::Utc;
-use codex_app_server_protocol::Account;
 use codex_app_server_protocol::AuthMode;
-use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::GetAuthStatusParams;
 use codex_app_server_protocol::GetAuthStatusResponse;
 use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::RequestId;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_features::Feature;
 use codex_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
-use codex_protocol::account::PlanType as AccountPlanType;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use tempfile::TempDir;
@@ -27,7 +21,6 @@ use tokio::time::timeout;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
-use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
@@ -138,105 +131,6 @@ async fn get_auth_status_with_api_key() -> Result<()> {
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
     assert_eq!(status.auth_method, Some(AuthMode::ApiKey));
     assert_eq!(status.auth_token, Some("sk-test-key".to_string()));
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn personal_access_token_without_email_supports_auth_status_and_account_read() -> Result<()> {
-    let codex_home = TempDir::new()?;
-    create_config_toml(codex_home.path())?;
-
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/v1/user-auth-credential/whoami"))
-        .and(header("Authorization", "Bearer at-test-token"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "email": null,
-            "chatgpt_user_id": "user-123",
-            "chatgpt_account_id": "account-123",
-            "chatgpt_plan_type": "enterprise_cbp_automation",
-            "chatgpt_account_is_fedramp": false,
-        })))
-        .expect(1..)
-        .mount(&server)
-        .await;
-
-    let authapi_base_url = server.uri();
-    let mut mcp = TestAppServer::builder()
-        .with_mock_chatgpt_backend()
-        .with_codex_home(codex_home.path())
-        .without_auto_env()
-        .with_env_overrides(&[
-            ("OPENAI_API_KEY", None),
-            ("CODEX_ACCESS_TOKEN", Some("at-test-token")),
-            ("CODEX_AUTHAPI_BASE_URL", Some(authapi_base_url.as_str())),
-        ])
-        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
-        .await?;
-
-    let request_id = mcp
-        .send_get_auth_status_request(GetAuthStatusParams {
-            include_token: Some(true),
-            refresh_token: Some(false),
-        })
-        .await?;
-
-    let status: GetAuthStatusResponse =
-        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
-    assert_eq!(
-        status,
-        GetAuthStatusResponse {
-            auth_method: Some(AuthMode::PersonalAccessToken),
-            auth_token: None,
-            requires_openai_auth: Some(true),
-        }
-    );
-
-    let request_id = mcp
-        .send_get_account_request(GetAccountParams {
-            refresh_token: false,
-        })
-        .await?;
-    let response: JSONRPCResponse = timeout(
-        DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
-    )
-    .await??;
-    assert_eq!(
-        response
-            .result
-            .get("account")
-            .and_then(|account| account.get("email")),
-        Some(&serde_json::Value::Null),
-    );
-    assert_eq!(
-        response
-            .result
-            .get("account")
-            .and_then(|account| account.get("planType"))
-            .and_then(serde_json::Value::as_str),
-        Some("enterprise_cbp_automation"),
-    );
-    assert_eq!(
-        to_response::<GetAccountResponse>(response)?,
-        GetAccountResponse {
-            user_id: Some("user-123".to_string()),
-            workspace_routing: Some(codex_app_server_protocol::WorkspaceRouting {
-                chatgpt_account_id: "account-123".to_string(),
-                backend_origin: "https://chatgpt.com".to_string(),
-                account_routing_override:
-                    codex_app_server_protocol::AccountRoutingOverride::NoConstraint,
-            }),
-            account: Some(Account::Chatgpt {
-                email: None,
-                plan_type: AccountPlanType::EnterpriseCbpAutomation,
-                workspace_name: None,
-            }),
-            requires_openai_auth: true,
-        }
-    );
-
-    server.verify().await;
     Ok(())
 }
 

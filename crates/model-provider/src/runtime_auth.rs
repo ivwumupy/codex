@@ -106,9 +106,6 @@ pub fn select_runtime_provider(
             "runtime auth requires the model provider's selected OpenAI credential".to_string(),
         )
     };
-    if info.aws.is_some() {
-        return Err(unsupported());
-    }
     let credentials = credentials.ok_or_else(unsupported)?;
     if let Some(bearer) = crate::auth::bearer_auth_for_provider(info)? {
         let token = bearer.token.ok_or_else(unsupported)?;

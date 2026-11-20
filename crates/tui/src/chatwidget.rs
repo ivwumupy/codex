@@ -78,8 +78,6 @@ use crate::text_formatting::proper_join;
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
 use crate::version::CODEX_CLI_VERSION;
-use codex_app_server_protocol::AddCreditsNudgeCreditType;
-use codex_app_server_protocol::AddCreditsNudgeEmailStatus;
 use codex_app_server_protocol::AppSummary;
 use codex_app_server_protocol::CodexErrorInfo as AppServerCodexErrorInfo;
 use codex_app_server_protocol::CollabAgentTool;
@@ -191,7 +189,6 @@ fn normalize_thread_name(name: &str) -> Option<String> {
 use crate::app_event::AppEvent;
 use crate::app_event::ExitMode;
 use crate::app_event::PermissionProfileSelection;
-use crate::app_event::RateLimitRefreshOrigin;
 use crate::app_event_sender::AppEventSender;
 use crate::auto_review_denials;
 use crate::auto_review_denials::RecentAutoReviewDenials;
@@ -343,7 +340,6 @@ mod backend_banners;
 mod compaction;
 mod luna_reserve_model;
 mod luna_reserve_return;
-mod security_setup;
 pub(crate) use backend_banners::AutomaticModelSwitchReason;
 mod protocol;
 pub(crate) use protocol::final_agent_message;
@@ -358,7 +354,6 @@ use self::rate_limits::app_server_rate_limit_error_kind;
 pub(crate) use self::rate_limits::fallback_limit_label;
 use self::rate_limits::is_app_server_cyber_policy_error;
 mod recap;
-mod reset_credits;
 pub(crate) use self::rate_limits::limit_label_for_window;
 mod completion;
 mod reasoning_shortcuts;
@@ -392,12 +387,10 @@ mod tool_requests;
 mod transcript;
 mod transcript_export;
 mod tui_mode_picker;
-mod usage_history;
 use self::transcript::TranscriptState;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
-mod usage;
 mod user_messages;
 mod working_directory;
 use self::user_messages::MessageDelivery;
@@ -564,15 +557,6 @@ pub(crate) struct ChatWidget {
     // Status and polling use account usage reads; response streams may identify meters differently.
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
-    next_status_refresh_request_id: u64,
-    pending_rate_limit_reset_request_id: Option<u64>,
-    pending_rate_limit_reset_idempotency_key: Option<String>,
-    rate_limit_reset_picker_request_id: Option<u64>,
-    pending_rate_limit_reset_hint_request_id: Option<u64>,
-    pending_usage_menu_rate_limit_request_id: Option<u64>,
-    pending_rate_limit_reset_hint: Option<PlainHistoryCell>,
-    available_rate_limit_reset_credits: Option<i64>,
-    next_rate_limit_reset_request_id: u64,
     plan_type: Option<PlanType>,
     codex_rate_limit_reached_type: Option<RateLimitReachedType>,
     codex_spend_control_reached: Option<bool>,
@@ -580,10 +564,6 @@ pub(crate) struct ChatWidget {
     clock_format: crate::clock_format::ClockFormat,
     usage_notice_state: usage_notice::UsageNoticeState,
     backend_banner_state: backend_banners::BackendBannerState,
-    pub(crate) security_setup_request_id: uuid::Uuid,
-    security_setup_presented: bool,
-    security_setup_identity: Option<crate::security_setup::Identity>,
-    security_setup_dismissed: bool,
     automatic_model_switch_state: backend_banners::AutomaticModelSwitchState,
     backend_banner_notice_model: Option<String>,
     // Remember the account's Reserve entry notice across chats and transient banner refreshes.
@@ -592,13 +572,11 @@ pub(crate) struct ChatWidget {
     pub(crate) composer_images: Option<crate::transcript_image::composer::ComposerImages>,
     pub(crate) rendered_selection: std::cell::RefCell<crate::rendered_selection::RenderedSelection>,
     rate_limit_switch_prompt: RateLimitSwitchPromptState,
-    add_credits_nudge_email_in_flight: Option<rate_limits::PendingCreditsNudge>,
     adaptive_chunking: AdaptiveChunkingPolicy,
     // Stream lifecycle controller
     stream_controller: Option<StreamController>,
     // Stream lifecycle controller for proposed plan output.
     plan_stream_controller: Option<PlanStreamController>,
-    pending_stream_consolidations: usize,
     /// Copy feedback is discarded with its originating conversation.
     pending_clipboard: Option<clipboard::PendingCopy>,
     /// Legacy terminals report auto-repeat as new presses; suppress the burst after a slow paste.
@@ -628,9 +606,6 @@ pub(crate) struct ChatWidget {
     ide_context: IdeContextState,
     plugins_cache: PluginsCacheState,
     plugins_fetch_state: PluginListFetchState,
-    plugin_remote_sections_loading: bool,
-    plugin_remote_sections_loaded: bool,
-    plugin_remote_section_errors: Vec<crate::app_event::PluginRemoteSectionError>,
     plugin_install_apps_needing_auth: Vec<AppSummary>,
     plugin_install_auth_flow: Option<PluginInstallAuthFlowState>,
     plugins_active_tab_id: Option<String>,
@@ -1220,7 +1195,6 @@ impl ChatWidget {
     fn flush_active_cell(&mut self) {
         if let Some(active) = self.transcript.take_active_cell() {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
-            self.request_pending_usage_output_insertion();
         }
     }
 
@@ -1252,7 +1226,6 @@ impl ChatWidget {
         };
         if let Some(active) = self.take_history_insertion_prefix(cell.as_ref()) {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
-            self.request_pending_usage_output_insertion();
         }
         self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
     }
@@ -1326,7 +1299,7 @@ impl ChatWidget {
         items: &[UserInput],
         client_id: Option<&str>,
         from_replay: bool,
-        turn_id: &str,
+        _turn_id: &str,
     ) {
         let display = Self::user_message_display_from_inputs(items);
         if from_replay {
@@ -1458,7 +1431,6 @@ impl ChatWidget {
                 computer.mark_failed();
             }
             self.add_boxed_history(cell);
-            self.request_pending_usage_output_insertion();
         }
     }
 
@@ -1994,32 +1966,19 @@ impl ChatWidget {
     /// Returns a cache key describing the current in-flight cells for the transcript overlay.
     ///
     /// `Ctrl+T` renders committed transcript cells plus a render-only live tail derived from the
-    /// current active and rate-limit cells, and the overlay caches that tail; this
+    /// current active cell, and the overlay caches that tail; this
     /// key is what it uses to decide whether it must recompute. When there are no live cells, this
     /// returns `None` so the overlay can drop the tail entirely.
     ///
     /// Sources backed by external mutable state disable reuse even when revision and animation
     /// tick are unchanged. Stable sources still require a revision bump when their content changes.
     pub(crate) fn active_cell_transcript_key(&self) -> Option<ActiveCellTranscriptKey> {
-        let cell = self.transcript.active_cell.as_ref();
-        let rate_limit_reset_hint = self.pending_rate_limit_reset_hint();
-        if cell.is_none() && rate_limit_reset_hint.is_none() {
-            return None;
-        }
-        let live_sources: [Option<&dyn HistoryCell>; 2] = [
-            cell.map(AsRef::as_ref),
-            rate_limit_reset_hint.map(|cell| cell as &dyn HistoryCell),
-        ];
+        let cell = self.transcript.active_cell.as_ref()?;
         Some(ActiveCellTranscriptKey {
-            cacheable: live_sources
-                .into_iter()
-                .flatten()
-                .all(HistoryCell::has_stable_transcript_height),
+            cacheable: cell.has_stable_transcript_height(),
             revision: self.transcript.active_cell_revision,
-            is_stream_continuation: cell
-                .map(|cell| cell.is_stream_continuation())
-                .unwrap_or(/*default*/ false),
-            animation_tick: cell.and_then(|cell| cell.transcript_animation_tick()),
+            is_stream_continuation: cell.is_stream_continuation(),
+            animation_tick: cell.transcript_animation_tick(),
         })
     }
 

@@ -29,7 +29,6 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::path::Component;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::PoisonError;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -74,7 +73,6 @@ const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_STREAM_MAX_RETRIES: u64 = 5;
 const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
 const DEFAULT_CREDENTIAL_EXPORT_TIMEOUT_MS: u64 = 30_000;
-const DEFAULT_AWS_AUTH_REFRESH_TIMEOUT_MS: u64 = 300_000;
 pub const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS: u64 = 15_000;
 /// Hard cap for user-configured `stream_max_retries`.
 const MAX_STREAM_MAX_RETRIES: u64 = 100;
@@ -91,22 +89,6 @@ pub const AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME: &str = "Amazon Bedrock Runtime";
 pub const AMAZON_BEDROCK_RUNTIME_PROVIDER_ID: &str = "amazon-bedrock-runtime";
 pub const GCP_PROVIDER_NAME: &str = "Google Cloud Vertex AI";
 pub const GCP_PROVIDER_ID: &str = "gcp";
-pub const AMAZON_BEDROCK_GPT_5_5_MODEL_ID: &str = "openai.gpt-5.5";
-pub const AMAZON_BEDROCK_GPT_5_6_SOL_MODEL_ID: &str = "openai.gpt-5.6-sol";
-pub const AMAZON_BEDROCK_GPT_6_1_SOL_MODEL_ID: &str = "openai.gpt-6.1-sol";
-pub const AMAZON_BEDROCK_GPT_6_1_TERRA_MODEL_ID: &str = "openai.gpt-6.1-terra";
-pub const AMAZON_BEDROCK_GPT_6_SOL_MODEL_ID: &str = "openai.gpt-6-sol";
-pub const AMAZON_BEDROCK_GPT_6_LUNA_MODEL_ID: &str = "openai.gpt-6-luna";
-pub const AMAZON_BEDROCK_GPT_6_ASTRA_MODEL_ID: &str = "openai.gpt-6-astra";
-pub const AMAZON_BEDROCK_GPT_5_6_TERRA_MODEL_ID: &str = "openai.gpt-5.6-terra";
-pub const AMAZON_BEDROCK_GPT_5_6_LUNA_MODEL_ID: &str = "openai.gpt-5.6-luna";
-pub const AMAZON_BEDROCK_RUNTIME_GLOBAL_GPT_5_6_TERRA_MODEL_ID: &str =
-    "global.openai.gpt-5.6-terra";
-pub const AMAZON_BEDROCK_RUNTIME_GLOBAL_GPT_5_6_LUNA_MODEL_ID: &str = "global.openai.gpt-5.6-luna";
-pub const AMAZON_BEDROCK_DEFAULT_BASE_URL: &str =
-    "https://bedrock-mantle.us-east-1.api.aws/openai/v1";
-const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER: &str = "x-amzn-mantle-client-agent";
-const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
 const CHAT_WIRE_API_REMOVED_ERROR: &str = "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config.\nMore info: https://github.com/openai/codex/discussions/7782";
 
 /// Wire protocol that the provider speaks.
@@ -150,18 +132,9 @@ pub struct ModelProviderInfo {
     pub name: String,
     /// Base URL for the provider's OpenAI-compatible API.
     pub base_url: Option<String>,
-    /// Optional full URL for a Codex-native model catalog. When unset, OpenAI discovery
-    /// uses the Codex backend unless `base_url` overrides the inference endpoint.
-    /// The endpoint must serve the Codex catalog format, not the public `/v1/models` API.
-    ///
-    /// For built-in OpenAI, set this under `[model_providers.openai]`; other non-default
-    /// provider overrides are rejected. The URL must use HTTPS and an allowed ChatGPT
-    /// host. Other hosts require a custom provider. Inference still uses `openai_base_url`.
-    ///
-    /// Catalog requests use the provider's credentials, including an API key or ChatGPT
-    /// access token. Only configure an endpoint you trust with those credentials.
-    /// Setting this URL does not grant catalog access or guarantee that the endpoint
-    /// accepts a regional API key. Existing discovery gates and entitlement checks apply.
+    /// Optional URL for a Codex-format model catalog, fetched using provider credentials.
+    /// The built-in OpenAI provider accepts HTTPS URLs on OpenAI API hosts.
+    /// Use a custom provider for a catalog hosted elsewhere.
     pub model_catalog_url: Option<RedactedString>,
     /// Environment variable that stores the user's API key for this provider.
     pub env_key: Option<String>,
@@ -177,17 +150,6 @@ pub struct ModelProviderInfo {
     pub auth: Option<ModelProviderAuthInfo>,
     /// Gateway access token from OAuth or a credential export command.
     pub gateway_oauth: Option<GatewayOAuthConfig>,
-    /// AWS SigV4 auth configuration for this provider.
-    pub aws: Option<ModelProviderAwsAuthInfo>,
-    /// Google Cloud project ID for the built-in GCP provider. Takes precedence
-    /// over `GOOGLE_CLOUD_PROJECT` when deriving the Vertex AI endpoint.
-    pub project_id: Option<String>,
-    /// Google Cloud location for the built-in GCP provider. Takes precedence
-    /// over `GOOGLE_CLOUD_LOCATION`; defaults to `global` when neither is set.
-    pub location: Option<String>,
-    /// Absolute path to a Google ADC credential file. For GCP, overrides
-    /// GOOGLE_APPLICATION_CREDENTIALS in the auth command's environment only.
-    pub credential_file: Option<PathBuf>,
     /// Which wire protocol this provider expects.
     #[serde(default)]
     pub wire_api: WireApi,
@@ -234,20 +196,6 @@ pub struct ModelProviderInfo {
     pub include_internal_metadata: bool,
 }
 
-/// AWS SigV4 auth configuration for a model provider.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct ModelProviderAwsAuthInfo {
-    /// AWS profile name to use. When unset, the AWS SDK default chain decides.
-    pub profile: Option<String>,
-    /// AWS region to use for provider-specific endpoints.
-    pub region: Option<String>,
-    /// Optional command whose exported credentials replace the AWS SDK credential chain.
-    pub credential_export: Option<AwsCredentialExportConfig>,
-    /// Optional command used to reauthenticate after a refreshable AWS auth failure.
-    pub auth_refresh: Option<AwsAuthRefreshConfig>,
-}
-
 /// Command used to export credentials for a model provider.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -261,8 +209,6 @@ pub struct CredentialExportConfig {
     #[serde(default = "default_credential_export_timeout_ms")]
     pub timeout_ms: NonZeroU64,
 }
-
-pub type AwsCredentialExportConfig = CredentialExportConfig;
 
 impl CredentialExportConfig {
     pub fn validate(&self, field: &str) -> Result<(), String> {
@@ -293,120 +239,11 @@ fn default_credential_export_timeout_ms() -> NonZeroU64 {
     }
 }
 
-/// Command used to refresh AWS credentials for a model provider.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct AwsAuthRefreshConfig {
-    /// Executable to invoke directly, without a shell.
-    pub command: String,
-    /// Arguments passed to the refresh command.
-    #[serde(default)]
-    pub args: Vec<RedactedString>,
-    /// Maximum time to wait for the refresh command to complete.
-    #[serde(default = "default_aws_auth_refresh_timeout_ms")]
-    pub timeout_ms: NonZeroU64,
-}
-
-impl AwsAuthRefreshConfig {
-    pub fn timeout(&self) -> Duration {
-        Duration::from_millis(self.timeout_ms.get())
-    }
-}
-
-fn default_aws_auth_refresh_timeout_ms() -> NonZeroU64 {
-    match NonZeroU64::new(DEFAULT_AWS_AUTH_REFRESH_TIMEOUT_MS) {
-        Some(timeout_ms) => timeout_ms,
-        None => panic!("AWS auth refresh timeout must be non-zero"),
-    }
-}
-
 impl ModelProviderInfo {
-    /// Checks that a configured Bedrock entry only customizes supported fields.
-    /// Call this on the override before merging it with the built-in provider.
-    pub fn validate_bedrock_override(&self) -> Result<(), String> {
-        let unsupported_fields = Self {
-            base_url: None,
-            auth: None,
-            aws: None,
-            http_headers: None,
-            ..self.clone()
-        };
-        if unsupported_fields != Self::default() {
-            return Err("only supports changing \
-`base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, \
-and `aws.auth_refresh`; \
-other non-default provider fields are not supported"
-                .to_string());
-        }
-        Ok(())
-    }
-
-    /// Checks the credential-file path for a GCP provider or built-in GCP override.
-    pub fn validate_gcp_credential_file(&self) -> Result<(), String> {
-        if let Some(credential_file) = &self.credential_file
-            && !credential_file.is_absolute()
-        {
-            return Err("provider credential_file must be an absolute path".to_string());
-        }
-        Ok(())
-    }
-
     pub fn validate(&self) -> std::result::Result<(), String> {
-        if self.is_gcp() {
-            self.validate_gcp_credential_file()?;
-        }
         if let Some(gateway) = &self.gateway_oauth {
             gateway.validate(self)?;
         }
-        if let Some(aws) = self.aws.as_ref() {
-            if self.supports_websockets {
-                // TODO(celia-oai): Support AWS SigV4 signing for WebSocket
-                // upgrade requests before allowing AWS-authenticated providers
-                // to enable Responses-over-WebSocket.
-                return Err("provider aws cannot be combined with supports_websockets".to_string());
-            }
-
-            let mut conflicts = Vec::new();
-            if self.env_key.is_some() {
-                conflicts.push("env_key");
-            }
-            if self.experimental_bearer_token.is_some() {
-                conflicts.push("experimental_bearer_token");
-            }
-            if self.auth.is_some() {
-                conflicts.push("auth");
-            }
-            if self.requires_openai_auth {
-                conflicts.push("requires_openai_auth");
-            }
-
-            if !conflicts.is_empty() {
-                return Err(format!(
-                    "provider aws cannot be combined with {}",
-                    conflicts.join(", ")
-                ));
-            }
-
-            if let Some(credential_export) = aws.credential_export.as_ref() {
-                if aws.profile.is_some() {
-                    return Err(
-                        "provider aws.credential_export cannot be combined with aws.profile"
-                            .to_string(),
-                    );
-                }
-                credential_export.validate("aws.credential_export")?;
-            }
-
-            if let Some(auth_refresh) = aws.auth_refresh.as_ref() {
-                if auth_refresh.command.trim().is_empty() {
-                    return Err("provider aws.auth_refresh.command must not be empty".to_string());
-                }
-                if auth_refresh.command != "aws" {
-                    return Err("provider aws.auth_refresh.command must be `aws`".to_string());
-                }
-            }
-        }
-
         let Some(auth) = self.auth.as_ref() else {
             return Ok(());
         };
@@ -467,25 +304,11 @@ other non-default provider fields are not supported"
     }
 
     /// Builds an API provider with managed residency taking precedence over configured headers.
-    pub fn to_api_provider(&self, auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
-        let default_base_url = if matches!(
-            auth_mode,
-            Some(
-                AuthMode::Chatgpt
-                    | AuthMode::ChatgptAuthTokens
-                    | AuthMode::Headers
-                    | AuthMode::AgentIdentity
-                    | AuthMode::PersonalAccessToken
-            )
-        ) {
-            CHATGPT_CODEX_BASE_URL
-        } else {
-            "https://api.openai.com/v1"
-        };
+    pub fn to_api_provider(&self, _auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
         let base_url = self
             .base_url
             .clone()
-            .unwrap_or_else(|| default_base_url.to_string());
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
 
         let mut headers = self.build_header_map()?;
         if let Some(requirement) = read_managed_residency_requirement() {
@@ -576,7 +399,6 @@ other non-default provider fields are not supported"
             experimental_bearer_token: None,
             auth: None,
             gateway_oauth: None,
-            aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
             http_headers: Some(
@@ -607,92 +429,7 @@ other non-default provider fields are not supported"
             supports_websockets: true,
             supports_standalone_web_search: true,
             capabilities: None,
-            project_id: None,
-            location: None,
-            credential_file: None,
             include_internal_metadata: true,
-        }
-    }
-
-    pub fn create_amazon_bedrock_provider(
-        aws: Option<ModelProviderAwsAuthInfo>,
-    ) -> ModelProviderInfo {
-        ModelProviderInfo {
-            name: AMAZON_BEDROCK_PROVIDER_NAME.into(),
-            // The runtime provider derives the regional Mantle endpoint when
-            // this is unset. A configured value is therefore unambiguously an
-            // endpoint override.
-            base_url: None,
-            model_catalog_url: None,
-            env_key: None,
-            env_key_instructions: None,
-            experimental_bearer_token: None,
-            auth: None,
-            gateway_oauth: None,
-            aws: Some(aws.unwrap_or(ModelProviderAwsAuthInfo {
-                profile: None,
-                region: None,
-                credential_export: None,
-                auth_refresh: None,
-            })),
-            wire_api: WireApi::Responses,
-            query_params: None,
-            http_headers: Some(HashMap::from([(
-                AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string(),
-                AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE.into(),
-            )])),
-            env_http_headers: None,
-            request_max_retries: None,
-            stream_max_retries: None,
-            stream_idle_timeout_ms: None,
-            websocket_connect_timeout_ms: None,
-            requires_openai_auth: false,
-            supports_websockets: false,
-            supports_standalone_web_search: false,
-            capabilities: None,
-            project_id: None,
-            location: None,
-            credential_file: None,
-            include_internal_metadata: false,
-        }
-    }
-
-    pub fn create_amazon_bedrock_runtime_provider(
-        aws: Option<ModelProviderAwsAuthInfo>,
-    ) -> ModelProviderInfo {
-        let mut provider = Self::create_amazon_bedrock_provider(aws);
-        provider.name = AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME.into();
-        provider
-    }
-
-    pub fn create_gcp_provider() -> ModelProviderInfo {
-        ModelProviderInfo {
-            name: GCP_PROVIDER_NAME.into(),
-            base_url: None,
-            model_catalog_url: None,
-            env_key: None,
-            env_key_instructions: None,
-            experimental_bearer_token: None,
-            // Config loading supplies default command auth after resolving its working directory.
-            auth: None,
-            gateway_oauth: None,
-            aws: None,
-            capabilities: None,
-            wire_api: WireApi::Responses,
-            query_params: None,
-            http_headers: None,
-            env_http_headers: None,
-            request_max_retries: None,
-            stream_max_retries: None,
-            stream_idle_timeout_ms: None,
-            websocket_connect_timeout_ms: None,
-            requires_openai_auth: false,
-            supports_websockets: false,
-            supports_standalone_web_search: false,
-            project_id: None,
-            location: None,
-            credential_file: None,
-            include_internal_metadata: false,
         }
     }
 
@@ -725,19 +462,6 @@ other non-default provider fields are not supported"
                         && !value.trim().is_empty()
                 })
             })
-    }
-
-    pub fn is_amazon_bedrock(&self) -> bool {
-        self.name == AMAZON_BEDROCK_PROVIDER_NAME
-            || self.name == AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME
-    }
-
-    pub fn is_amazon_bedrock_runtime(&self) -> bool {
-        self.name == AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME
-    }
-
-    pub fn is_gcp(&self) -> bool {
-        self.name == GCP_PROVIDER_NAME
     }
 
     pub fn has_command_auth(&self) -> bool {
@@ -777,28 +501,15 @@ pub fn merge_configured_model_providers(
             if let Some(catalog_url) = provider.model_catalog_url.take()
                 && let Some(built_in_provider) = model_providers.get_mut(&key)
             {
-                let allowed = catalog_url.parse::<http::Uri>().ok().is_some_and(|uri| {
-                    uri.scheme_str() == Some("https")
-                        && uri.host().is_some_and(|host| {
-                            codex_http_client::is_allowed_chatgpt_host(&host.to_ascii_lowercase())
-                        })
-                        && uri
-                            .authority()
-                            .is_some_and(|authority| !authority.as_str().contains('@'))
-                });
-                if !allowed {
-                    return Err("model_providers.openai.model_catalog_url must use an allowed ChatGPT host. If you need to use a 3rd party host, configure a custom model_provider".to_string());
+                if !codex_http_client::is_openai_model_api_url(&catalog_url) {
+                    return Err("model_providers.openai.model_catalog_url must use an OpenAI API HTTPS endpoint. If you need to use a 3rd party host, configure a custom model_provider".to_string());
                 }
                 built_in_provider.model_catalog_url = Some(catalog_url);
             }
         } else {
             if is_removed_cloud_provider_id(&key)
-                || provider.aws.is_some()
-                || provider.is_gcp()
-                || provider.is_amazon_bedrock()
                 || provider.gateway_oauth.is_some()
                 || provider.auth.is_some()
-                || provider.credential_file.is_some()
             {
                 return Err(format!(
                     "model_providers.{key}: cloud and account authentication are unsupported. Configure a base_url and an API key."
@@ -821,7 +532,6 @@ pub fn custom_provider_with_base_url(base_url: &str, wire_api: WireApi) -> Model
         experimental_bearer_token: None,
         auth: None,
         gateway_oauth: None,
-        aws: None,
         wire_api,
         query_params: None,
         http_headers: None,
@@ -834,9 +544,6 @@ pub fn custom_provider_with_base_url(base_url: &str, wire_api: WireApi) -> Model
         supports_websockets: false,
         supports_standalone_web_search: false,
         capabilities: None,
-        project_id: None,
-        location: None,
-        credential_file: None,
         include_internal_metadata: false,
     }
 }

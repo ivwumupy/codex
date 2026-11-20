@@ -49,7 +49,6 @@ pub(crate) struct PreparedExecCommand {
     pub(crate) cwd: PathUri,
     pub(crate) permissions: EffectiveAdditionalPermissions,
     pub(crate) justification: Option<String>,
-    pub(crate) prefix_rule: Option<Vec<String>>,
     pub(crate) tty: bool,
     pub(crate) yield_time_ms: u64,
     pub(crate) max_output_tokens: Option<usize>,
@@ -274,7 +273,6 @@ impl<'a> ParsedExecCommand<'a> {
             tty: args.tty,
             permissions,
             justification: args.justification,
-            prefix_rule: args.prefix_rule,
         })
     }
 }

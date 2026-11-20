@@ -573,7 +573,6 @@ impl App {
             && chat_widget.has_chatgpt_account() == self.chat_widget.has_chatgpt_account()
         {
             chat_widget.inherit_backend_banner_state(&mut self.chat_widget);
-            chat_widget.inherit_security_setup(&mut self.chat_widget);
         }
         chat_widget
             .mention_usage_mut()
@@ -973,7 +972,7 @@ impl App {
     }
 
     pub(super) async fn reset_thread_event_state(&mut self) {
-        let mut previous_pending = std::mem::take(&mut self.pending_app_server_requests);
+        let previous_pending = std::mem::take(&mut self.pending_app_server_requests);
         // Move retained tasks' approvals to background routing before clearing request bookkeeping.
         for (thread_id, requests) in &mut self.agents_overview.dispatched_requests {
             if let Some(channel) = self.thread_event_channels.get(thread_id) {
@@ -1486,7 +1485,6 @@ impl App {
             initial_user_message,
         );
         if let Some(account) = account {
-            self.account_email_request_id = None;
             self.feedback_audience = account.feedback_audience();
             init.has_chatgpt_account = account.has_chatgpt_account();
             init.has_codex_backend_auth = init.has_chatgpt_account;

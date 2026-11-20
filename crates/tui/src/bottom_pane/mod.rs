@@ -86,8 +86,6 @@ mod empty_state_policy;
 mod hook_status;
 mod mcp_server_elicitation;
 mod multi_select_picker;
-pub(crate) use multi_select_picker::MultiSelectItem;
-pub(crate) use multi_select_picker::MultiSelectPicker;
 #[cfg(test)]
 #[path = "questions_tests.rs"]
 mod question_tests;
@@ -2888,10 +2886,8 @@ mod tests {
 
     #[test]
     fn backend_banner_snapshots_and_numbered_actions() {
-        for (kind, action, label) in [
-            ("personal_limit", "view_usage", "View usage"),
-            ("workspace_member_credits", "notify_owner", "Notify owner"),
-        ] {
+        {
+            let (kind, action, label) = ("personal_limit", "view_usage", "View usage");
             let banner = crate::backend_banners::BackendBanner::parse(&serde_json::json!({
                 "banner_type": kind,
                 "presentation": "dismissible",
@@ -2924,17 +2920,9 @@ mod tests {
             pane.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
             let selected = match rx.try_recv().expect("numbered CTA dispatch") {
                 AppEvent::OpenUrlInBrowser { url } => url,
-                AppEvent::SendAddCreditsNudgeEmail { credit_type } => format!("{credit_type:?}"),
                 other => panic!("unexpected banner action: {other:?}"),
             };
-            assert_eq!(
-                selected,
-                if action == "view_usage" {
-                    "https://chatgpt.com/settings/usage"
-                } else {
-                    "Credits"
-                }
-            );
+            assert_eq!(selected, "https://chatgpt.com/settings/usage");
             assert!(pane.inline_banner.is_some());
         }
     }

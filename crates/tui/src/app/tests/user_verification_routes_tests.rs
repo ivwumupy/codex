@@ -302,7 +302,6 @@ async fn inactive_thread_user_verification_preserves_foreground_stream() -> Resu
                     scrollback_reflow,
                     deferred_history_cell,
                 )?;
-                app.chat_widget.note_stream_consolidation_completed();
             }
             _ => {}
         }

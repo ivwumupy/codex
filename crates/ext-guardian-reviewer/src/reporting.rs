@@ -116,7 +116,6 @@ impl ReviewReport {
         telemetry: &SessionTelemetry,
 
         result: GuardianReviewAnalyticsResult,
-        completed_at_ms: u64,
         elapsed: Duration,
     ) {
         crate::metrics::emit_guardian_review_metrics(

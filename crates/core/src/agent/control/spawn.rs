@@ -557,17 +557,7 @@ impl LocalAgentControl {
                     ..Default::default()
                 })
         };
-        let subagent_analytics =
-            if let SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }) = &session_source
-                && let Some(parent_thread_id) = parent_thread_id
-                && let Ok(parent) = state.get_thread(parent_thread_id).await
-            {
-                Some(parent.session.app_server_client_metadata().await)
-            } else {
-                None
-            };
-        // Reserving a slot can evict an idle nested parent. Capture its instructions and
-        // analytics metadata alongside its authority before the live parent can disappear.
+        // Capture inherited instructions before reserving a slot can evict the parent.
         let residency_slot = self
             .reserve_v2_residency_slot(&state, &config, &membership, Some(thread_id))
             .await?;
@@ -599,8 +589,6 @@ impl LocalAgentControl {
                     let residency_pin = runtime.pin_v2_residency(&reloaded_thread.thread).await?;
                     runtime.registry.clear_evicted_environments(thread_id);
                     residency_slot.commit(reloaded_thread.thread_id);
-                    // Register before listeners can forward events from the resumed thread.
-                    if let Some(client_metadata) = subagent_analytics {}
                     state.notify_thread_created(reloaded_thread.thread_id);
                     Ok(residency_pin)
                 })
@@ -889,25 +877,6 @@ impl LocalAgentControl {
             .map_err(|err| err.with_agent_context(AgentErrorContext::ChildStartup))?;
         let child_create = child_create_started_at.elapsed();
         agent_metadata.agent_id = Some(new_thread.thread_id);
-        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id, ..
-        })) = notification_source.as_ref()
-        {
-            let client_metadata = match state.get_thread(*parent_thread_id).await {
-                Ok(parent_thread) => parent_thread.session.app_server_client_metadata().await,
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        parent_thread_id = %parent_thread_id,
-                        "skipping subagent thread analytics: failed to load parent thread metadata"
-                    );
-                    crate::session::session::AppServerClientMetadata {
-                        client_name: None,
-                        client_version: None,
-                    }
-                }
-            };
-        }
 
         let durability_wait_started_at = Instant::now();
         if options.fork_mode.is_some() {

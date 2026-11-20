@@ -1023,7 +1023,6 @@ See the Codex keymap documentation for supported actions and examples."
             last_thread_usage_status_cell: None,
             pending_thread_usage_history_refresh: false,
             overlay: None,
-            retained_analytics: None,
             deferred_history_lines: Vec::new(),
             has_emitted_history_lines: false,
             transcript_reflow: TranscriptReflowState::default(),
@@ -1099,9 +1098,7 @@ See the Codex keymap documentation for supported actions and examples."
             pending_managed_worktree_attach: None,
             startup_protected_input_boundary: true,
             startup_pending_protected_request: false,
-            account_email_request_id: None,
             rate_limit_hard_stop_generation: 0,
-            rate_limit_refresh_state: Default::default(),
             pending_mcp_login_start: None,
             active_mcp_login_ids: HashMap::new(),
             pending_plugin_enabled_writes: HashMap::new(),
@@ -1258,25 +1255,6 @@ See the Codex keymap documentation for supported actions and examples."
             "tui startup initial frame scheduled"
         );
         app.refresh_startup_skills(&app_server);
-        // Kick off a non-blocking rate-limit prefetch so the first `/status`
-        // already has data and available reset credits can be surfaced, without
-        // delaying the initial frame render.
-        if requires_openai_auth && has_chatgpt_account {
-            crate::security_setup::prefetch(
-                &app.config,
-                &app_server,
-                app.app_event_tx.clone(),
-                app.chat_widget.security_setup_request_id,
-            );
-            let reset_hint_request_id = app.chat_widget.start_rate_limit_reset_startup_check();
-            app.refresh_rate_limits(
-                &app_server,
-                RateLimitRefreshOrigin::StartupPrefetch {
-                    reset_hint_request_id,
-                },
-            );
-        }
-
         let mut last_screen_size = tui.terminal.last_known_screen_size;
         let mut settled_size_tags = crate::terminal_size_telemetry::tags(last_screen_size);
         let mut pending_resize: Option<(ratatui::layout::Size, Instant)> = None;
@@ -1477,10 +1455,6 @@ See the Codex keymap documentation for supported actions and examples."
                         Some((size, Instant::now() + Duration::from_secs(/*secs*/ 15)));
                 }
                 last_screen_size = size;
-                let rate_limit_poll_deadline = app
-                    .chat_widget
-                    .rate_limit_refresh_interval()
-                    .and_then(|interval| app.rate_limit_refresh_state.poll_deadline(interval));
                 let control = select! {
                     result = async {
                         match app.daemon_restart.as_mut() {
@@ -1700,17 +1674,6 @@ See the Codex keymap documentation for supported actions and examples."
                                 settled_size_tags = tags;
                             }
                         }
-                        AppRunControl::Continue
-                    }
-                    () = async {
-                        match rate_limit_poll_deadline {
-                            Some(deadline) => {
-                                tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
-                            }
-                            None => std::future::pending().await,
-                        }
-                    }, if backends.is_listening(displayed_owner) => {
-                        app.refresh_rate_limits(backends.session_at(displayed_session), RateLimitRefreshOrigin::Periodic);
                         AppRunControl::Continue
                     }
                     () = async {

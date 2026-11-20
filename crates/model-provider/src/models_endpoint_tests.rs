@@ -141,7 +141,7 @@ async fn provider_api_key_without_endpoint_overrides_uses_bundled_catalog() {
         (
             "provider-key",
             Some(CodexAuth::create_dummy_chatgpt_auth_for_testing()),
-            codex_model_provider_info::CHATGPT_CODEX_BASE_URL,
+            "https://api.openai.com/v1",
         ),
         (
             "provider-key",

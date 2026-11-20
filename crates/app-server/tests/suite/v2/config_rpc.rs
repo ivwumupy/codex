@@ -33,7 +33,6 @@ use codex_app_server_protocol::ConfigReadResponse;
 use codex_app_server_protocol::ConfigRequirementsReadResponse;
 use codex_app_server_protocol::ConfigValueWriteParams;
 use codex_app_server_protocol::ConfigWriteResponse;
-use codex_app_server_protocol::ConfiguredHookHandler;
 use codex_app_server_protocol::ForcedChatgptWorkspaceIds;
 use codex_app_server_protocol::JSONRPCError;
 use codex_app_server_protocol::MergeStrategy;
@@ -249,74 +248,6 @@ chatgpt_base_url = "https://managed.example/backend-api/"
         "cli_auth_credentials_store = \"file\"\nchatgpt_base_url = \"https://user.example/backend-api/\"\n",
     );
 
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_requirements_read_includes_remote_control_and_managed_hooks() -> Result<()> {
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join("requirements.toml"),
-        r#"allow_remote_control = false
-
-[hooks]
-
-[[hooks.SessionStart]]
-
-[[hooks.SessionStart.hooks]]
-type = "command"
-command = "echo managed"
-additionalContextLimit = 4096
-
-[[hooks.SessionStart.hooks]]
-type = "mcp_tool"
-server = "security"
-tool = "scan"
-input = { path = "${tool_input.file_path}", metadata = { enabled = true, retries = 2 } }
-timeout = 30
-statusMessage = "Scanning file"
-"#,
-    )?;
-    let mut mcp = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
-        .without_auto_env()
-        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
-        .await?;
-
-    let request_id = mcp.send_config_requirements_read_request().await?;
-    let response: ConfigRequirementsReadResponse =
-        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
-    let requirements = response
-        .requirements
-        .expect("managed requirements should be returned");
-    assert_eq!(requirements.allow_remote_control, Some(false));
-    assert_eq!(
-        requirements
-            .hooks
-            .expect("managed hooks should be returned")
-            .session_start[0]
-            .hooks,
-        vec![
-            ConfiguredHookHandler::Command {
-                command: "echo managed".to_string(),
-                command_windows: None,
-                timeout_sec: None,
-                r#async: false,
-                status_message: None,
-                additional_context_limit: Some(4_096),
-            },
-            ConfiguredHookHandler::McpTool {
-                server: "security".to_string(),
-                tool: "scan".to_string(),
-                input: serde_json::from_value(json!({
-                    "path": "${tool_input.file_path}",
-                    "metadata": { "enabled": true, "retries": 2 },
-                }))?,
-                timeout_sec: Some(30),
-                status_message: Some("Scanning file".to_string()),
-            },
-        ]
-    );
     Ok(())
 }
 

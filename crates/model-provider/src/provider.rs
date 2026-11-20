@@ -28,7 +28,6 @@ use codex_runtime_agent_instance::RuntimeAuthManager;
 
 use crate::ProviderCapabilities;
 use crate::ResolvedResponsesProvider;
-use crate::amazon_bedrock::AmazonBedrockModelProvider;
 use crate::auth::ProviderAuthScope;
 use crate::auth::ResolvedProviderAuth;
 use crate::auth::auth_manager_for_provider;
@@ -36,7 +35,6 @@ use crate::auth::resolve_provider_auth;
 use crate::auth::resolve_provider_auth_for_scope;
 use crate::auth::uses_fedramp_api_key;
 use crate::combined_auth::compose_auth;
-use crate::gcp::GcpModelProvider;
 use crate::models_endpoint::OpenAiModelsEndpoint;
 use crate::request_setup::resolve_request_auth;
 use crate::workspace_routing::WorkspaceRoutingContext;
@@ -63,33 +61,6 @@ pub struct ProviderAuthRecoveryMessages {
     pub started: &'static str,
     pub succeeded: &'static str,
 }
-
-/// Error returned when a provider cannot construct its app-visible account state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProviderAccountError {
-    MissingChatgptAccountDetails,
-    UnsupportedBedrockApiKeyAuth,
-}
-
-impl fmt::Display for ProviderAccountError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingChatgptAccountDetails => {
-                write!(f, "plan type is required for chatgpt authentication")
-            }
-            Self::UnsupportedBedrockApiKeyAuth => {
-                write!(
-                    f,
-                    "Bedrock API key auth is only supported by the Amazon Bedrock model provider"
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for ProviderAccountError {}
-
-pub type ProviderAccountResult = std::result::Result<ProviderAccountState, ProviderAccountError>;
 
 /// Default model used for automatic approval review when a provider does not
 /// require a backend-specific model ID.
@@ -212,7 +183,7 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
     fn auth(&self) -> ModelProviderFuture<'_, Option<CodexAuth>>;
 
     /// Returns the current app-visible account state for this provider.
-    fn account_state(&self) -> ProviderAccountResult;
+    fn account_state(&self) -> ProviderAccountState;
 
     /// Maps an API client error into the provider's user-facing error representation.
     fn map_api_error(&self, error: ApiError) -> CodexErr {
@@ -432,7 +403,6 @@ pub fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool
         && provider.env_key.is_none()
         && provider.experimental_bearer_token.is_none()
         && provider.auth.is_none()
-        && provider.aws.is_none()
 }
 
 /// Creates the default model provider for configured provider metadata.
@@ -449,12 +419,6 @@ pub(crate) fn create_model_provider_with_runtime(
     auth_manager: Option<Arc<AuthManager>>,
     runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
 ) -> SharedModelProvider {
-    if provider_info.is_amazon_bedrock() {
-        return Arc::new(AmazonBedrockModelProvider::new(provider_info, auth_manager));
-    }
-    if provider_info.is_gcp() {
-        return Arc::new(GcpModelProvider::new(provider_info, auth_manager));
-    }
     Arc::new(ConfiguredModelProvider::new(
         provider_info,
         auth_manager,
@@ -652,47 +616,18 @@ impl ModelProvider for ConfiguredModelProvider {
         Box::pin(self.resolve_auth(Some(scope)))
     }
 
-    fn account_state(&self) -> ProviderAccountResult {
-        let account = if self.info.requires_openai_auth {
-            self.auth_manager
-                .as_ref()
-                .and_then(|auth_manager| {
-                    let auth = auth_manager.auth_cached()?;
-                    if auth_manager.refresh_failure_for_auth(&auth).is_some() {
-                        return None;
-                    }
-                    if matches!(auth, CodexAuth::Headers(_)) {
-                        return None;
-                    }
-                    Some(auth)
-                })
-                .map(|auth| match &auth {
-                    CodexAuth::ApiKey(_) => Ok(ProviderAccount::ApiKey),
-                    CodexAuth::BedrockApiKey(_) | CodexAuth::BedrockAccessKeys(_) => {
-                        Err(ProviderAccountError::UnsupportedBedrockApiKeyAuth)
-                    }
-                    CodexAuth::Chatgpt(_)
-                    | CodexAuth::ChatgptAuthTokens(_)
-                    | CodexAuth::Headers(_)
-                    | CodexAuth::AgentIdentity(_)
-                    | CodexAuth::PersonalAccessToken(_) => {
-                        let email = auth.get_account_email();
-                        let plan_type = auth.account_plan_type();
-
-                        plan_type
-                            .map(|plan_type| ProviderAccount::Chatgpt { email, plan_type })
-                            .ok_or(ProviderAccountError::MissingChatgptAccountDetails)
-                    }
-                })
-                .transpose()?
-        } else {
-            None
-        };
-
-        Ok(ProviderAccountState {
+    fn account_state(&self) -> ProviderAccountState {
+        let account = self.auth_manager.as_ref().and_then(|manager| {
+            let auth = manager.auth_cached()?;
+            (self.info.requires_openai_auth
+                && auth.is_api_key_auth()
+                && manager.refresh_failure_for_auth(&auth).is_none())
+            .then_some(ProviderAccount::ApiKey)
+        });
+        ProviderAccountState {
             account,
             requires_openai_auth: self.info.requires_openai_auth,
-        })
+        }
     }
 
     fn models_manager(

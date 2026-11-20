@@ -53,7 +53,6 @@ use codex_protocol::protocol::Event;
 #[cfg(test)]
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SubAgentSource;
 use futures::future::BoxFuture;
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -84,7 +83,6 @@ use codex_thread_store::PersistContext;
 use codex_utils_path_uri::PathUri;
 
 use super::ApprovalRequestReasons;
-use super::GUARDIAN_REVIEWER_NAME;
 use super::GuardianApprovalRequest;
 use super::GuardianReviewContext;
 use super::feedback::record_failed_review;

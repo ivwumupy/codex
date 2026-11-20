@@ -127,12 +127,9 @@ impl HistoryCell for PresentationCell {
 }
 
 #[tokio::test]
-async fn owned_live_history_keeps_all_sources_in_each_presentation() {
+async fn owned_live_history_uses_each_presentation() {
     let (mut widget, _sender, _events, _operations) = make_chatwidget_manual_with_sender().await;
     widget.transcript.active_cell = Some(Box::new(PresentationCell("active")));
-    widget.pending_rate_limit_reset_hint = Some(history_cell::PlainHistoryCell::new(vec![
-        "rate limit hint".into(),
-    ]));
     let text = |lines: Option<Vec<HyperlinkLine>>| {
         lines
             .unwrap_or_default()
@@ -148,21 +145,13 @@ async fn owned_live_history_keeps_all_sources_in_each_presentation() {
 
     insta::assert_snapshot!(format!("{compact}\n---\n{raw}\n---\n{detailed}"), @"
     compact active
-
-    rate limit hint
     ---
     raw active
-
-    rate limit hint
     ---
     detailed active
-
-    rate limit hint
     ");
 
     widget.local_settings.tui.animations = false;
-    let expected = ["active", "rate limit hint"];
-
     widget.set_raw_output_mode(/*enabled*/ false);
     let compact = text(widget.active_cell_display_hyperlink_lines(/*width*/ 80));
     let frame = render_frame(&widget, /*width*/ 80);
@@ -185,16 +174,7 @@ async fn owned_live_history_keeps_all_sources_in_each_presentation() {
         ("raw", raw),
         ("detailed", detailed),
     ] {
-        let actual = rendered
-            .lines()
-            .filter_map(|line| {
-                expected
-                    .iter()
-                    .find(|source| line.contains(**source))
-                    .copied()
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(actual, expected, "{presentation}");
+        assert_eq!(rendered.matches("active").count(), 1, "{presentation}");
     }
 }
 

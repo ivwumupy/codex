@@ -15,7 +15,7 @@ use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_model_provider::ModelProvider;
 use codex_model_provider::ModelProviderFuture;
-use codex_model_provider::ProviderAccountResult;
+use codex_model_provider::ProviderAccountState;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::ModelProviderInfo;
@@ -1301,7 +1301,7 @@ impl ModelProvider for MockMemoryModelProvider {
         Box::pin(async move { delegate.auth().await })
     }
 
-    fn account_state(&self) -> ProviderAccountResult {
+    fn account_state(&self) -> ProviderAccountState {
         self.delegate.account_state()
     }
 

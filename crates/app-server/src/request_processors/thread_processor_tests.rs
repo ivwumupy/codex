@@ -646,7 +646,6 @@ mod thread_processor_behavior_tests {
             experimental_bearer_token: None,
             auth: None,
             gateway_oauth: None,
-            aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
             http_headers: None,
@@ -659,9 +658,6 @@ mod thread_processor_behavior_tests {
             supports_websockets: true,
             supports_standalone_web_search: false,
             capabilities: None,
-            project_id: None,
-            location: None,
-            credential_file: None,
             include_internal_metadata: false,
         };
         let config_manager = ConfigManager::new(

@@ -20,7 +20,6 @@ codex-agent-roles = { path = "crates/agent-roles" }
 codex-ansi-escape = { path = "crates/ansi-escape" }
 codex-api = { path = "crates/codex-api" }
 codex-attachment-store = { path = "crates/attachment-store" }
-codex-aws-auth = { path = "crates/aws-auth" }
 codex-app-server = { path = "crates/app-server" }
 codex-app-server-transport = { path = "crates/app-server-transport" }
 codex-app-server-daemon = { path = "crates/app-server-daemon" }
@@ -33,7 +32,6 @@ codex-arg0 = { path = "crates/arg0" }
 codex-async-utils = { path = "crates/async-utils" }
 codex-backend-client = { path = "crates/backend-client" }
 codex-build-info = { path = "crates/build-info" }
-codex-chatgpt = { path = "crates/chatgpt" }
 codex-client = { path = "crates/codex-client" }
 codex-collaboration-mode-templates = { path = "crates/collaboration-mode-templates" }
 codex-code-mode = { path = "crates/code-mode" }
@@ -70,7 +68,6 @@ codex-extension-api = { path = "crates/ext-extension-api" }
 codex-extension-items = { path = "crates/ext-items" }
 codex-multi-env-copy-file = { path = "crates/ext-multi-env-copy-file" }
 codex-goal-extension = { path = "crates/ext-goal" }
-codex-git-attribution = { path = "crates/ext-git-attribution" }
 codex-guardian-reviewer = { path = "crates/ext-guardian-reviewer" }
 codex-guardian-v2 = { path = "crates/ext-guardian-v2" }
 codex-guardian-v3 = { path = "crates/ext-guardian-v3" }
@@ -160,7 +157,6 @@ codex-utils-string = { path = "crates/utils-string" }
 codex-utils-template = { path = "crates/utils-template" }
 codex-user-verification = { path = "crates/user-verification" }
 codex-v8-poc = { path = "crates/v8-poc" }
-codex-workload-identity = { path = "crates/workload-identity" }
 core_test_support = { path = "crates/core-test-support" }
 
 # External
@@ -174,12 +170,6 @@ assert_matches = "1.5.0"
 async-channel = "2.3.1"
 async-io = "2.6.0"
 async-stream = "0.3.6"
-aws-config = "1"
-aws-credential-types = "1"
-aws-sigv4 = "1"
-aws-smithy-runtime-api = { version = "1", features = ["client", "http-1x"] }
-aws-smithy-types = { version = "1", features = ["http-body-1-x"] }
-aws-types = "1"
 axum = { version = "0.8", default-features = false }
 base64 = "0.22.1"
 bitflags = "2.13.1"
@@ -472,11 +462,8 @@ strip = "symbols"
 
 [profile.release]
 lto = "thin"
-debug = "line-tables-only"
-split-debuginfo = "off"
-# Keep release binaries symbolicateable until packaging has archived the
-# sidecar symbols and stripped the binaries.
-strip = false
+debug = "none"
+strip = "symbols"
 
 # Balance parallel release code generation against binary size.
 codegen-units = 4
