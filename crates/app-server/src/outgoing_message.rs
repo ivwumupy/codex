@@ -16,13 +16,11 @@ use codex_app_server_protocol::ServerNotificationEnvelope;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::ServerRequestPayload;
 use codex_app_server_protocol::ServerRequestResolvedNotification;
-use codex_app_server_protocol::ServerResponse;
 use codex_diagnostics::Gauge;
 use codex_diagnostics::GaugeGuard;
 use codex_otel::span_w3c_trace_context;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -342,6 +340,7 @@ impl OutgoingMessageSender {
         self.request_contexts.lock().await.len()
     }
 
+    #[cfg(test)]
     pub(crate) async fn send_request(
         &self,
         request: ServerRequestPayload,
@@ -539,7 +538,6 @@ impl OutgoingMessageSender {
 
         match entry {
             Some((id, entry)) => {
-                let completed_at_ms = now_unix_timestamp_ms();
                 if entry.verification_owner.is_none()
                     && let Ok(response) = entry.request.response_from_result(result.clone())
                 {
@@ -579,12 +577,7 @@ impl OutgoingMessageSender {
     }
 
     pub(crate) async fn cancel_request(&self, id: &RequestId) -> bool {
-        let entry = self.take_request_callback(id).await;
-        if let Some((request_id, _entry)) = entry {
-            true
-        } else {
-            false
-        }
+        self.take_request_callback(id).await.is_some()
     }
 
     pub(crate) async fn cancel_all_requests(&self, error: Option<JSONRPCErrorError>) {
@@ -698,29 +691,7 @@ impl OutgoingMessageSender {
     where
         T: Into<ClientResponsePayload>,
     {
-        self.send_response_as_inner(request_id, response.into(), /*thread_originator*/ None)
-            .await;
-    }
-
-    pub(crate) async fn send_response_with_thread_originator<T>(
-        &self,
-        request_id: ConnectionRequestId,
-        response: T,
-        thread_originator: String,
-    ) where
-        T: Into<ClientResponsePayload>,
-    {
-        self.send_response_as_inner(request_id, response.into(), Some(thread_originator))
-            .await;
-    }
-
-    pub(crate) async fn send_response_as(
-        &self,
-        request_id: ConnectionRequestId,
-        response: ClientResponsePayload,
-    ) {
-        self.send_response_as_inner(request_id, response, /*thread_originator*/ None)
-            .await;
+        self.send_response_as(request_id, response.into()).await;
     }
 
     /// Revalidates a sensitive result after reserving queue capacity, with no
@@ -754,11 +725,10 @@ impl OutgoingMessageSender {
         });
     }
 
-    async fn send_response_as_inner(
+    pub(crate) async fn send_response_as(
         &self,
         request_id: ConnectionRequestId,
         response: ClientResponsePayload,
-        thread_originator: Option<String>,
     ) {
         let connection_id = request_id.connection_id;
 

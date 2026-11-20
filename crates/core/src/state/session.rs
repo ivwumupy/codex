@@ -190,12 +190,6 @@ impl SessionState {
         self.initial_settings_pending = value;
     }
 
-    pub(crate) fn take_next_turn_is_first(&mut self) -> bool {
-        let is_first_turn = self.next_turn_is_first;
-        self.next_turn_is_first = false;
-        is_first_turn
-    }
-
     pub(crate) fn take_initial_settings_pending(&mut self) -> bool {
         let pending = self.initial_settings_pending;
         self.initial_settings_pending = false;
@@ -450,6 +444,7 @@ impl SessionState {
     }
 
     // Returns the current connector selection tracked on session state.
+    #[cfg(test)]
     pub(crate) fn get_connector_selection(&self) -> HashSet<String> {
         self.active_connector_selection.clone()
     }

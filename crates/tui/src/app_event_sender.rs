@@ -3,10 +3,6 @@
 //! This wraps the raw channel so call sites can submit typed `AppCommand`s
 //! without duplicating event construction or session logging behavior.
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-
 use crate::app_command::AppCommand;
 use crate::app_command::UserVerificationResponse;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;

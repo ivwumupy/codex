@@ -59,7 +59,7 @@ pub(super) async fn run_main_inner(
             .push("web_search=\"live\"".to_string());
     }
 
-    let mut cli_kv_overrides = match cli.config_overrides.parse_overrides() {
+    let cli_kv_overrides = match cli.config_overrides.parse_overrides() {
         // Parse `-c` overrides from the CLI.
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
@@ -278,7 +278,6 @@ pub(super) async fn run_main_inner(
     let terminal_size_tags = crate::terminal_size_telemetry::tags(initial_terminal_size);
     let startup_presentation::StartupPresentation {
         bootstrap_config,
-        config_cwd: _,
         mut screen,
         local_settings,
     } = presentation;
@@ -644,7 +643,6 @@ pub(super) async fn run_main_inner(
                         "config_override"
                     }
                 }
-                Some("GCP sign-in") => "gcp_sign_in",
                 Some(daemon_startup::GATEWAY_SIGN_IN_EXCLUSION) => "gateway_sign_in",
                 Some(daemon_startup::WSL_DRVFS_EXCLUSION) => "wsl_drvfs",
                 Some("this Windows launcher") => "windows_detach_restricted",

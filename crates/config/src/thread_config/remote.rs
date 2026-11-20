@@ -183,7 +183,6 @@ fn model_provider_from_proto(
             .map(model_provider_auth_from_proto)
             .transpose()?,
         gateway_oauth: None,
-        aws: None,
         wire_api,
         query_params: provider.query_params.map(redacted_string_map),
         http_headers: provider.http_headers.map(redacted_string_map),
@@ -201,9 +200,6 @@ fn model_provider_from_proto(
                 cyber_access_programs: capabilities.cyber_access_programs,
                 ..Default::default()
             }),
-        project_id: provider.project_id,
-        location: provider.location,
-        credential_file: provider.credential_file.map(Into::into),
         include_internal_metadata: false,
     };
     Ok((id, info))
@@ -223,9 +219,6 @@ fn model_provider_to_proto(
         experimental_bearer_token,
         auth,
         gateway_oauth: _,
-        aws: _,
-        project_id,
-        location,
         wire_api,
         query_params,
         http_headers,
@@ -238,7 +231,6 @@ fn model_provider_to_proto(
         supports_websockets,
         supports_standalone_web_search,
         include_internal_metadata: _,
-        credential_file,
         capabilities,
     } = provider;
 
@@ -247,7 +239,6 @@ fn model_provider_to_proto(
         name,
         base_url,
         model_catalog_url: model_catalog_url.map(RedactedString::into_inner),
-        credential_file: credential_file.map(|path| path.to_string_lossy().into_owned()),
         env_key,
         env_key_instructions,
         experimental_bearer_token: experimental_bearer_token.map(RedactedString::into_inner),
@@ -266,8 +257,6 @@ fn model_provider_to_proto(
         requires_openai_auth,
         supports_websockets,
         supports_standalone_web_search,
-        project_id,
-        location,
     }
 }
 
@@ -464,9 +453,6 @@ mod tests {
     #[test]
     fn model_provider_proto_roundtrips_through_domain_type() {
         let mut expected = expected_provider();
-        expected.project_id = Some("vertex-project".to_string());
-        expected.location = Some("us-central1".to_string());
-        expected.credential_file = Some(workspace_dir().join("adc.json").into_path_buf());
         expected.auth = None;
         expected.experimental_bearer_token = Some("synthetic-provider-token".into());
         for capabilities in [
@@ -521,7 +507,6 @@ mod tests {
                             capabilities: Some(proto::ModelProviderCapabilities {
                                 cyber_access_programs: Some(true),
                             }),
-                            credential_file: None,
                             env_key: None,
                             env_key_instructions: None,
                             experimental_bearer_token: None,
@@ -558,8 +543,6 @@ mod tests {
                             requires_openai_auth: false,
                             supports_websockets: true,
                             supports_standalone_web_search: true,
-                            project_id: None,
-                            location: None,
                         }],
                         features: HashMap::from([
                             ("plugins".to_string(), false),
@@ -623,14 +606,10 @@ mod tests {
             supports_websockets: true,
             supports_standalone_web_search: true,
             gateway_oauth: None,
-            aws: None,
             capabilities: Some(ModelProviderCapabilities {
                 cyber_access_programs: Some(true),
                 ..Default::default()
             }),
-            project_id: None,
-            location: None,
-            credential_file: None,
             include_internal_metadata: false,
         }
     }

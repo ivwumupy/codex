@@ -90,25 +90,3 @@ host_pattern = '^github[.]com$'
         }
     }
 }
-
-#[tokio::test]
-async fn blocking_curated_git_does_not_block_remote_installed_plugins() {
-    let home = TempDir::new().unwrap();
-    write_cached_plugin(home.path(), REMOTE_GLOBAL_MARKETPLACE_NAME, "linear");
-    let manager = test_plugins_manager_with_options(
-        home.path().to_path_buf(),
-        Some(Product::Codex),
-        Some(AuthMode::Chatgpt),
-    );
-    manager.write_remote_installed_plugins_cache(vec![remote_installed_plugin("linear")]);
-    let mut config = plugins_config_input_with_requirements(
-        home.path(),
-        "",
-        "[marketplaces]\nrestrict_to_allowed_sources = true\n",
-    );
-    config.remote_plugin_enabled = true;
-    assert_eq!(
-        loaded_plugin_names(&manager, &config).await,
-        vec!["linear@openai-curated-remote".to_string()]
-    );
-}

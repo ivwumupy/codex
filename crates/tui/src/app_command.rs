@@ -1,4 +1,3 @@
-use std::fmt;
 use std::path::PathBuf;
 
 use codex_app_server_protocol::AskForApproval;
@@ -12,7 +11,6 @@ use codex_app_server_protocol::UserInput;
 use codex_app_server_protocol::UserVerificationErrorDetails;
 use codex_app_server_protocol::UserVerificationProof;
 use codex_config::types::ApprovalsReviewer;
-use codex_protocol::ThreadId;
 use codex_protocol::approvals::GuardianAssessmentEvent;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
@@ -21,7 +19,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use serde::Serialize;
-use serde::Serializer;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

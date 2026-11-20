@@ -7,9 +7,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
-use app_test_support::ChatGptIdTokenClaims;
 use app_test_support::TestAppServer;
-use app_test_support::encode_id_token;
 use app_test_support::write_chatgpt_auth;
 use axum::Json;
 use axum::Router;
@@ -30,7 +28,6 @@ use codex_app_server_protocol::AppsListResponse;
 use codex_app_server_protocol::GetAccountParams;
 use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
@@ -121,8 +118,6 @@ async fn list_apps_returns_empty_with_api_key_auth() -> Result<()> {
             last_refresh: None,
             agent_identity: None,
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),
@@ -146,81 +141,6 @@ async fn list_apps_returns_empty_with_api_key_auth() -> Result<()> {
     let AppsListResponse { data, next_cursor } =
         timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
     assert!(data.is_empty());
-    assert!(next_cursor.is_none());
-
-    server_handle.abort();
-    let _ = server_handle.await;
-    Ok(())
-}
-
-#[tokio::test]
-async fn list_apps_uses_external_chatgpt_auth() -> Result<()> {
-    let access_token = encode_id_token(
-        &ChatGptIdTokenClaims::new()
-            .email("external@example.com")
-            .plan_type("pro")
-            .chatgpt_account_id("account-123"),
-    )?;
-    let connectors = vec![AppInfo {
-        id: "beta".to_string(),
-        name: "Beta".to_string(),
-        description: Some("Beta connector".to_string()),
-        logo_url: None,
-        logo_url_dark: None,
-        icon_assets: None,
-        icon_dark_assets: None,
-        distribution_channel: None,
-        branding: None,
-        app_metadata: None,
-        labels: None,
-        install_url: None,
-        is_accessible: false,
-        is_enabled: true,
-        plugin_display_names: Vec::new(),
-    }];
-    let tools = vec![connector_tool("beta", "Beta App")?];
-    let (server_url, server_handle, _) = start_apps_server_with_delays_and_control_inner(
-        connectors,
-        tools,
-        Duration::ZERO,
-        Duration::ZERO,
-        &access_token,
-    )
-    .await?;
-
-    let codex_home = TempDir::new()?;
-    write_connectors_config(codex_home.path(), &server_url)?;
-
-    let mut mcp = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
-        .without_auto_env()
-        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
-        .await?;
-    let login_id = mcp
-        .send_chatgpt_auth_tokens_login_request(
-            access_token,
-            "account-123".to_string(),
-            Some("pro".to_string()),
-        )
-        .await?;
-    let login_response: LoginAccountResponse =
-        timeout(DEFAULT_TIMEOUT, mcp.read_response(login_id)).await??;
-    assert_eq!(login_response, LoginAccountResponse::ChatgptAuthTokens {});
-
-    let request_id = mcp
-        .send_apps_list_request(AppsListParams {
-            limit: None,
-            cursor: None,
-            thread_id: None,
-            force_refetch: true,
-        })
-        .await?;
-    let AppsListResponse { data, next_cursor } =
-        timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
-
-    assert_eq!(data.len(), 1);
-    assert_eq!(data[0].id, "beta");
-    assert!(data[0].is_accessible);
     assert!(next_cursor.is_none());
 
     server_handle.abort();

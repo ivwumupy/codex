@@ -142,32 +142,3 @@ async fn entering_a_key_for_a_legacy_gateway_prompts_for_its_address() {
     tab move · enter next/save · esc back
     ");
 }
-
-#[test]
-fn cloud_provider_edits_preserve_credentials() {
-    let mut provider = gateway(GatewayAuth::None);
-    provider.id = "amazon-bedrock-runtime".into();
-    provider.settings = ProviderSettings::Bedrock {
-        profile: None,
-        region: None,
-    };
-    let mut bedrock = Draft::new(Some(provider.clone()), &[]);
-    assert_eq!(bedrock.fields(), vec![(Field::Region, None)]);
-    bedrock.changes.insert(Field::Region, "us-west-2".into());
-    assert_eq!(
-        wire(bedrock.patch().unwrap()),
-        json!({"type":"bedrock", "providerId":"amazon-bedrock-runtime", "region":"us-west-2"})
-    );
-    provider.id = "gcp".into();
-    provider.settings = ProviderSettings::Gcp {
-        project_id: Some("dev".into()),
-        location: Some("us-east1".into()),
-        credential_file: Some("/srv/gcp.json".into()),
-    };
-    let mut gcp = Draft::new(Some(provider), &[]);
-    gcp.changes.insert(Field::Location, String::new());
-    assert_eq!(
-        wire(gcp.patch().unwrap()),
-        json!({"type":"gcp", "providerId":"gcp", "location":null})
-    );
-}

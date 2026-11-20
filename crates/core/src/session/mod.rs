@@ -34,7 +34,6 @@ use crate::context::ManagedDeveloperInstructions;
 use crate::context::ModelSwitchInstructions;
 use crate::context::MultiAgentRoleInstructions;
 use crate::context::NetworkRuleSaved;
-use crate::context::RecommendedPluginsInstructions;
 use crate::context::world_state::Placement;
 use crate::context::world_state::WorldState;
 use crate::context::world_state::WorldStateSnapshot;
@@ -59,7 +58,6 @@ use crate::turn_metadata::TurnMetadataState;
 use crate::turn_timing::now_unix_timestamp_ms;
 use async_channel::Receiver;
 use async_channel::Sender;
-use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
 
@@ -101,7 +99,6 @@ use codex_otel::set_parent_from_w3c_trace_context;
 use codex_prompts::ResolvedModelMessages;
 use codex_prompts::render_model_instructions;
 use codex_protocol::ResponseUsageMetadata;
-use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::ElicitationRequest;
 use codex_protocol::approvals::ElicitationRequestEvent;
@@ -116,7 +113,6 @@ use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::image_preparation::ImagePreparationMetadata;
 use codex_protocol::items::EnteredReviewModeItem;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::items::TurnItem;
@@ -294,7 +290,6 @@ pub(crate) use self::input_queue::TurnInput;
 pub(crate) use self::input_queue::TurnInputQueue;
 pub(crate) use self::input_queue::UserInputMetadata;
 use self::review::spawn_review_thread;
-use self::session::AppServerClientMetadata;
 use self::session::Session;
 use self::session::SessionConfiguration;
 use self::session::SessionSettingsCommit;
@@ -344,7 +339,6 @@ use crate::windows_sandbox::local_binding_policy_for_sandbox;
 use crate::windows_sandbox::managed_proxy_routing_for_windows_sandbox;
 use codex_core_plugins::PluginCommandAttribution;
 use codex_core_plugins::PluginsManager;
-use codex_core_plugins::RecommendedPluginCandidatesInput;
 use codex_git_utils::get_git_repo_root;
 use codex_history::CodexHarnessMetadata;
 use codex_history::CompactedItem;
@@ -1322,17 +1316,6 @@ async fn thread_title_from_thread_store(
 }
 
 impl Session {
-    pub(crate) async fn app_server_client_metadata(&self) -> AppServerClientMetadata {
-        let state = self.state.lock().await;
-        AppServerClientMetadata {
-            client_name: state.session_configuration.app_server_client_name.clone(),
-            client_version: state
-                .session_configuration
-                .app_server_client_version
-                .clone(),
-        }
-    }
-
     fn managed_network_proxy_active_for_permission_profile(
         permission_profile: &PermissionProfile,
     ) -> bool {
@@ -1517,7 +1500,7 @@ impl Session {
     #[cfg(test)]
     pub(crate) async fn codex_home(&self) -> AbsolutePathBuf {
         let state = self.state.lock().await;
-        state.session_configuration.codex_home().clone()
+        state.session_configuration.codex_home.clone()
     }
 
     pub(crate) fn subscribe_elicitation_pause_state(&self) -> watch::Receiver<bool> {
@@ -1605,11 +1588,6 @@ impl Session {
         state.auto_compact_window_snapshot()
     }
 
-    pub(crate) async fn estimated_tokens_since_last_usage(&self) -> i64 {
-        let state = self.state.lock().await;
-        state.history.estimated_tokens_since_last_usage()
-    }
-
     pub(crate) async fn total_token_usage(&self) -> Option<TokenUsage> {
         let state = self.state.lock().await;
         state.token_info().map(|info| info.total_token_usage)
@@ -1674,12 +1652,6 @@ impl Session {
     ) -> HashSet<String> {
         let mut state = self.state.lock().await;
         state.merge_connector_selection(connector_ids)
-    }
-
-    // Returns the connector IDs currently selected for this session.
-    pub(crate) async fn get_connector_selection(&self) -> HashSet<String> {
-        let state = self.state.lock().await;
-        state.get_connector_selection()
     }
 
     // Clears connector IDs that were accumulated for explicit selection.
@@ -3692,7 +3664,7 @@ impl Session {
         turn_context: &TurnContext,
         model_info: &ModelInfo,
         items: &[ResponseItem],
-    ) -> (Vec<ResponseItem>, Vec<ImagePreparationMetadata>) {
+    ) -> Vec<ResponseItem> {
         let mut items = items.to_vec();
         let image_preparation_mode =
             if unified_image_budget_enabled(&turn_context.config.features, model_info) {
@@ -3710,7 +3682,7 @@ impl Session {
             ImageResizeNoticeMode::Disabled
         };
         // Keep nested image-upload futures out of every caller's future frame.
-        let image_preparations = Box::pin(prepare_image_response_items(
+        Box::pin(prepare_image_response_items(
             &self.thread_id.to_string(),
             turn_context.config.ephemeral,
             &mut items,
@@ -3725,7 +3697,7 @@ impl Session {
             Self::stamp_response_item_for_history(item, &turn_context.sub_id);
             self.assign_missing_response_item_id(item);
         }
-        (items, image_preparations)
+        items
     }
 
     pub(crate) fn assign_missing_response_item_id(&self, item: &mut ResponseItem) {
@@ -3786,17 +3758,12 @@ impl Session {
         model_info: &ModelInfo,
         items: &[ResponseItem],
     ) {
-        let (items, image_preparations) = self
+        let items = self
             .prepare_conversation_items_for_history(turn_context, model_info, items)
             .await;
         let items = items.into_iter().map(ResponseItemEnvelope::new).collect();
-        self.record_prepared_conversation_items(
-            turn_context,
-            model_info,
-            items,
-            image_preparations,
-        )
-        .await;
+        self.record_prepared_conversation_items(turn_context, model_info, items)
+            .await;
     }
 
     async fn record_prepared_conversation_items(
@@ -3804,7 +3771,6 @@ impl Session {
         turn_context: &TurnContext,
         model_info: &ModelInfo,
         mut items: Vec<ResponseItemEnvelope>,
-        image_preparations: Vec<ImagePreparationMetadata>,
     ) {
         // Save the originating history budget for replay.
         // Preserve any existing tool-specific override.
@@ -3901,7 +3867,6 @@ impl Session {
                 .history
                 .record_annotated_items(&mut items, model_info.truncation_policy.into());
         }
-        for image in image_preparations {}
         let settings_guard =
             if force_mcp_checkpoint && self.reference_context_item().await.is_none() {
                 Some(thread_settings::acquire_persistence_lock(self).await)
@@ -4420,7 +4385,7 @@ impl Session {
                     ]
                 });
         }
-        let (items, _) = self
+        let items = self
             .prepare_conversation_items_for_history(
                 turn_context,
                 model_info,
@@ -4879,32 +4844,6 @@ impl Session {
             developer_sections
                 .push(DeveloperInstructions::new(developer_instructions).render_fragment());
         }
-        let loaded_plugins = self
-            .services
-            .plugins_manager
-            .plugins_for_config(&turn_context.config.plugins_config_input())
-            .await
-            .without_plugins(&turn_context.disabled_plugin_ids);
-        let recommended_plugin_candidates = if turn_context
-            .config
-            .features
-            .plugin_recommendations_enabled()
-        {
-            let auth = self.services.auth_manager.auth().await;
-            let plugins_config = turn_context.config.plugins_config_input();
-            self.services
-                .plugins_manager
-                .recommended_plugin_candidates_for_config(RecommendedPluginCandidatesInput {
-                    plugins_config: &plugins_config,
-                    loaded_plugins: &loaded_plugins,
-                    auth: auth.as_ref(),
-                    disabled_tools: &turn_context.config.tool_suggest.disabled_tools,
-                    app_server_client_name: turn_context.app_server_client_name.as_deref(),
-                })
-                .await
-        } else {
-            None
-        };
         let context_contributors = self.services.extensions.context_contributors().to_vec();
         for contributor in &context_contributors {
             for fragment in contributor
@@ -5050,20 +4989,6 @@ impl Session {
                     "user" => contextual_user_sections.push(fragment.render_fragment()),
                     _ => {}
                 }
-            }
-
-            if next_item.is_none()
-                && let Some(recommended_plugins) = recommended_plugin_candidates
-                    .as_deref()
-                    .and_then(|plugins| {
-                        RecommendedPluginsInstructions::from_plugins(
-                            plugins,
-                            &ResolvedModelMessages::from_model(&step_context.settings.model_info)
-                                .plugin_recommendations(),
-                        )
-                    })
-            {
-                developer_sections.push(recommended_plugins.render_fragment());
             }
 
             if let Some(developer_message) = crate::context_manager::updates::build_rendered_message(
@@ -5691,7 +5616,7 @@ impl Session {
                 codex_history::HEARTBEAT_CONTENT_KIND.to_owned(),
             )]);
         }
-        let (prepared_items, image_preparations) = self
+        let prepared_items = self
             .prepare_annotated_conversation_items_for_history(
                 turn_context,
                 model_info,
@@ -5710,13 +5635,8 @@ impl Session {
             &prepared_items,
             &user_image_content_indices,
         );
-        self.record_prepared_conversation_items(
-            turn_context,
-            model_info,
-            prepared_items,
-            image_preparations,
-        )
-        .await;
+        self.record_prepared_conversation_items(turn_context, model_info, prepared_items)
+            .await;
         user_message_item.client_id = client_id;
         let turn_item = TurnItem::UserMessage(user_message_item);
         self.emit_turn_item_started(turn_context, &turn_item).await;

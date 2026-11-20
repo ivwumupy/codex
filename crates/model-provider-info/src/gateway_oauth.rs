@@ -156,9 +156,6 @@ impl GatewayOAuthConfig {
     }
 
     pub(crate) fn validate(&self, provider: &ModelProviderInfo) -> Result<(), String> {
-        if provider.aws.is_some() || provider.is_amazon_bedrock() {
-            return Err("provider gateway_oauth cannot be combined with AWS authentication".into());
-        }
         let base_url = provider
             .base_url
             .as_deref()
@@ -197,9 +194,6 @@ impl GatewayOAuthConfig {
             );
         }
         let gateway_header = if self.delivery().is_authorization_bearer() {
-            if provider.is_gcp() {
-                return Err("Google Cloud uses the Authorization header for its own token. Remove gateway_oauth to use the built-in Google Cloud provider".into());
-            }
             if provider.requires_openai_auth
                 || provider.env_key.is_some()
                 || provider.experimental_bearer_token.is_some()

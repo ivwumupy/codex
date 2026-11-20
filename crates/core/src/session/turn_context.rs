@@ -16,9 +16,9 @@ use crate::tools::sandboxing::configured_windows_sandbox_selection;
 use crate::tools::sandboxing::executor_windows_sandbox_selection;
 use arc_swap::ArcSwap;
 use codex_core_plugins::PluginCommandAttribution;
-use codex_core_plugins::ResolvedPluginMetricsOperation;
 use codex_core_plugins::TrustedPluginRoots;
 use codex_exec_server::ExecutorFileSystem;
+#[cfg(test)]
 use codex_extension_api::SelectedPluginSnapshot;
 use codex_file_system::EnvironmentAccess;
 use codex_file_system::FileSystemEnvironmentAccessor;
@@ -643,6 +643,7 @@ impl TurnContext {
         self.initial_settings.effective_collaboration_mode()
     }
 
+    #[cfg(test)]
     /// Combines setup-time host identities with the first step's ready selected packages.
     /// Keeps the complete observation or marks it unknown; never truncates membership.
     pub(super) fn active_plugin_ids_for_telemetry(
@@ -747,26 +748,6 @@ impl TurnContext {
         }
     }
 
-    pub(crate) async fn plugin_metrics_operation_for_command(
-        &self,
-        command: &[String],
-        cwd: &PathUri,
-        environment: &Environment,
-    ) -> Option<ResolvedPluginMetricsOperation> {
-        let trusted_roots = self.extension_data.get::<TrustedPluginRoots>()?;
-        if environment.is_remote() {
-            trusted_roots
-                .resolve_metrics_operation_in_filesystem(
-                    command,
-                    cwd,
-                    environment.get_filesystem().as_ref(),
-                )
-                .await
-        } else {
-            trusted_roots.resolve_metrics_operation(command, &cwd.to_abs_path().ok()?)
-        }
-    }
-
     /// Returns the selected environment's permissions, or the thread's permissions when none is ready.
     pub(crate) fn permission_profile(&self) -> PermissionProfile {
         self.initial_environments
@@ -787,10 +768,6 @@ impl TurnContext {
                     environments.primary_workspace_root_uris(),
                 )
         })
-    }
-
-    pub(crate) fn network_sandbox_policy(&self) -> NetworkSandboxPolicy {
-        self.permission_profile().network_sandbox_policy()
     }
 
     pub(crate) fn sandbox_policy(&self) -> SandboxPolicy {

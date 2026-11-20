@@ -682,6 +682,7 @@ impl ChatWidget {
         }
         self.status_line_workspace_headline_pending_request_id = None;
         match result {
+            #[cfg(test)]
             Ok(crate::workspace_messages::WorkspaceHeadlineFetchResult::Available(headline)) => {
                 self.status_line_workspace_messages_disabled = false;
                 self.status_line_workspace_headline = headline;
@@ -1001,8 +1002,7 @@ impl ChatWidget {
                     && self
                         .config
                         .model_providers
-                        .get(&self.config.model_provider_id)
-                        .is_some_and(|provider| !provider.is_amazon_bedrock()))
+                        .contains_key(&self.config.model_provider_id))
                 .then_some("Flex")
             })
     }

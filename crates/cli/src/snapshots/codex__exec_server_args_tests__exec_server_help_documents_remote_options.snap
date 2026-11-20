@@ -87,7 +87,7 @@ Options:
           Transport used for the remote executor connection
 
           [default: noise]
-          [possible values: noise, direct]
+          [possible values: noise]
 
       --environment-id <ID>
           Environment id to attach to when registering remotely
@@ -105,27 +105,6 @@ Options:
       --executor-credential-stdin
           Read rotating executor credentials from stdin; exit when the pipe
           closes
-
-      --chatgpt-token-stdin
-          Read a ChatGPT access token from stdin for HTTPS registration
-
-      --chatgpt-account-id <ID>
-          ChatGPT account ID. Must match the token's account claim when present
-
-      --aws-sigv4
-          Sign Direct registration and WebSocket handshake requests with AWS
-          SigV4
-
-      --aws-profile <PROFILE>
-          AWS profile used for SigV4 authentication
-
-      --aws-region <REGION>
-          AWS signing region. Uses the SDK region chain when omitted
-
-      --aws-service <SERVICE>
-          AWS signing service
-
-          [default: execute-api]
 
       --exit-on-stdin-close
           Exit when the parent-owned standard-input pipe closes

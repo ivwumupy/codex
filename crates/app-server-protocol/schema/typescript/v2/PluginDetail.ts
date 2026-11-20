@@ -9,7 +9,7 @@ import type { PluginSummary } from "./PluginSummary";
 import type { ScheduledTaskSummary } from "./ScheduledTaskSummary";
 import type { SkillSummary } from "./SkillSummary";
 
-export type PluginDetail = { marketplaceName: string, marketplacePath: AbsolutePathBuf | null, summary: PluginSummary, shareUrl: string | null, description: string | null, skills: Array<SkillSummary>,
+export type PluginDetail = { marketplaceName: string, marketplacePath: AbsolutePathBuf | null, summary: PluginSummary, description: string | null, skills: Array<SkillSummary>,
 /**
  * The declared onboarding skill, when the plugin and visible skill are enabled.
  */

@@ -4,31 +4,21 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use crate::OPENAI_API_CURATED_MARKETPLACE_NAME;
 use crate::OPENAI_CURATED_MARKETPLACE_NAME;
 use crate::PluginsConfigInput;
 use crate::PluginsManager;
-use crate::http_client_selector::HttpClientSelector;
-use crate::remote::RemotePluginServiceConfig;
 use codex_config::LoaderOverrides;
 use codex_config::NoopThreadConfigLoader;
 use codex_config::loader::load_config_layers_state;
 use codex_exec_server::LOCAL_FS;
-use codex_http_client::ClientRouteClass;
-use codex_http_client::HttpClientFactory;
-use codex_http_client::OutboundProxyPolicy;
-use codex_http_client::RequestBuilder;
-use codex_http_client::RouteAwareClientPool;
 use codex_login::AuthHeaders;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::ExternalAuth;
 use codex_login::ExternalAuthFuture;
 use codex_login::ExternalAuthRefreshContext;
-use codex_login::auth::BedrockAccessKeysAuth;
-use codex_login::auth::BedrockApiKeyAuth;
 use codex_login::test_support::auth_manager_from_optional_auth;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::protocol::Product;
@@ -47,7 +37,6 @@ use codex_utils_path_uri::PathUri;
 use codex_utils_plugins::PluginSkillRoot;
 use codex_utils_plugins::SkillDiscoveryMode;
 use codex_utils_plugins::migrated_command_skills_root;
-use http::Method;
 use toml::Value;
 
 pub(crate) const TEST_CURATED_PLUGIN_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -131,15 +120,6 @@ fn test_codex_auth(auth_mode: Option<AuthMode>) -> Option<CodexAuth> {
         )
         .expect("test ChatGPT tokens should parse"),
         AuthMode::Headers => CodexAuth::Headers(AuthHeaders::new(http::HeaderMap::new())),
-        AuthMode::BedrockApiKey => CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
-            api_key: "test-api-key".to_string(),
-            region: "us-east-1".to_string(),
-        }),
-        AuthMode::BedrockAccessKeys => CodexAuth::BedrockAccessKeys(BedrockAccessKeysAuth {
-            access_key_id: "test-access-key-id".to_string(),
-            secret_access_key: "test-secret-access-key".to_string(),
-            session_token: None,
-        }),
         AuthMode::AgentIdentity | AuthMode::PersonalAccessToken => {
             panic!("test auth mode requires a purpose-built CodexAuth")
         }
@@ -319,89 +299,6 @@ fn load_test_skill_root(root: &PluginSkillRoot) -> LoadedSkillRoot {
     }
 }
 
-pub(crate) fn test_http_client_factory() -> HttpClientFactory {
-    HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault)
-}
-
-#[derive(Debug)]
-pub(crate) struct RecordingHttpClientSelector {
-    selected_urls: Arc<Mutex<Vec<String>>>,
-    delegate: RouteAwareClientPool,
-}
-
-impl RecordingHttpClientSelector {
-    fn record_url(&self, url: &str) {
-        match self.selected_urls.lock() {
-            Ok(mut selected_urls) => selected_urls.push(url.to_string()),
-            Err(error) => panic!("selected URL recorder lock should not be poisoned: {error}"),
-        }
-    }
-
-    pub(crate) fn new() -> (Arc<Self>, Arc<Mutex<Vec<String>>>) {
-        let selected_urls = Arc::new(Mutex::new(Vec::new()));
-        let delegate = RouteAwareClientPool::with_chatgpt_cloudflare_cookies(
-            test_http_client_factory(),
-            ClientRouteClass::Api,
-        );
-        (
-            Arc::new(Self {
-                selected_urls: Arc::clone(&selected_urls),
-                delegate,
-            }),
-            selected_urls,
-        )
-    }
-}
-
-impl HttpClientSelector for RecordingHttpClientSelector {
-    fn for_current_account(&self) -> Arc<dyn HttpClientSelector> {
-        Arc::new(Self {
-            selected_urls: Arc::clone(&self.selected_urls),
-            delegate: self.delegate.for_current_account(),
-        })
-    }
-
-    fn request(&self, method: Method, url: &str) -> RequestBuilder {
-        self.record_url(url);
-        self.delegate.request(method, url)
-    }
-
-    fn request_for_account(
-        &self,
-        method: Method,
-        url: &str,
-        binding: &codex_http_client::NetworkPolicy,
-    ) -> Option<RequestBuilder> {
-        self.record_url(url);
-        self.delegate.request_for_account(method, url, binding)
-    }
-    fn outbound_proxy_policy(&self) -> OutboundProxyPolicy {
-        self.delegate.outbound_proxy_policy()
-    }
-}
-
-pub(crate) fn recording_remote_plugin_service_config(
-    chatgpt_base_url: String,
-) -> (RemotePluginServiceConfig, Arc<Mutex<Vec<String>>>) {
-    let (http_clients, selected_urls) = RecordingHttpClientSelector::new();
-    (
-        RemotePluginServiceConfig {
-            runtime_auth: None,
-            chatgpt_base_url,
-            product_sku: crate::remote::CODEX_PRODUCT_SKU.to_string(),
-            http_clients,
-        },
-        selected_urls,
-    )
-}
-
-pub(crate) fn recorded_http_client_urls(selected_urls: &Mutex<Vec<String>>) -> Vec<String> {
-    match selected_urls.lock() {
-        Ok(selected_urls) => selected_urls.clone(),
-        Err(error) => panic!("selected URL recorder lock should not be poisoned: {error}"),
-    }
-}
-
 pub(crate) fn write_file(path: &Path, contents: &str) {
     fs::create_dir_all(path.parent().expect("file should have a parent")).unwrap();
     fs::write(path, contents).unwrap();
@@ -531,11 +428,6 @@ pub(crate) async fn load_plugins_config(codex_home: &Path, cwd: &Path) -> Plugin
     .await
     .expect("config should load");
     let effective_config = config_layer_stack.effective_config();
-    let model_provider_id = effective_config
-        .get("model_provider")
-        .and_then(toml::Value::as_str)
-        .unwrap_or_default()
-        .to_string();
     PluginsConfigInput::new(
         config_layer_stack,
         effective_config
@@ -543,16 +435,7 @@ pub(crate) async fn load_plugins_config(codex_home: &Path, cwd: &Path) -> Plugin
             .try_into::<codex_config::config_toml::ConfigToml>()
             .unwrap()
             .plugins,
-        model_provider_id,
         feature_enabled(&effective_config, "plugins", /*default_enabled*/ true),
-        feature_enabled(
-            &effective_config,
-            "remote_plugin",
-            /*default_enabled*/ true,
-        ),
-        "https://chatgpt.com/backend-api/".to_string(),
-        test_http_client_factory(),
-        /*product_sku*/ None,
     )
 }
 

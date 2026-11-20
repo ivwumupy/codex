@@ -5574,8 +5574,6 @@ fn fresh_session_keeps_its_name_and_draft_when_cycling_backends() -> Result<()> 
                 app.agents_overview.threads.insert(retained_thread, Some(retained));
 
                 app.chat_widget.insert_str("unsent draft");
-                app.agents_overview.pending_usage = Some((thread_id, uuid::Uuid::new_v4()));
-                app.agents_overview.usage_disabled = true;
                 let cwd = tempdir()?;
                 let mut settings = app.backend_settings();
                 settings.config.cwd = cwd.path().to_path_buf().abs();
@@ -5625,8 +5623,6 @@ fn fresh_session_keeps_its_name_and_draft_when_cycling_backends() -> Result<()> 
                 write_user("user-a");
                 assert_eq!(app.other_new_session_backend(&backends).await, None);
 
-                assert_eq!(app.agents_overview.pending_usage, None);
-                assert!(!app.agents_overview.usage_disabled);
                 assert_eq!(app.config.cwd.as_path(), cwd.path());
                 assert_eq!(app.chat_widget.thread_name().as_deref(), Some("Add User"));
                 assert_eq!(app.chat_widget.composer_text_with_pending(), "unsent draft");

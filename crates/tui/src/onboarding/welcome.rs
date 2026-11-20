@@ -1,4 +1,4 @@
-//! Shared welcome header for the existing sign-in and Bedrock onboarding pickers.
+//! Shared welcome header for the sign-in picker.
 //! The logo occupies a fixed stage so its motion never shifts the choices below it.
 
 use crossterm::event::KeyEvent;

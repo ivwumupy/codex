@@ -5,7 +5,6 @@ use codex_features::Feature;
 use codex_history::ResponseItemEnvelope;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
-use codex_protocol::image_preparation::ImagePreparationMetadata;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 
@@ -142,16 +141,11 @@ impl Session {
             return;
         }
 
-        let (annotated_items, image_preparations) = self
+        let annotated_items = self
             .prepare_annotated_conversation_items_for_history(turn_context, model_info, items)
             .await;
-        self.record_prepared_conversation_items(
-            turn_context,
-            model_info,
-            annotated_items,
-            image_preparations,
-        )
-        .await;
+        self.record_prepared_conversation_items(turn_context, model_info, annotated_items)
+            .await;
     }
 
     pub(crate) async fn prepare_annotated_conversation_items_for_history(
@@ -159,18 +153,16 @@ impl Session {
         turn_context: &TurnContext,
         model_info: &ModelInfo,
         items: Vec<ResponseItemEnvelope>,
-    ) -> (Vec<ResponseItemEnvelope>, Vec<ImagePreparationMetadata>) {
+    ) -> Vec<ResponseItemEnvelope> {
         let mut annotated_items = Vec::with_capacity(items.len());
-        let mut image_preparations = Vec::new();
         for envelope in items {
-            let (prepared_items, prepared_images) = self
+            let prepared_items = self
                 .prepare_conversation_items_for_history(
                     turn_context,
                     model_info,
                     std::slice::from_ref(&envelope.item),
                 )
                 .await;
-            image_preparations.extend(prepared_images);
 
             let mut metadata = envelope.metadata;
             annotated_items.extend(prepared_items.into_iter().map(|item| ResponseItemEnvelope {
@@ -178,7 +170,7 @@ impl Session {
                 metadata: metadata.take(),
             }));
         }
-        (annotated_items, image_preparations)
+        annotated_items
     }
 
     /// Injects items into active work, or records them without starting a turn.

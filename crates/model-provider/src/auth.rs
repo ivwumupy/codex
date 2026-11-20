@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -21,7 +20,6 @@ use codex_login::auth::AgentIdentityAuth;
 use codex_login::auth::AgentIdentityAuthError;
 use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::SessionSource;
 use codex_runtime_agent_instance::RuntimeAuth;
 use codex_runtime_agent_instance::RuntimeAuthError;
@@ -30,9 +28,6 @@ use http::HeaderMap;
 use http::HeaderValue;
 
 use crate::bearer_auth_provider::BearerAuthProvider;
-
-const BEDROCK_API_KEY_UNSUPPORTED_MESSAGE: &str =
-    "Bedrock API key auth is only supported by the Amazon Bedrock model provider";
 
 /// Credential ownership and optional OpenAI runtime auth for one harness/thread context.
 /// Publish these together so auxiliary clients cannot select another thread's credentials.
@@ -318,24 +313,11 @@ pub(crate) fn auth_manager_for_provider(
     provider: &ModelProviderInfo,
 ) -> Option<Arc<AuthManager>> {
     match provider.auth.clone() {
-        Some(config) => {
-            if provider.is_gcp() {
-                let mut env = HashMap::new();
-                if let Some(credential_file) = &provider.credential_file {
-                    env.insert(
-                        "GOOGLE_APPLICATION_CREDENTIALS".to_string(),
-                        credential_file.as_os_str().to_os_string(),
-                    );
-                }
-                Some(AuthManager::external_bearer_only_with_env(config, env))
-            } else {
-                Some(match auth_manager {
-                    Some(manager) => crate::shared_state::process_shared_state()
-                        .command_credentials(&config, &manager.runtime_config()),
-                    None => AuthManager::external_bearer_only(config),
-                })
-            }
-        }
+        Some(config) => Some(match auth_manager {
+            Some(manager) => crate::shared_state::process_shared_state()
+                .command_credentials(&config, &manager.runtime_config()),
+            None => AuthManager::external_bearer_only(config),
+        }),
         None => auth_manager,
     }
 }
@@ -350,15 +332,6 @@ pub(crate) fn resolve_provider_auth(
 
     if !provider.requires_openai_auth && provider.auth.is_none() {
         return Ok(unauthenticated_auth_provider());
-    }
-
-    if matches!(
-        auth,
-        Some(CodexAuth::BedrockApiKey(_) | CodexAuth::BedrockAccessKeys(_))
-    ) {
-        return Err(CodexErr::UnsupportedOperation(
-            BEDROCK_API_KEY_UNSUPPORTED_MESSAGE.to_string(),
-        ));
     }
 
     Ok(match auth {
@@ -527,9 +500,6 @@ pub fn auth_provider_from_auth(auth: &CodexAuth) -> SharedAuthProvider {
             Arc::new(AgentIdentityAuthProvider { auth: auth.clone() })
         }
         CodexAuth::Headers(auth) => Arc::new(HeaderAuthProvider { auth: auth.clone() }),
-        CodexAuth::BedrockApiKey(_) | CodexAuth::BedrockAccessKeys(_) => {
-            unreachable!("{BEDROCK_API_KEY_UNSUPPORTED_MESSAGE}")
-        }
         CodexAuth::ApiKey(_)
         | CodexAuth::Chatgpt(_)
         | CodexAuth::ChatgptAuthTokens(_)

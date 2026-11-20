@@ -170,7 +170,6 @@ impl Harness {
             installation_id: "11111111-1111-4111-8111-111111111111".into(),
             code_mode_session_provider: None,
 
-            remote_control_handle: None,
             plugin_startup_tasks: None,
         }));
         Ok(Self {
@@ -188,9 +187,7 @@ impl Harness {
                 },
                 // Remote control can share a process whose primary listener is stdio.
                 // Keeping that case tests that authorization uses the connection's origin.
-                ConnectionOrigin::Stdio
-                | ConnectionOrigin::InProcess
-                | ConnectionOrigin::RemoteControl => AppServerTransport::Stdio,
+                ConnectionOrigin::Stdio | ConnectionOrigin::InProcess => AppServerTransport::Stdio,
             },
         })
     }

@@ -10,7 +10,6 @@ use core_test_support::test_codex::test_codex;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use tempfile::TempDir;
-use test_case::test_case;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
@@ -18,13 +17,10 @@ use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-#[test_case(CodexAuth::from_api_key("catalog-routing-test-key"), "Bearer catalog-routing-test-key"; "api_key")]
-#[test_case(CodexAuth::create_dummy_chatgpt_auth_for_testing(), "Bearer Access Token"; "chatgpt")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn builtin_openai_catalog_override_preserves_inference(
-    auth: CodexAuth,
-    authorization: &str,
-) -> Result<()> {
+async fn builtin_openai_catalog_override_preserves_inference() -> Result<()> {
+    let auth = CodexAuth::from_api_key("catalog-routing-test-key");
+    let authorization = "Bearer catalog-routing-test-key";
     let inference = responses::start_mock_server().await;
     let catalog_server = MockServer::start().await;
     let mut catalog = bundled_models_response()?;
@@ -44,7 +40,7 @@ openai_base_url = "{}/v1"
 [features]
 api_key_model_discovery = true
 [model_providers.openai]
-model_catalog_url = "https://chatgpt.com/backend-api/codex/models"
+model_catalog_url = "https://api.openai.com/codex/models"
 "#,
             inference.uri(),
         ),
@@ -56,7 +52,7 @@ model_catalog_url = "https://chatgpt.com/backend-api/codex/models"
             .model_catalog_url
             .as_deref()
             .map(String::as_str),
-        Some("https://chatgpt.com/backend-api/codex/models"),
+        Some("https://api.openai.com/codex/models"),
     );
     // Config validation uses the production allowlist. Redirect only this test's
     // runtime catalog client to a local server to capture credential routing.

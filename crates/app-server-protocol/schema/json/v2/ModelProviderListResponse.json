@@ -130,69 +130,6 @@
           ],
           "title": "CustomGatewayProviderSettings",
           "type": "object"
-        },
-        {
-          "properties": {
-            "profile": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "region": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "bedrock"
-              ],
-              "title": "BedrockProviderSettingsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "BedrockProviderSettings",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "credentialFile": {
-              "description": "Path on the app-server host, without credential-file contents.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "location": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "projectId": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "gcp"
-              ],
-              "title": "GcpProviderSettingsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "GcpProviderSettings",
-          "type": "object"
         }
       ]
     }

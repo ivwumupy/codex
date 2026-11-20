@@ -5,8 +5,6 @@ use app_test_support::ChatGptAuthFixture;
 use app_test_support::ChatGptIdTokenClaims;
 use app_test_support::TestAppServer;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::GetAccountRateLimitsResponse;
-use codex_app_server_protocol::RateLimitResetCreditsSummary;
 use codex_config::types::AuthCredentialsStoreMode;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -33,7 +31,6 @@ enum AuthKind {
 #[test_case(AuthKind::Chatgpt, Some(json!({"supportsLunaReserve": true})), /*expect_header*/ true; "eligible_client")]
 #[test_case(AuthKind::Fedramp, Some(json!({"supportsLunaReserve": true})), /*expect_header*/ false; "restricted_account")]
 #[test_case(AuthKind::Pat, Some(json!({"supportsLunaReserve": true})), /*expect_header*/ false; "personal_access_token")]
-#[test_case(AuthKind::Chatgpt, Some(json!({"supportsLunaReserve": true, "excludeResetCreditDetails": true})), /*expect_header*/ true; "lightweight_poll")]
 #[tokio::test]
 async fn luna_reserve_usage_capability(
     auth_kind: AuthKind,
@@ -71,21 +68,9 @@ async fn luna_reserve_usage_capability(
         .and(path("/api/codex/usage"))
         .respond_with(ResponseTemplate::new(/*s*/ 200).set_body_json(json!({
             "account_id": "account-a", "user_id": "user-a", "plan_type": "pro",
-            "rate_limit": {"allowed": false, "limit_reached": true},
-            "rate_limit_reset_credits": {"available_count": 2}
+            "rate_limit": {"allowed": false, "limit_reached": true}
         })))
         .expect(/*r*/ 1)
-        .mount(&backend)
-        .await;
-    let lightweight = params
-        .as_ref()
-        .is_some_and(|params| params["excludeResetCreditDetails"] == true);
-    Mock::given(method("GET"))
-        .and(path("/api/codex/rate-limit-reset-credits"))
-        .respond_with(ResponseTemplate::new(/*s*/ 200).set_body_json(json!({
-            "available_count": 2, "credits": []
-        })))
-        .expect(if lightweight { 0 } else { 1 })
         .mount(&backend)
         .await;
     let mut app = TestAppServer::builder()
@@ -102,14 +87,7 @@ async fn luna_reserve_usage_capability(
         .build_initialized()
         .await?;
     let request = app.send_request("account/rateLimits/read", params).await?;
-    let response: GetAccountRateLimitsResponse = app.read_response(request).await?;
-    assert_eq!(
-        response.rate_limit_reset_credits,
-        Some(RateLimitResetCreditsSummary {
-            available_count: 2,
-            credits: (!lightweight).then(Vec::new),
-        })
-    );
+    let _: Value = app.read_response(request).await?;
     let requests = backend
         .received_requests()
         .await

@@ -25,7 +25,6 @@ pub struct PluginSearchParams {
 #[ts(rename_all = "camelCase", export_to = "v2/")]
 pub enum PluginSearchScope {
     Global,
-    Workspace,
     Personal,
 }
 

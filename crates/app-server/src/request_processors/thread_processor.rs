@@ -4,8 +4,6 @@ mod daemon_continuation;
 #[path = "daemon_snapshot.rs"]
 mod daemon_snapshot;
 
-mod workspace_switching;
-
 #[path = "thread_resume_account.rs"]
 mod thread_resume_account;
 
@@ -1746,7 +1744,6 @@ impl ThreadRequestProcessor {
         let cwd = config_snapshot.cwd().clone();
         let active_permission_profile =
             thread_response_active_permission_profile(config_snapshot.active_permission_profile);
-        let thread_originator = config_snapshot.originator.clone();
 
         let response = ThreadStartResponse {
             thread: thread.clone(),
@@ -1767,7 +1764,7 @@ impl ThreadRequestProcessor {
         let notif = thread_started_notification(thread);
         listener_task_context
             .outgoing
-            .send_response_with_thread_originator(request_id, response, thread_originator)
+            .send_response(request_id, response)
             .instrument(tracing::info_span!(
                 "app_server.thread_start.send_response",
                 otel.name = "app_server.thread_start.send_response",
@@ -4564,8 +4561,6 @@ impl ThreadRequestProcessor {
                         redact_thread_resume_payloads(&mut initial_turns_page.data);
                     }
                 }
-
-                let thread_originator = config_snapshot.originator.clone();
                 let response = ThreadResumeResponse {
                     thread,
                     disabled_plugin_ids: config_snapshot.disabled_plugin_ids,
@@ -4588,9 +4583,7 @@ impl ThreadRequestProcessor {
                 };
 
                 let connection_id = request_id.connection_id;
-                self.outgoing
-                    .send_response_with_thread_originator(request_id, response, thread_originator)
-                    .await;
+                self.outgoing.send_response(request_id, response).await;
                 // `excludeTurns` is explicitly the cheap resume path, so avoid
                 // rebuilding history only to attribute a replayed usage update.
                 if let Some(token_usage_turn_id) = token_usage_turn_id {
@@ -5942,7 +5935,6 @@ impl ThreadRequestProcessor {
         let sandbox = config_snapshot.sandbox_policy().into();
         let active_permission_profile =
             thread_response_active_permission_profile(config_snapshot.active_permission_profile);
-        let thread_originator = config_snapshot.originator.clone();
         let response = ThreadForkResponse {
             thread: thread.clone(),
             disabled_plugin_ids: config_snapshot.disabled_plugin_ids,
@@ -5962,9 +5954,7 @@ impl ThreadRequestProcessor {
 
         let notif = thread_started_notification(thread);
         let connection_id = request_id.connection_id;
-        self.outgoing
-            .send_response_with_thread_originator(request_id, response, thread_originator)
-            .await;
+        self.outgoing.send_response(request_id, response).await;
         // `excludeTurns` is the cheap fork path, so skip restored usage replay
         // instead of rebuilding history only to attribute a historical update.
         if let Some(token_usage_turn_id) = token_usage_turn_id {

@@ -741,10 +741,6 @@ impl ModelClient {
         }
     }
 
-    pub(crate) fn auth_manager(&self) -> Option<Arc<AuthManager>> {
-        self.state.provider.auth_manager()
-    }
-
     pub(crate) fn auth_owner(&self) -> Option<AuthOwner> {
         codex_model_provider::request_auth_owner(self.state.provider.as_ref())
     }
@@ -1066,17 +1062,7 @@ impl ModelClient {
             &prompt.output_schema,
             prompt.output_schema_strict,
         );
-        let service_tier = model_info
-            .service_tier_for_request(service_tier)
-            .filter(|tier| {
-                // Bedrock requires an advertised tier, including for flex, which the
-                // generic OpenAI resolver permits without catalog support.
-                !self.state.provider.info().is_amazon_bedrock()
-                    || model_info
-                        .service_tiers
-                        .iter()
-                        .any(|supported| supported.id == *tier)
-            });
+        let service_tier = model_info.service_tier_for_request(service_tier);
         if !include_internal {
             for item in &mut input {
                 item.clear_tool_result_metadata();
@@ -1177,7 +1163,6 @@ impl ModelClient {
             && provider.env_key.is_none()
             && provider.experimental_bearer_token.is_none()
             && provider.auth.is_none()
-            && provider.aws.is_none()
     }
 
     fn set_guardian_metadata(
@@ -2783,9 +2768,7 @@ impl AuthRequestTelemetryContext {
         let auth_telemetry = auth_header_telemetry(api_auth)?;
         Ok(Self {
             auth_mode: auth_mode.map(|mode| match mode {
-                AuthMode::ApiKey | AuthMode::BedrockApiKey | AuthMode::BedrockAccessKeys => {
-                    "ApiKey"
-                }
+                AuthMode::ApiKey => "ApiKey",
                 AuthMode::Chatgpt
                 | AuthMode::ChatgptAuthTokens
                 | AuthMode::Headers

@@ -49,16 +49,6 @@ pub enum AuthMode {
     #[ts(rename = "personalAccessToken")]
     #[strum(serialize = "personalAccessToken")]
     PersonalAccessToken,
-    /// Amazon Bedrock bearer token managed by Codex.
-    #[serde(rename = "bedrockApiKey")]
-    #[ts(rename = "bedrockApiKey")]
-    #[strum(serialize = "bedrockApiKey")]
-    BedrockApiKey,
-    /// Amazon Bedrock AWS access keys managed by Codex.
-    #[serde(rename = "bedrockAccessKeys")]
-    #[ts(rename = "bedrockAccessKeys")]
-    #[strum(serialize = "bedrockAccessKeys")]
-    BedrockAccessKeys,
 }
 
 impl AuthMode {
@@ -66,11 +56,7 @@ impl AuthMode {
     pub fn has_chatgpt_account(self) -> bool {
         match self {
             Self::Chatgpt | Self::ChatgptAuthTokens | Self::PersonalAccessToken => true,
-            Self::ApiKey
-            | Self::Headers
-            | Self::AgentIdentity
-            | Self::BedrockApiKey
-            | Self::BedrockAccessKeys => false,
+            Self::ApiKey | Self::Headers | Self::AgentIdentity => false,
         }
     }
 
@@ -82,7 +68,7 @@ impl AuthMode {
             | Self::Headers
             | Self::AgentIdentity
             | Self::PersonalAccessToken => true,
-            Self::ApiKey | Self::BedrockApiKey | Self::BedrockAccessKeys => false,
+            Self::ApiKey => false,
         }
     }
 }
@@ -474,49 +460,6 @@ macro_rules! client_response_payload_from_impl {
         }
     };
     ($variant:ident, $response:ty, manual) => {};
-}
-
-/// Preserve explicit `undefined` accepted by the original stable usage request.
-///
-/// A Rust-based TypeScript proxy retains dependency discovery; a raw `#[ts(type = ...)]`
-/// override would silently omit the generated params import and schema fixture.
-#[allow(dead_code)]
-#[derive(TS)]
-#[ts(untagged)]
-enum GetAccountTokenUsageParamsTypeScript {
-    Params(v2::GetAccountTokenUsageParams),
-    #[ts(type = "undefined")]
-    Undefined,
-}
-
-/// Preserve omitted/undefined params while exporting the new usage capability type.
-#[allow(dead_code)]
-#[derive(TS)]
-#[ts(untagged)]
-enum GetAccountRateLimitsParamsTypeScript {
-    Params(v2::GetAccountRateLimitsParams),
-    #[ts(type = "undefined")]
-    Undefined,
-}
-
-/// Preserve null and explicit undefined params while adding provider selection to gateway reads.
-#[allow(dead_code)]
-#[derive(TS)]
-#[ts(untagged)]
-enum GatewayOAuthReadParamsTypeScript {
-    Params(Option<v2::GatewayOAuthReadParams>),
-    #[ts(type = "undefined")]
-    Undefined,
-}
-
-/// Preserve null and explicit undefined params while adding provider selection to gateway login.
-#[allow(dead_code)]
-#[derive(TS)]
-#[ts(untagged)]
-enum GatewayOAuthLoginParamsTypeScript {
-    Params(Option<v2::GatewayOAuthLoginParams>),
-    #[ts(type = "undefined")]
-    Undefined,
 }
 
 client_request_definitions! {
@@ -993,45 +936,10 @@ client_request_definitions! {
         serialization: None,
         response: v2::PluginInstalledResponse,
     },
-    PluginReconcile => "plugin/reconcile" {
-        params: v2::PluginReconcileParams,
-        serialization: None,
-        response: v2::PluginReconcileResponse,
-    },
     PluginRead => "plugin/read" {
         params: v2::PluginReadParams,
         serialization: None,
         response: v2::PluginReadResponse,
-    },
-    PluginSkillRead => "plugin/skill/read" {
-        params: v2::PluginSkillReadParams,
-        serialization: global("config"),
-        response: v2::PluginSkillReadResponse,
-    },
-    PluginShareSave => "plugin/share/save" {
-        params: v2::PluginShareSaveParams,
-        serialization: global("config"),
-        response: v2::PluginShareSaveResponse,
-    },
-    PluginShareUpdateTargets => "plugin/share/updateTargets" {
-        params: v2::PluginShareUpdateTargetsParams,
-        serialization: global("config"),
-        response: v2::PluginShareUpdateTargetsResponse,
-    },
-    PluginShareList => "plugin/share/list" {
-        params: v2::PluginShareListParams,
-        serialization: global("config"),
-        response: v2::PluginShareListResponse,
-    },
-    PluginShareCheckout => "plugin/share/checkout" {
-        params: v2::PluginShareCheckoutParams,
-        serialization: global("config"),
-        response: v2::PluginShareCheckoutResponse,
-    },
-    PluginShareDelete => "plugin/share/delete" {
-        params: v2::PluginShareDeleteParams,
-        serialization: global("config"),
-        response: v2::PluginShareDeleteResponse,
     },
     AppsRead => "app/read" {
         params: v2::AppsReadParams,
@@ -1151,21 +1059,6 @@ client_request_definitions! {
         serialization: None,
         response: v2::ModelListResponse,
     },
-    GatewayOAuthRead => "account/gatewayOAuth/read" {
-        params: #[ts(optional, as = "Option<GatewayOAuthReadParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGatewayOAuthReadParams,
-        serialization: None,
-        response: v2::GatewayOAuthReadResponse,
-    },
-    GatewayOAuthLogin => "account/gatewayOAuth/login" {
-        params: #[ts(optional, as = "Option<GatewayOAuthLoginParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGatewayOAuthLoginParams,
-        serialization: None,
-        response: v2::GatewayOAuthLoginResponse,
-    },
-    GatewayOAuthCancel => "account/gatewayOAuth/cancel" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: None,
-        response: v2::GatewayOAuthCancelResponse,
-    },
     ModelProviderList => "modelProvider/list" {
         params: v2::ModelProviderListParams,
         serialization: global_shared_read("config"),
@@ -1195,48 +1088,6 @@ client_request_definitions! {
         params: v2::ExperimentalFeatureEnablementSetParams,
         serialization: global("config"),
         response: v2::ExperimentalFeatureEnablementSetResponse,
-    },
-    #[experimental("remoteControl/enable")]
-    RemoteControlEnable => "remoteControl/enable" {
-        params: #[serde(skip_serializing_if = "Option::is_none")] v2::NullableRemoteControlEnableParams,
-        serialization: global("remote-control"),
-        response: v2::RemoteControlEnableResponse,
-    },
-    #[experimental("remoteControl/disable")]
-    RemoteControlDisable => "remoteControl/disable" {
-        params: #[serde(skip_serializing_if = "Option::is_none")] v2::NullableRemoteControlDisableParams,
-        serialization: global("remote-control"),
-        response: v2::RemoteControlDisableResponse,
-    },
-    #[experimental("remoteControl/status/read")]
-    RemoteControlStatusRead => "remoteControl/status/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: global_shared_read("remote-control"),
-        response: v2::RemoteControlStatusReadResponse,
-    },
-    #[experimental("remoteControl/pairing/start")]
-    RemoteControlPairingStart => "remoteControl/pairing/start" {
-        params: v2::RemoteControlPairingStartParams,
-        serialization: global("remote-control-pairing"),
-        response: v2::RemoteControlPairingStartResponse,
-    },
-    #[experimental("remoteControl/pairing/status")]
-    RemoteControlPairingStatus => "remoteControl/pairing/status" {
-        params: v2::RemoteControlPairingStatusParams,
-        serialization: global_shared_read("remote-control-pairing"),
-        response: v2::RemoteControlPairingStatusResponse,
-    },
-    #[experimental("remoteControl/client/list")]
-    RemoteControlClientsList => "remoteControl/client/list" {
-        params: v2::RemoteControlClientsListParams,
-        serialization: global_shared_read("remote-control-clients"),
-        response: v2::RemoteControlClientsListResponse,
-    },
-    #[experimental("remoteControl/client/revoke")]
-    RemoteControlClientsRevoke => "remoteControl/client/revoke" {
-        params: v2::RemoteControlClientsRevokeParams,
-        serialization: global("remote-control-clients"),
-        response: v2::RemoteControlClientsRevokeResponse,
     },
     #[experimental("collaborationMode/list")]
     /// Lists collaboration mode presets.
@@ -1336,33 +1187,9 @@ client_request_definitions! {
         response: v2::LoginAccountResponse,
     },
 
-    #[experimental("account/bedrock/discover")]
-    BedrockDiscover => "account/bedrock/discover" {
-        params: v2::BedrockDiscoverParams,
-        serialization: global_shared_read("account-auth"),
-        response: v2::BedrockDiscoverResponse,
-    },
 
-    #[experimental("account/bedrock/setup")]
-    BedrockSetup => "account/bedrock/setup" {
-        params: v2::BedrockSetupParams,
-        serialization: global("account-auth"),
-        response: v2::BedrockSetupResponse,
-    },
 
-    #[experimental("account/gcp/setup")]
-    GcpSetup => "account/gcp/setup" {
-        params: v2::GcpSetupParams,
-        serialization: global("account-auth"),
-        response: v2::GcpSetupResponse,
-    },
 
-    #[experimental("account/bedrock/checkGovCloudRequirements")]
-    BedrockCheckGovCloudRequirements => "account/bedrock/checkGovCloudRequirements" {
-        params: v2::BedrockCheckGovCloudRequirementsParams,
-        serialization: global("account-auth"),
-        response: v2::BedrockCheckGovCloudRequirementsResponse,
-    },
 
     CancelLoginAccount => "account/login/cancel" {
         params: v2::CancelLoginAccountParams,
@@ -1370,21 +1197,7 @@ client_request_definitions! {
         response: v2::CancelLoginAccountResponse,
     },
 
-    #[experimental("accountSession/list")]
-    AccountSessionsList => "accountSession/list" {
-        params: v2::AccountSessionsListParams,
-        serialization: global("account-auth"),
-        manual_payload_conversion: manual,
-        response: v2::AccountSessionsResponse,
-    },
 
-    #[experimental("accountSession/switch")]
-    AccountSessionsSwitch => "accountSession/switch" {
-        params: v2::AccountSessionsSwitchParams,
-        serialization: global("account-auth"),
-        manual_payload_conversion: manual,
-        response: v2::AccountSessionsSwitchResponse,
-    },
 
     LogoutAccount => "account/logout" {
         params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
@@ -1392,41 +1205,11 @@ client_request_definitions! {
         response: v2::LogoutAccountResponse,
     },
 
-    GetAccountSecuritySetup => "account/securitySetup/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: None,
-        response: v2::GetAccountSecuritySetupResponse,
-    },
 
-    GetAccountRateLimits => "account/rateLimits/read" {
-        params: #[ts(optional, as = "Option<GetAccountRateLimitsParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountRateLimitsParams,
-        serialization: None,
-        response: v2::GetAccountRateLimitsResponse,
-    },
 
-    ConsumeAccountRateLimitResetCredit => "account/rateLimitResetCredit/consume" {
-        params: v2::ConsumeAccountRateLimitResetCreditParams,
-        serialization: global("account-auth"),
-        response: v2::ConsumeAccountRateLimitResetCreditResponse,
-    },
 
-    GetAccountTokenUsage => "account/usage/read" {
-        params: #[ts(optional, as = "Option<GetAccountTokenUsageParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountTokenUsageParams,
-        serialization: None,
-        response: v2::GetAccountTokenUsageResponse,
-    },
 
-    GetWorkspaceMessages => "account/workspaceMessages/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: None,
-        response: v2::GetWorkspaceMessagesResponse,
-    },
 
-    SendAddCreditsNudgeEmail => "account/sendAddCreditsNudgeEmail" {
-        params: v2::SendAddCreditsNudgeEmailParams,
-        serialization: global("account-auth"),
-        response: v2::SendAddCreditsNudgeEmailResponse,
-    },
 
     FeedbackUpload => "feedback/upload" {
         params: v2::FeedbackUploadParams,
@@ -1896,10 +1679,6 @@ server_request_definitions! {
         response: v2::DynamicToolCallResponse,
     },
 
-    ChatgptAuthTokensRefresh => "account/chatgptAuthTokens/refresh" {
-        params: v2::ChatgptAuthTokensRefreshParams,
-        response: v2::ChatgptAuthTokensRefreshResponse,
-    },
 
     /// Generate a fresh upstream attestation result on demand.
     AttestationGenerate => "attestation/generate" {
@@ -2083,10 +1862,8 @@ server_notification_definitions! {
     #[experimental("mcpServer/event/stream/notification")]
     McpServerEventStream => "mcpServer/event/stream/notification" (v2::McpServerEventStreamNotification),
     AccountUpdated => "account/updated" (v2::AccountUpdatedNotification),
-    GatewayOAuthChanged => "account/gatewayOAuth/changed" (v2::GatewayOAuthChangedNotification),
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
-    RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
     ExternalAgentConfigImportProgress => "externalAgentConfig/import/progress" (v2::ExternalAgentConfigImportProgressNotification),
     ExternalAgentConfigImportCompleted => "externalAgentConfig/import/completed" (v2::ExternalAgentConfigImportCompletedNotification),
     FsChanged => "fs/changed" (v2::FsChangedNotification),
@@ -2148,7 +1925,6 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use codex_protocol::ThreadId;
-    use codex_protocol::account::PlanType;
     use codex_protocol::config_types::MultiAgentMode;
     use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
     use codex_protocol::parse_command::ParsedCommand;
@@ -2463,7 +2239,6 @@ mod tests {
             request_id: request_id(),
             params: v2::PluginInstallParams {
                 marketplace_path: Some(absolute_path("/tmp/marketplace")),
-                remote_marketplace_name: None,
                 install_attempt_id: None,
                 plugin_name: "plugin-a".to_string(),
             },
@@ -2509,7 +2284,6 @@ mod tests {
             request_id: request_id(),
             params: v2::PluginListParams {
                 cwds: None,
-                marketplace_kinds: None,
                 force_refetch: false,
             },
         };
@@ -2519,7 +2293,6 @@ mod tests {
             request_id: request_id(),
             params: v2::PluginReadParams {
                 marketplace_path: Some(absolute_path("/tmp/marketplace")),
-                remote_marketplace_name: None,
                 plugin_name: "plugin-a".to_string(),
             },
         };
@@ -2655,17 +2428,6 @@ mod tests {
             Some(ClientRequestSerializationScope::Global("config"))
         );
 
-        let add_credits_nudge = ClientRequest::SendAddCreditsNudgeEmail {
-            request_id: request_id(),
-            params: v2::SendAddCreditsNudgeEmailParams {
-                credit_type: v2::AddCreditsNudgeCreditType::Credits,
-            },
-        };
-        assert_eq!(
-            add_credits_nudge.serialization_scope(),
-            Some(ClientRequestSerializationScope::Global("account-auth"))
-        );
-
         let environment_add = ClientRequest::EnvironmentAdd {
             request_id: request_id(),
             params: v2::EnvironmentAddParams {
@@ -2771,53 +2533,6 @@ mod tests {
             },
         };
         assert_eq!(mcp_resource_read.serialization_scope(), None);
-
-        let remote_control_pairing_start = ClientRequest::RemoteControlPairingStart {
-            request_id: request_id(),
-            params: v2::RemoteControlPairingStartParams::default(),
-        };
-        assert_eq!(
-            remote_control_pairing_start.serialization_scope(),
-            Some(ClientRequestSerializationScope::Global(
-                "remote-control-pairing"
-            ))
-        );
-        let remote_control_pairing_status = ClientRequest::RemoteControlPairingStatus {
-            request_id: request_id(),
-            params: v2::RemoteControlPairingStatusParams {
-                pairing_code: Some("pairing-code".to_string()),
-                manual_pairing_code: None,
-            },
-        };
-        assert_eq!(
-            remote_control_pairing_status.serialization_scope(),
-            Some(ClientRequestSerializationScope::GlobalSharedRead(
-                "remote-control-pairing"
-            ))
-        );
-        let remote_control_clients_list = ClientRequest::RemoteControlClientsList {
-            request_id: request_id(),
-            params: v2::RemoteControlClientsListParams::default(),
-        };
-        assert_eq!(
-            remote_control_clients_list.serialization_scope(),
-            Some(ClientRequestSerializationScope::GlobalSharedRead(
-                "remote-control-clients"
-            ))
-        );
-        let remote_control_clients_revoke = ClientRequest::RemoteControlClientsRevoke {
-            request_id: request_id(),
-            params: v2::RemoteControlClientsRevokeParams {
-                environment_id: "environment-id".to_string(),
-                client_id: "client-id".to_string(),
-            },
-        };
-        assert_eq!(
-            remote_control_clients_revoke.serialization_scope(),
-            Some(ClientRequestSerializationScope::Global(
-                "remote-control-clients"
-            ))
-        );
     }
 
     #[test]
@@ -3046,29 +2761,6 @@ mod tests {
     }
 
     #[test]
-    fn serialize_chatgpt_auth_tokens_refresh_request() -> Result<()> {
-        let request = ServerRequest::ChatgptAuthTokensRefresh {
-            request_id: RequestId::Integer(8),
-            params: v2::ChatgptAuthTokensRefreshParams {
-                reason: v2::ChatgptAuthTokensRefreshReason::Unauthorized,
-                previous_account_id: Some("org-123".to_string()),
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/chatgptAuthTokens/refresh",
-                "id": 8,
-                "params": {
-                    "reason": "unauthorized",
-                    "previousAccountId": "org-123"
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
     fn serialize_attestation_generate_request() -> Result<()> {
         let params = v2::AttestationGenerateParams {};
         let request = ServerRequest::AttestationGenerate {
@@ -3202,59 +2894,6 @@ mod tests {
     }
 
     #[test]
-    fn serialize_get_account_rate_limits() -> Result<()> {
-        let request = ClientRequest::GetAccountRateLimits {
-            request_id: RequestId::Integer(1),
-            params: None,
-        };
-        assert_eq!(request.id(), &RequestId::Integer(1));
-        assert_eq!(
-            json!({
-                "method": "account/rateLimits/read",
-                "id": 1,
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_get_account_token_usage() -> Result<()> {
-        let request = ClientRequest::GetAccountTokenUsage {
-            request_id: RequestId::Integer(1),
-            params: None,
-        };
-        assert_eq!(request.id(), &RequestId::Integer(1));
-        assert_eq!(
-            json!({
-                "method": "account/usage/read",
-                "id": 1,
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_get_account_thread_usage() -> Result<()> {
-        let request = ClientRequest::GetAccountTokenUsage {
-            request_id: RequestId::Integer(1),
-            params: Some(v2::GetAccountTokenUsageParams {
-                thread_id: Some("thread-123".to_string()),
-            }),
-        };
-        assert_eq!(
-            json!({
-                "method": "account/usage/read",
-                "id": 1,
-                "params": { "threadId": "thread-123" },
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
     fn deserialize_legacy_get_account_token_usage_response() -> Result<()> {
         let response: v2::GetAccountTokenUsageResponse = serde_json::from_value(json!({
             "summary": {
@@ -3282,23 +2921,6 @@ mod tests {
             },
         );
         assert_eq!(serde_json::to_value(response)?["threadUsage"], json!(null));
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_get_workspace_messages() -> Result<()> {
-        let request = ClientRequest::GetWorkspaceMessages {
-            request_id: RequestId::Integer(1),
-            params: None,
-        };
-        assert_eq!(request.id(), &RequestId::Integer(1));
-        assert_eq!(
-            json!({
-                "method": "account/workspaceMessages/read",
-                "id": 1,
-            }),
-            serde_json::to_value(&request)?,
-        );
         Ok(())
     }
 
@@ -3468,150 +3090,6 @@ mod tests {
     }
 
     #[test]
-    fn serialize_account_login_amazon_bedrock() -> Result<()> {
-        for (params, expected_params) in [
-            (
-                v2::LoginAccountParams::AmazonBedrock {
-                    api_key: "secret".to_string(),
-                    region: "us-west-2".to_string(),
-                },
-                json!({
-                    "type": "amazonBedrock",
-                    "apiKey": "secret",
-                    "region": "us-west-2"
-                }),
-            ),
-            (
-                v2::LoginAccountParams::AmazonBedrockAccessKeys {
-                    access_key_id: "access-key-id".to_string(),
-                    secret_access_key: "secret-access-key".to_string(),
-                    session_token: Some("session-token".to_string()),
-                    region: "us-west-2".to_string(),
-                },
-                json!({
-                    "type": "amazonBedrockAccessKeys",
-                    "accessKeyId": "access-key-id",
-                    "secretAccessKey": "secret-access-key",
-                    "sessionToken": "session-token",
-                    "region": "us-west-2"
-                }),
-            ),
-        ] {
-            let request = ClientRequest::LoginAccount {
-                request_id: RequestId::Integer(2),
-                params,
-            };
-            assert_eq!(
-                json!({
-                    "method": "account/login/start",
-                    "id": 2,
-                    "params": expected_params,
-                }),
-                serde_json::to_value(&request)?,
-            );
-        }
-        assert_eq!(
-            json!({"type": "amazonBedrock"}),
-            serde_json::to_value(v2::LoginAccountResponse::AmazonBedrock {})?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_account_login_chatgpt() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(3),
-            params: v2::LoginAccountParams::Chatgpt {
-                app_brand: None,
-                codex_streamlined_login: false,
-                use_hosted_login_success_page: false,
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 3,
-                "params": {
-                    "type": "chatgpt",
-                    "appBrand": null
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_account_login_chatgpt_streamlined() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(3),
-            params: v2::LoginAccountParams::Chatgpt {
-                app_brand: None,
-                codex_streamlined_login: true,
-                use_hosted_login_success_page: false,
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 3,
-                "params": {
-                    "type": "chatgpt",
-                    "appBrand": null,
-                    "codexStreamlinedLogin": true
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_account_login_chatgpt_with_hosted_success_page() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(3),
-            params: v2::LoginAccountParams::Chatgpt {
-                app_brand: Some(v2::LoginAppBrand::Chatgpt),
-                codex_streamlined_login: true,
-                use_hosted_login_success_page: true,
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 3,
-                "params": {
-                    "type": "chatgpt",
-                    "appBrand": "chatgpt",
-                    "codexStreamlinedLogin": true,
-                    "useHostedLoginSuccessPage": true
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_account_login_chatgpt_device_code() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(4),
-            params: v2::LoginAccountParams::ChatgptDeviceCode,
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 4,
-                "params": {
-                    "type": "chatgptDeviceCode"
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
     fn serialize_account_logout() -> Result<()> {
         let request = ClientRequest::LogoutAccount {
             request_id: RequestId::Integer(5),
@@ -3621,32 +3099,6 @@ mod tests {
             json!({
                 "method": "account/logout",
                 "id": 5,
-            }),
-            serde_json::to_value(&request)?,
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialize_account_login_chatgpt_auth_tokens() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(6),
-            params: v2::LoginAccountParams::ChatgptAuthTokens {
-                access_token: "access-token".to_string(),
-                chatgpt_account_id: "org-123".to_string(),
-                chatgpt_plan_type: Some("business".to_string()),
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 6,
-                "params": {
-                    "type": "chatgptAuthTokens",
-                    "accessToken": "access-token",
-                    "chatgptAccountId": "org-123",
-                    "chatgptPlanType": "business"
-                }
             }),
             serde_json::to_value(&request)?,
         );
@@ -3698,71 +3150,6 @@ mod tests {
             serde_json::to_value(&api_key)?,
         );
 
-        let chatgpt = v2::Account::Chatgpt {
-            email: Some("user@example.com".to_string()),
-            plan_type: PlanType::Plus,
-            workspace_name: None,
-        };
-        assert_eq!(
-            json!({
-                "type": "chatgpt",
-                "email": "user@example.com",
-                "planType": "plus",
-                "workspaceName": null,
-            }),
-            serde_json::to_value(&chatgpt)?,
-        );
-
-        let chatgpt_without_email = v2::Account::Chatgpt {
-            email: None,
-            plan_type: PlanType::Pro,
-            workspace_name: None,
-        };
-        assert_eq!(
-            json!({
-                "type": "chatgpt",
-                "email": null,
-                "planType": "pro",
-                "workspaceName": null,
-            }),
-            serde_json::to_value(&chatgpt_without_email)?,
-        );
-
-        let codex_managed_bedrock = v2::Account::AmazonBedrock {
-            uses_codex_managed_credentials: true,
-        };
-        assert_eq!(
-            json!({
-                "type": "amazonBedrock",
-                "usesCodexManagedCredentials": true,
-            }),
-            serde_json::to_value(&codex_managed_bedrock)?,
-        );
-
-        let externally_managed_bedrock = v2::Account::AmazonBedrock {
-            uses_codex_managed_credentials: false,
-        };
-        assert_eq!(
-            json!({
-                "type": "amazonBedrock",
-                "usesCodexManagedCredentials": false,
-            }),
-            serde_json::to_value(&externally_managed_bedrock)?,
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn account_defaults_legacy_bedrock_managed_credentials_flag() -> Result<()> {
-        assert_eq!(
-            v2::Account::AmazonBedrock {
-                uses_codex_managed_credentials: false,
-            },
-            serde_json::from_value(json!({
-                "type": "amazonBedrock",
-            }))?,
-        );
         Ok(())
     }
 

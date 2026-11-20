@@ -67,7 +67,6 @@ mod tests {
             experimental_bearer_token: None,
             auth: None,
             gateway_oauth: None,
-            aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
             http_headers: None,
@@ -80,9 +79,6 @@ mod tests {
             supports_websockets: false,
             supports_standalone_web_search: false,
             capabilities: None,
-            project_id: None,
-            location: None,
-            credential_file: None,
             include_internal_metadata: false,
         };
 

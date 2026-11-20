@@ -80,14 +80,7 @@ Disconnecting either side closes its peer and resets the remote stream. The
 existing harness reconnect flow can then resume a retained destination session.
 The forwarder does not replay requests or persist execution state, so recovery
 is limited by the destination's session and process-output retention.
-It uses the standard Codex ChatGPT sign-in state; run `codex login` first when
-remote registration needs authentication. Containerized callers that receive an
-Agent Identity JWT in `CODEX_ACCESS_TOKEN` can opt into that auth path with
-`--use-agent-identity-auth`; Codex then registers an Agent task and sends the
-derived AgentAssertion headers on the registry request.
-
-Alternatively, API users can instead use `CODEX_API_KEY`;
-Codex sends it as a bearer token on the registration request. For example:
+Set `CODEX_API_KEY` to send a bearer token on the registration request. For example:
 
 ```sh
 CODEX_API_KEY="$OPENAI_API_KEY" \
@@ -96,45 +89,8 @@ codex exec-server \
   --environment-id "$ENVIRONMENT_ID"
 ```
 
-AWS-hosted registries can use SigV4 for registry requests and the executor
-WebSocket handshake. Select the transport and authentication with executor
-arguments rather than `config.toml` settings:
-
-```sh
-codex exec-server \
-  --remote https://example.com \
-  --environment-id "$ENVIRONMENT_ID" \
-  --remote-transport direct \
-  --aws-sigv4 \
-  --aws-profile development \
-  --aws-region us-west-2 \
-  --aws-service bedrock-mantle
-```
-
-Noise remains the default transport. Direct requires `--aws-sigv4`, which
-conflicts with `--use-agent-identity-auth` and is not supported for Noise.
-The AWS options require `--aws-sigv4`; Direct forwarding remains unsupported.
-The AWS SDK default credential and region chains are used when `--aws-profile`
-or `--aws-region` is omitted. The signing service defaults to `execute-api`.
-Direct mode registers `direct_jsonrpc_v1` through the AWS-owned
-`/cloud/environment/{environment_id}/direct/register` endpoint and carries plain
-exec-server JSON-RPC over the authenticated WebSocket. The existing Codex Noise
-registration endpoint remains unchanged. Production deployments must use TLS
-(`https`/`wss`).
-
-Direct registration URLs must remain reusable across disconnects and temporary
-connection failures. The executor only refreshes its registration when the
-WebSocket handshake returns `409 Conflict`. Handshake `408`, `429`, and `5xx`
-responses retry with backoff using the current registration; other `4xx` responses
-stop the executor. A backend that issues single-use connection URLs must adapt to
-this contract. If the initial registration or a registration refresh fails, the
-executor returns the error without retrying registration, matching Noise.
-
-Wire framing:
-
-- local websocket: one JSON-RPC message per websocket message
-- direct remote websocket: one JSON-RPC message per websocket message
-- Noise remote websocket: binary protobuf relay frames carrying encrypted payloads
+Local WebSocket connections carry one JSON-RPC message per WebSocket message.
+Remote connections carry encrypted payloads in binary Noise relay frames.
 
 ## Remote Relay Message Format
 

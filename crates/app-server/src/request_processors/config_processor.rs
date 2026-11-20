@@ -57,7 +57,6 @@ use codex_features::Feature;
 use codex_features::canonical_feature_for_key;
 use codex_features::feature_for_key;
 use codex_model_provider::create_model_provider;
-use codex_plugin::PluginId;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::WebSearchMode;
 use serde_json::json;
@@ -78,7 +77,6 @@ const SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT: &[&str] = &[
     "mcp_lazy_stdio_startup",
     "memories",
     "mentions_v2",
-    "remote_control",
     "remote_plugin",
     "tool_suggest",
     "windows_sandbox_service",
@@ -281,35 +279,20 @@ impl ConfigRequestProcessor {
         &self,
         params: ConfigValueWriteParams,
     ) -> Result<ConfigWriteResponse, JSONRPCErrorError> {
-        let pending_changes = codex_core_plugins::toggles::collect_plugin_enabled_candidates(
-            [(&params.key_path, &params.value)].into_iter(),
-        );
-        let response = self
-            .config_manager
+        self.config_manager
             .write_value(params)
             .await
-            .map_err(map_error)?;
-        self.emit_plugin_toggle_events(pending_changes).await;
-        Ok(response)
+            .map_err(map_error)
     }
 
     async fn batch_write_inner(
         &self,
         params: ConfigBatchWriteParams,
     ) -> Result<ConfigWriteResponse, JSONRPCErrorError> {
-        let pending_changes = codex_core_plugins::toggles::collect_plugin_enabled_candidates(
-            params
-                .edits
-                .iter()
-                .map(|edit| (&edit.key_path, &edit.value)),
-        );
-        let response = self
-            .config_manager
+        self.config_manager
             .batch_write(params)
             .await
-            .map_err(map_error)?;
-        self.emit_plugin_toggle_events(pending_changes).await;
-        Ok(response)
+            .map_err(map_error)
     }
 
     async fn set_experimental_feature_enablement(
@@ -364,24 +347,6 @@ impl ConfigRequestProcessor {
         }
 
         Ok(ExperimentalFeatureEnablementSetResponse { enablement })
-    }
-
-    async fn emit_plugin_toggle_events(
-        &self,
-        pending_changes: std::collections::BTreeMap<String, bool>,
-    ) {
-        let plugins_manager = self.thread_manager.plugins_manager();
-        for (plugin_id, enabled) in pending_changes {
-            let Ok(plugin_id) = PluginId::parse(&plugin_id) else {
-                continue;
-            };
-            let metadata = plugins_manager
-                .telemetry_metadata_for_installed_plugin(&plugin_id)
-                .await;
-            if enabled {
-            } else {
-            }
-        }
     }
 }
 
@@ -578,7 +543,7 @@ pub(crate) fn map_requirements_to_api(
         allow_managed_hooks_only: requirements.allow_managed_hooks_only,
         allow_browser_and_computer_use: requirements.allow_browser_and_computer_use,
         allow_appshots: requirements.allow_appshots,
-        allow_remote_control: requirements.allow_remote_control,
+
         computer_use: requirements
             .computer_use
             .map(map_computer_use_requirements_to_api),
@@ -950,6 +915,13 @@ fn config_write_error(code: ConfigWriteErrorCode, message: impl Into<String>) ->
 
 #[cfg(test)]
 mod tests {
+    fn map_test_requirements(
+        requirements: ConfigRequirementsToml,
+    ) -> codex_app_server_protocol::ConfigRequirements {
+        map_requirements_to_api(Some(requirements), vec![ForcedLoginMethod::Api])
+            .expect("requirements")
+    }
+
     use super::map_requirements_to_api;
     use super::reload_user_config;
     use crate::config_manager::ConfigManager;
@@ -1062,16 +1034,6 @@ client_id = "mcp-client"
         Ok(())
     }
 
-    fn map_test_requirements(
-        requirements: ConfigRequirementsToml,
-    ) -> codex_app_server_protocol::ConfigRequirements {
-        map_requirements_to_api(
-            Some(requirements),
-            vec![ForcedLoginMethod::Api, ForcedLoginMethod::Chatgpt],
-        )
-        .expect("requirements")
-    }
-
     #[test]
     fn requirements_api_includes_allow_managed_hooks_only() {
         let mapped = map_test_requirements(ConfigRequirementsToml {
@@ -1119,16 +1081,6 @@ client_id = "mcp-client"
     }
 
     #[test]
-    fn requirements_api_includes_allow_remote_control() {
-        let mapped = map_test_requirements(ConfigRequirementsToml {
-            allow_remote_control: Some(false),
-            ..ConfigRequirementsToml::default()
-        });
-
-        assert_eq!(mapped.allow_remote_control, Some(false));
-    }
-
-    #[test]
     fn requirements_api_includes_model_auto_review_and_new_thread_defaults() {
         let mapped = map_test_requirements(ConfigRequirementsToml {
             auto_review: Some(AutoReviewRequirementsToml {
@@ -1160,6 +1112,66 @@ client_id = "mcp-client"
             Some(ReasoningEffort::Medium)
         );
         assert_eq!(defaults.service_tier.as_deref(), Some("fast"));
+    }
+
+    #[test]
+    fn requirements_api_includes_allowed_windows_sandbox_implementations() {
+        let mapped = map_test_requirements(ConfigRequirementsToml {
+            windows: Some(WindowsRequirementsToml {
+                allowed_sandbox_implementations: Some(vec![
+                    codex_config::WindowsSandboxImplementationToml::Elevated,
+                    codex_config::WindowsSandboxImplementationToml::Unelevated,
+                ]),
+                allow_mxc: None,
+                require_mxc: None,
+            }),
+            ..ConfigRequirementsToml::default()
+        });
+
+        assert_eq!(
+            mapped.allowed_windows_sandbox_implementations,
+            Some(vec![
+                WindowsSandboxImplementation::Elevated,
+                WindowsSandboxImplementation::Unelevated,
+            ])
+        );
+    }
+
+    #[test]
+    fn requirements_api_includes_exact_managed_values() {
+        let sqlite_home = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-state"))
+            .expect("managed sqlite home should be absolute");
+        let log_dir = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-logs"))
+            .expect("managed log dir should be absolute");
+        let model_catalog_json =
+            AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-models.json"))
+                .expect("managed model catalog path should be absolute");
+        let mapped = map_test_requirements(ConfigRequirementsToml {
+            sqlite_home: Some(sqlite_home.clone()),
+            log_dir: Some(log_dir.clone()),
+            model_catalog_json: Some(model_catalog_json.clone()),
+            check_for_update_on_startup: Some(false),
+            allow_login_shell: Some(false),
+            feedback: Some(FeedbackConfigToml {
+                enabled: Some(false),
+            }),
+            ..ConfigRequirementsToml::default()
+        });
+
+        assert_eq!(mapped.sqlite_home, Some(PathUri::from(sqlite_home)));
+        assert_eq!(mapped.log_dir, Some(PathUri::from(log_dir)));
+        assert_eq!(
+            mapped.model_catalog_json,
+            Some(PathUri::from(model_catalog_json))
+        );
+        assert_eq!(mapped.check_for_update_on_startup, Some(false));
+        assert_eq!(mapped.allow_login_shell, Some(false));
+        assert_eq!(
+            mapped.feedback,
+            Some(FeedbackRequirements {
+                enabled: Some(false),
+            })
+        );
     }
 
     #[test]
@@ -1288,66 +1300,6 @@ client_id = "mcp-client"
                         access: AllowDenyRequirement::Deny,
                     }]),
                 }),
-            })
-        );
-    }
-
-    #[test]
-    fn requirements_api_includes_allowed_windows_sandbox_implementations() {
-        let mapped = map_test_requirements(ConfigRequirementsToml {
-            windows: Some(WindowsRequirementsToml {
-                allowed_sandbox_implementations: Some(vec![
-                    codex_config::WindowsSandboxImplementationToml::Elevated,
-                    codex_config::WindowsSandboxImplementationToml::Unelevated,
-                ]),
-                allow_mxc: None,
-                require_mxc: None,
-            }),
-            ..ConfigRequirementsToml::default()
-        });
-
-        assert_eq!(
-            mapped.allowed_windows_sandbox_implementations,
-            Some(vec![
-                WindowsSandboxImplementation::Elevated,
-                WindowsSandboxImplementation::Unelevated,
-            ])
-        );
-    }
-
-    #[test]
-    fn requirements_api_includes_exact_managed_values() {
-        let sqlite_home = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-state"))
-            .expect("managed sqlite home should be absolute");
-        let log_dir = AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-logs"))
-            .expect("managed log dir should be absolute");
-        let model_catalog_json =
-            AbsolutePathBuf::try_from(std::env::temp_dir().join("managed-models.json"))
-                .expect("managed model catalog path should be absolute");
-        let mapped = map_test_requirements(ConfigRequirementsToml {
-            sqlite_home: Some(sqlite_home.clone()),
-            log_dir: Some(log_dir.clone()),
-            model_catalog_json: Some(model_catalog_json.clone()),
-            check_for_update_on_startup: Some(false),
-            allow_login_shell: Some(false),
-            feedback: Some(FeedbackConfigToml {
-                enabled: Some(false),
-            }),
-            ..ConfigRequirementsToml::default()
-        });
-
-        assert_eq!(mapped.sqlite_home, Some(PathUri::from(sqlite_home)));
-        assert_eq!(mapped.log_dir, Some(PathUri::from(log_dir)));
-        assert_eq!(
-            mapped.model_catalog_json,
-            Some(PathUri::from(model_catalog_json))
-        );
-        assert_eq!(mapped.check_for_update_on_startup, Some(false));
-        assert_eq!(mapped.allow_login_shell, Some(false));
-        assert_eq!(
-            mapped.feedback,
-            Some(FeedbackRequirements {
-                enabled: Some(false),
             })
         );
     }

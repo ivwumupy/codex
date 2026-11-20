@@ -3,13 +3,10 @@ use std::time::Duration;
 
 use anyhow::Context;
 use anyhow::Result;
-use app_test_support::ChatGptAuthFixture;
+use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::to_response;
-use app_test_support::write_chatgpt_auth;
-use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
-use codex_app_server_protocol::AppInfo;
 use codex_app_server_protocol::CapabilityRootLocation;
 use codex_app_server_protocol::EnvironmentAddResponse;
 use codex_app_server_protocol::EnvironmentInfoResponse;
@@ -23,7 +20,6 @@ use codex_app_server_protocol::TurnEnvironmentParams;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
-use codex_config::types::AuthCredentialsStoreMode;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_protocol::protocol::PLUGINS_INSTRUCTIONS_OPEN_TAG;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -43,9 +39,6 @@ use tokio::process::Child;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-use super::app_list::connector_tool;
-use super::app_list::start_apps_server_with_delays;
-
 const READ_TIMEOUT: Duration = Duration::from_secs(20);
 const EXECUTOR_ID: &str = "executor-1";
 const EXECUTOR_ENV_NAME: &str = "MCP_EXECUTOR_MARKER";
@@ -61,7 +54,6 @@ const RESTORED_SELECTED_SKILLS_MESSAGE: &str =
     "The previously listed selected-environment skills are available again.";
 const MCP_SERVER_NAME: &str = "executor_probe";
 const MCP_CALL_ID: &str = "selected-executor-mcp-call";
-const CONNECTOR_ID: &str = "calendar";
 
 #[derive(Clone, Copy)]
 enum PluginMention {
@@ -83,7 +75,7 @@ async fn selected_plugin_mcp_startup_respects_explicit_mentions(
 ) -> Result<()> {
     let explicitly_mentioned = !matches!(mention, PluginMention::Unmentioned);
     let responses_server = responses::start_mock_server().await;
-    let fixture = selected_capability_fixture(&responses_server.uri(), &responses_server.uri())?;
+    let fixture = selected_capability_fixture(&responses_server.uri())?;
 
     let config_path = fixture.codex_home.path().join("config.toml");
     let config = std::fs::read_to_string(&config_path)?.replace(
@@ -165,11 +157,9 @@ async fn selected_plugin_mcp_startup_respects_explicit_mentions(
     } else {
         Duration::from_secs(5)
     };
-    timeout(
-        turn_timeout,
-        app_server.read_stream_until_notification_message("turn/completed"),
-    )
-    .await??;
+    let completed: codex_app_server_protocol::TurnCompletedNotification =
+        timeout(turn_timeout, app_server.read_notification("turn/completed")).await??;
+    assert_eq!(completed.turn.id, turn.id);
     let request = response_mock.single_request();
     assert_selected_skill_catalog_available(&request);
     assert_eq!(
@@ -190,30 +180,7 @@ async fn managed_plugins_requirement_disables_selected_executor_plugin_capabilit
     executor_capability_discovery: bool,
 ) -> Result<()> {
     let responses_server = responses::start_mock_server().await;
-    let (apps_url, apps_server_handle) = start_apps_server_with_delays(
-        vec![AppInfo {
-            id: CONNECTOR_ID.to_string(),
-            name: "Calendar".to_string(),
-            description: None,
-            logo_url: None,
-            logo_url_dark: None,
-            icon_assets: None,
-            icon_dark_assets: None,
-            distribution_channel: None,
-            branding: None,
-            app_metadata: None,
-            labels: None,
-            install_url: None,
-            is_accessible: false,
-            is_enabled: true,
-            plugin_display_names: Vec::new(),
-        }],
-        vec![connector_tool(CONNECTOR_ID, "Calendar")?],
-        Duration::ZERO,
-        Duration::ZERO,
-    )
-    .await?;
-    let fixture = selected_capability_fixture(&responses_server.uri(), &apps_url)?;
+    let fixture = selected_capability_fixture(&responses_server.uri())?;
     let config_path = fixture.codex_home.path().join("config.toml");
     let config = std::fs::read_to_string(&config_path)?.replace(
         "executor_capability_discovery = true",
@@ -266,38 +233,13 @@ async fn managed_plugins_requirement_disables_selected_executor_plugin_capabilit
     assert_selected_capabilities_absent(&response_mock.single_request());
 
     exec_server.kill().await?;
-    apps_server_handle.abort();
-    let _ = apps_server_handle.await;
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn selected_capability_stack_tracks_environment_selection_and_resume() -> Result<()> {
     let responses_server = responses::start_mock_server().await;
-    let (apps_url, apps_server_handle) = start_apps_server_with_delays(
-        vec![AppInfo {
-            id: CONNECTOR_ID.to_string(),
-            name: "Calendar".to_string(),
-            description: None,
-            logo_url: None,
-            logo_url_dark: None,
-            icon_assets: None,
-            icon_dark_assets: None,
-            distribution_channel: None,
-            branding: None,
-            app_metadata: None,
-            labels: None,
-            install_url: None,
-            is_accessible: false,
-            is_enabled: true,
-            plugin_display_names: Vec::new(),
-        }],
-        vec![connector_tool(CONNECTOR_ID, "Calendar")?],
-        Duration::ZERO,
-        Duration::ZERO,
-    )
-    .await?;
-    let fixture = selected_capability_fixture(&responses_server.uri(), &apps_url)?;
+    let fixture = selected_capability_fixture(&responses_server.uri())?;
 
     let response_mock = responses::mount_sse_sequence(
         &responses_server,
@@ -486,8 +428,6 @@ async fn selected_capability_stack_tracks_environment_selection_and_resume() -> 
     assert!(output.contains(EXECUTOR_ENV_VALUE));
 
     exec_server.kill().await?;
-    apps_server_handle.abort();
-    let _ = apps_server_handle.await;
     Ok(())
 }
 
@@ -514,38 +454,16 @@ impl SelectedCapabilityFixture {
     }
 }
 
-fn selected_capability_fixture(
-    responses_server_uri: &str,
-    apps_url: &str,
-) -> Result<SelectedCapabilityFixture> {
+fn selected_capability_fixture(responses_server_uri: &str) -> Result<SelectedCapabilityFixture> {
     let codex_home = TempDir::new()?;
-    write_mock_responses_config_toml_with_chatgpt_base_url(
-        codex_home.path(),
-        responses_server_uri,
-        apps_url,
-    )?;
-    let config_path = codex_home.path().join("config.toml");
-    let config = std::fs::read_to_string(&config_path)?.replacen(
-        "model_provider = \"mock_provider\"",
-        "mcp_oauth_credentials_store = \"file\"\nmodel_provider = \"mock_provider\"",
-        1,
-    );
     // These scenarios attach executors between turns, so each turn waits for attachment resolution.
-    std::fs::write(
-        config_path,
-        format!(
-            "{config}\n[features]\napps = true\nexecutor_capability_discovery = true\n\n[skills]\ninclude_instructions = true\n"
-        ),
-    )?;
-    write_chatgpt_auth(
-        codex_home.path(),
-        ChatGptAuthFixture::new("chatgpt-token")
-            .account_id("account-123")
-            .email("selected-capability-stack@example.com")
-            .plan_type("pro")
-            .chatgpt_account_id("account-123"),
-        AuthCredentialsStoreMode::File,
-    )?;
+    MockResponsesConfig::new(responses_server_uri)
+        .with_sandbox_mode("danger-full-access")
+        .with_root_config("mcp_oauth_credentials_store = \"file\"")
+        .with_extra_config(
+            "[features]\nexecutor_capability_discovery = true\n\n[skills]\ninclude_instructions = true",
+        )
+        .write(codex_home.path())?;
 
     // Reserve the URL before app-server starts. The configured environment initially fails to
     // connect, then environment/add points the same stable ID at the same URL once it is live.
@@ -576,17 +494,13 @@ fn selected_capability_fixture(
     std::fs::create_dir_all(&skill_dir)?;
     std::fs::write(
         manifest_dir.join("plugin.json"),
-        r#"{"name":"executor-demo","apps":"./.app.json","interface":{"displayName":"Executor Demo"}}"#,
+        r#"{"name":"executor-demo","interface":{"displayName":"Executor Demo"}}"#,
     )?;
     std::fs::write(
         skill_dir.join("SKILL.md"),
         format!(
             "---\nname: deploy\ndescription: {SKILL_DESCRIPTION}\n---\n\n{SKILL_BODY_MARKER}\n"
         ),
-    )?;
-    std::fs::write(
-        plugin.path().join(".app.json"),
-        format!(r#"{{"apps":{{"calendar":{{"id":"{CONNECTOR_ID}"}}}}}}"#),
     )?;
     std::fs::write(
         plugin.path().join(".mcp.json"),
@@ -638,14 +552,6 @@ fn assert_selected_plugin_tools_absent(request: &ResponsesRequest) {
         request
             .tool_by_name(&format!("mcp__{MCP_SERVER_NAME}"), "echo")
             .is_none()
-    );
-    let connector = request
-        .tool_by_name("mcp__codex_apps__calendar", "connector_calendar")
-        .expect("host connector should remain model-visible");
-    assert!(
-        connector["description"]
-            .as_str()
-            .is_some_and(|description| !description.contains(PLUGIN_DISPLAY_NAME))
     );
 }
 
@@ -704,14 +610,6 @@ fn assert_selected_plugin_tools(request: &ResponsesRequest) {
         request
             .tool_by_name(&format!("mcp__{MCP_SERVER_NAME}"), "echo")
             .is_some()
-    );
-    let connector = request
-        .tool_by_name("mcp__codex_apps__calendar", "connector_calendar")
-        .expect("selected connector should be model-visible");
-    assert!(
-        connector["description"]
-            .as_str()
-            .is_some_and(|description| description.contains(PLUGIN_DISPLAY_NAME))
     );
 }
 

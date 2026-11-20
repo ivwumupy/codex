@@ -846,7 +846,6 @@ mod tests {
                 permissions_preapproved: false,
             },
             justification: None,
-            prefix_rule: None,
             tty: false,
             yield_time_ms: 10_000,
             max_output_tokens: None,

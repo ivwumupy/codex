@@ -569,8 +569,6 @@ fn secrets_keyring_auth_storage_save_persists_and_removes_fallback_file() -> any
         last_refresh: Some(Utc::now()),
         agent_identity: None,
         personal_access_token: None,
-        bedrock_api_key: None,
-        bedrock_access_keys: None,
     };
 
     storage.save(&auth)?;

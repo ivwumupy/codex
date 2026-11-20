@@ -6,9 +6,7 @@ use app_test_support::to_response;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::DEFAULT_CLIENT_NAME;
 use app_test_support::write_chatgpt_auth;
-use axum::routing::get;
 use codex_app_server_protocol::Account;
-use codex_app_server_protocol::AccountLoginCompletedNotification;
 use codex_app_server_protocol::AccountUpdatedNotification;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ClientInfo;
@@ -18,13 +16,10 @@ use codex_app_server_protocol::GetAuthStatusParams;
 use codex_app_server_protocol::GetAuthStatusResponse;
 use codex_app_server_protocol::InitializeCapabilities;
 use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::TurnStatus;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_http_client::HttpClientBuilder;
 use codex_login::AuthDotJson;
@@ -32,23 +27,16 @@ use codex_login::AuthKeyringBackendKind;
 use codex_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
 use codex_login::load_auth_dot_json;
 use codex_login::login_with_api_key;
-use codex_protocol::auth::AuthMode as DomainAuthMode;
-use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
 use tempfile::TempDir;
 use test_case::test_case;
-use tokio::net::TcpListener;
-use tokio::sync::Notify;
 use tokio::time::timeout;
 use url::Url;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
-use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
@@ -448,10 +436,8 @@ async fn startup_enforces_requirements_at_the_correct_load_stage(
                     mcp.read_stream_until_error_message(RequestId::Integer(request_id)),
                 )
                 .await??;
-                assert_eq!(
-                    error.error.message,
-                    "ChatGPT account features are unsupported."
-                );
+                assert_eq!(error.error.code, -32600);
+                assert!(error.error.message.contains(method), "{error:?}");
             }
             assert_eq!(read_account(&mut mcp).await?.account, None);
         }
@@ -588,7 +574,7 @@ async fn cloud_login_methods_are_rejected_without_changing_the_account() -> Resu
         )
         .await??;
         assert_eq!(error.error.code, -32600);
-        assert!(error.error.message.contains("unsupported"));
+        assert!(error.error.message.contains("unknown variant"), "{error:?}");
     }
     assert_eq!(read_account(&mut mcp).await?.account, None);
     assert_eq!(load_file_auth(codex_home.path())?, None);

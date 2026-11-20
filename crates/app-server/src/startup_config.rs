@@ -32,7 +32,7 @@ pub struct StartupConfigArgs {
     pub startup_sign_out: bool,
 
     /// Validate configuration and print requirements as JSON without starting the app server.
-    #[arg(long, conflicts_with_all = ["listen", "stdio", "remote_control", "managed_daemon"])]
+    #[arg(long, conflicts_with_all = ["listen", "stdio", "managed_daemon"])]
     pub print_startup_config: bool,
 
     /// ClientInfo JSON used for configuration/auth request identity.

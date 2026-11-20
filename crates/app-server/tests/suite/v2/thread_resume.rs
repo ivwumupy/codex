@@ -66,7 +66,6 @@ use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSettingsUpdateParams;
 use codex_app_server_protocol::ThreadSettingsUpdateResponse;
-use codex_app_server_protocol::ThreadSource;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::ThreadStatus;
@@ -2627,27 +2626,6 @@ async fn goal_first_live_thread_appears_in_state_db_thread_list() -> Result<()> 
         vec![&thread.id]
     );
 
-    Ok(())
-}
-
-fn set_session_meta_on_fake_rollout(
-    codex_home: &std::path::Path,
-    filename_ts: &str,
-    thread_id: &str,
-    thread_source: &str,
-    originator: &str,
-) -> Result<()> {
-    let path = rollout_path(codex_home, filename_ts, thread_id);
-    let contents = std::fs::read_to_string(&path)?;
-    let mut lines = contents.lines();
-    let session_meta = lines
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("fake rollout missing session meta"))?;
-    let mut session_meta: serde_json::Value = serde_json::from_str(session_meta)?;
-    session_meta["payload"]["thread_source"] = serde_json::json!(thread_source);
-    session_meta["payload"]["originator"] = serde_json::json!(originator);
-    let remaining = lines.collect::<Vec<_>>().join("\n");
-    std::fs::write(&path, format!("{session_meta}\n{remaining}\n"))?;
     Ok(())
 }
 

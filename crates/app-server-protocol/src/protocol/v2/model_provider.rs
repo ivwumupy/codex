@@ -1,4 +1,4 @@
-//! Safe provider discovery and field patches for custom, AWS, and GCP configuration.
+//! Safe provider discovery and field patches for API provider configuration.
 
 use crate::JsonSchema;
 use crate::TS;
@@ -54,20 +54,6 @@ pub enum ProviderSettings {
     CustomGateway {
         auth: GatewayAuth,
     },
-    Bedrock {
-        profile: Option<String>,
-        region: Option<String>,
-    },
-    Gcp {
-        #[serde(rename = "projectId")]
-        #[ts(rename = "projectId")]
-        project_id: Option<String>,
-        location: Option<String>,
-        /// Path on the app-server host, without credential-file contents.
-        #[serde(rename = "credentialFile")]
-        #[ts(rename = "credentialFile")]
-        credential_file: Option<String>,
-    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -94,23 +80,6 @@ pub enum GatewayAuth {
 #[ts(tag = "type", rename_all = "camelCase", export_to = "v2/")]
 pub enum ProviderSettingsPatch {
     CustomGateway(CustomGatewaySettingsParams),
-    Bedrock(BedrockSettingsParams),
-    Gcp(GcpSettingsParams),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "kebab-case")]
-#[ts(rename_all = "kebab-case", export_to = "v2/")]
-pub enum BedrockProviderId {
-    AmazonBedrock,
-    AmazonBedrockRuntime,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase", export_to = "v2/")]
-pub enum GcpProviderId {
-    Gcp,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
@@ -149,72 +118,6 @@ pub struct CustomGatewaySettingsParams {
     #[ts(type = "string | null")]
     #[ts(optional = nullable)]
     pub env_key: Option<Option<String>>,
-}
-
-/// AWS configuration fields for built-in Bedrock providers.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(export_to = "v2/")]
-pub struct BedrockSettingsParams {
-    pub provider_id: BedrockProviderId,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[schemars(with = "Option<String>", skip_serializing_if = "Option::is_none")]
-    #[ts(type = "string | null")]
-    #[ts(optional = nullable)]
-    pub profile: Option<Option<String>>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[schemars(with = "Option<String>", skip_serializing_if = "Option::is_none")]
-    #[ts(type = "string | null")]
-    #[ts(optional = nullable)]
-    pub region: Option<Option<String>>,
-}
-
-/// GCP configuration fields. Credential-file paths refer to the app-server host.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(export_to = "v2/")]
-pub struct GcpSettingsParams {
-    pub provider_id: GcpProviderId,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[schemars(with = "Option<String>", skip_serializing_if = "Option::is_none")]
-    #[ts(type = "string | null")]
-    #[ts(optional = nullable)]
-    pub project_id: Option<Option<String>>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[schemars(with = "Option<String>", skip_serializing_if = "Option::is_none")]
-    #[ts(type = "string | null")]
-    #[ts(optional = nullable)]
-    pub location: Option<Option<String>>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[schemars(with = "Option<String>", skip_serializing_if = "Option::is_none")]
-    #[ts(type = "string | null")]
-    #[ts(optional = nullable)]
-    pub credential_file: Option<Option<String>>,
 }
 
 // A missing name preserves it, but an explicitly supplied name must be a string.

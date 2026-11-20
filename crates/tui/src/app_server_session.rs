@@ -65,14 +65,12 @@ use codex_app_server_protocol::ConfigBatchWriteParams;
 use codex_app_server_protocol::ConfigRequirementsReadResponse;
 use codex_app_server_protocol::ConfigWriteResponse;
 use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::MemoryResetResponse;
 use codex_app_server_protocol::Model as ApiModel;
 use codex_app_server_protocol::NewThreadModelDefaults;
-use codex_app_server_protocol::RateLimitSnapshot;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ReviewDelivery;
 use codex_app_server_protocol::ReviewStartParams;
@@ -2341,20 +2339,6 @@ pub(crate) async fn start_thread_with_request_handle(
     Ok(started)
 }
 
-pub(crate) fn workspace_display(
-    name: Option<String>,
-    routing: Option<codex_app_server_protocol::WorkspaceRouting>,
-) -> Option<String> {
-    let name = name
-        .map(|name| name.trim().to_owned())
-        .filter(|name| !name.is_empty() && !name.chars().any(char::is_control));
-    let id = routing.map(|routing| routing.chatgpt_account_id);
-    match (name, id) {
-        (Some(name), Some(id)) => Some(format!("{name} ({id})")),
-        (name, id) => name.or(id),
-    }
-}
-
 pub(crate) fn status_account_display_from_auth_mode(
     auth_mode: Option<AuthMode>,
     plan_type: Option<codex_protocol::account::PlanType>,
@@ -2369,9 +2353,7 @@ pub(crate) fn status_account_display_from_auth_mode(
             plan: plan_type.map(plan_type_display_name),
             workspace: None,
         }),
-        Some(AuthMode::Headers)
-        | Some(AuthMode::BedrockApiKey)
-        | Some(AuthMode::BedrockAccessKeys) => None,
+        Some(AuthMode::Headers) => None,
         None => None,
     }
 }
@@ -3138,26 +3120,6 @@ async fn thread_session_state_from_thread_response(
     })
 }
 
-pub(crate) fn app_server_rate_limit_snapshots(
-    response: GetAccountRateLimitsResponse,
-) -> Vec<RateLimitSnapshot> {
-    let primary_limit_id = response.rate_limits.limit_id.clone();
-    let mut snapshots = vec![response.rate_limits];
-    if let Some(by_limit_id) = response.rate_limits_by_limit_id {
-        snapshots.extend(by_limit_id.into_iter().filter_map(|(limit_id, snapshot)| {
-            if primary_limit_id.as_deref().is_some_and(|primary_limit_id| {
-                primary_limit_id == limit_id
-                    || Some(primary_limit_id) == snapshot.limit_id.as_deref()
-            }) {
-                None
-            } else {
-                Some(snapshot)
-            }
-        }));
-    }
-    snapshots
-}
-
 #[cfg(test)]
 #[path = "app_server_session/reasoning_defaults_tests.rs"]
 mod reasoning_defaults_tests;
@@ -3276,11 +3238,7 @@ mod tests {
         let account = GetAccountResponse {
             user_id: None,
             workspace_routing: None,
-            account: Some(Account::Chatgpt {
-                email: Some("teammate@openai.com".to_string()),
-                plan_type: codex_protocol::account::PlanType::Plus,
-                workspace_name: None,
-            }),
+            account: Some(Account::ApiKey {}),
             requires_openai_auth: true,
         };
 
@@ -3296,11 +3254,11 @@ mod tests {
                 bootstrap.has_chatgpt_account,
             ),
             (
-                Some("teammate@openai.com"),
-                Some(TelemetryAuthMode::Chatgpt),
-                Some(codex_protocol::account::PlanType::Plus),
-                FeedbackAudience::OpenAiEmployee,
-                true,
+                None,
+                Some(TelemetryAuthMode::ApiKey),
+                None,
+                FeedbackAudience::External,
+                false,
             )
         );
 
@@ -3394,11 +3352,7 @@ mod tests {
         );
         let account = GetAccountResponse {
             user_id: None,
-            account: Some(Account::Chatgpt {
-                email: Some("teammate@openai.com".to_string()),
-                plan_type: codex_protocol::account::PlanType::Plus,
-                workspace_name: None,
-            }),
+            account: Some(Account::ApiKey {}),
             requires_openai_auth: true,
             workspace_routing: None,
         };
@@ -3450,25 +3404,6 @@ mod tests {
 
         app_server.shutdown().await?;
         Ok(())
-    }
-
-    fn rate_limit_snapshot(limit_id: &str) -> RateLimitSnapshot {
-        RateLimitSnapshot {
-            limit_id: Some(limit_id.to_string()),
-            limit_name: None,
-            normal_model_slug: None,
-            primary: Some(codex_app_server_protocol::RateLimitWindow {
-                used_percent: 0,
-                window_duration_mins: Some(10_080),
-                resets_at: None,
-            }),
-            secondary: None,
-            credits: None,
-            individual_limit: None,
-            spend_control_reached: None,
-            plan_type: None,
-            rate_limit_reached_type: None,
-        }
     }
 
     fn api_model_with_upgrade_retirement_at(retirement_at: Option<i64>) -> ApiModel {
@@ -3535,31 +3470,6 @@ mod tests {
                 expected_upgrade(None),
                 expected_upgrade(None),
             ]
-        );
-    }
-
-    #[test]
-    fn app_server_rate_limit_snapshots_deduplicates_top_level_limit_from_map() {
-        let response = GetAccountRateLimitsResponse {
-            ordinary_usage_allowed: None,
-            account_id: None,
-            rate_limit_upsell: None,
-            rate_limits: rate_limit_snapshot("codex"),
-            rate_limits_by_limit_id: Some(HashMap::from([
-                ("codex".to_string(), rate_limit_snapshot("codex")),
-                ("other".to_string(), rate_limit_snapshot("other")),
-            ])),
-            rate_limit_reset_credits: None,
-        };
-
-        let snapshots = app_server_rate_limit_snapshots(response);
-
-        assert_eq!(
-            snapshots
-                .iter()
-                .map(|snapshot| snapshot.limit_id.as_deref())
-                .collect::<Vec<_>>(),
-            vec![Some("codex"), Some("other")]
         );
     }
 

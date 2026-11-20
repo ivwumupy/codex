@@ -76,19 +76,8 @@ async fn backend_banner_fallback_updates_task_settings_and_keeps_notice() -> Res
         while ops.try_recv().is_ok() {}
         requests.lock().unwrap().clear();
         let response = fallback_response();
-        let generation = app.rate_limit_hard_stop_generation;
-        let mut tui = crate::tui::test_support::make_test_tui()?;
-        app.handle_event(
-            &mut tui,
-            &mut server,
-            AppEvent::RateLimitsLoaded {
-                request_id: 1,
-                origin: RateLimitRefreshOrigin::StatusCommand { request_id: 0 },
-                hard_stop_generation: generation,
-                result: Ok(response.clone()),
-            },
-        )
-        .await?;
+        app.chat_widget.update_backend_banner(&response);
+        app.apply_backend_banner_fallback(&mut server).await;
 
         let actual_mode = app.chat_widget.effective_collaboration_mode();
         assert_eq!(actual_mode, expected_mode);
@@ -175,10 +164,9 @@ async fn backend_banner_fallback_updates_task_settings_and_keeps_notice() -> Res
 }
 
 #[tokio::test]
-async fn backend_banner_fallback_uses_current_task_and_accepted_generation() -> Result<()> {
+async fn backend_banner_fallback_updates_current_task() -> Result<()> {
     let (mut app, _events, _ops) = make_test_app_with_channels().await;
     let (mut server, requests, proxy) = start_fallback_thread(&mut app).await?;
-    let read_generation = app.rate_limit_hard_stop_generation;
     let second = server.start_thread(&app.config).await?;
     let active_id = second.session.thread_id;
     let mut tui = crate::tui::test_support::make_test_tui()?;
@@ -194,24 +182,8 @@ async fn backend_banner_fallback_uses_current_task_and_accepted_generation() -> 
         .await?;
     configure_fallback_model(&mut app);
     requests.lock().unwrap().clear();
-    app.rate_limit_hard_stop_generation = read_generation.wrapping_add(1);
-    for generation in [read_generation, app.rate_limit_hard_stop_generation] {
-        app.handle_event(
-            &mut tui,
-            &mut server,
-            AppEvent::RateLimitsLoaded {
-                request_id: 1,
-                origin: RateLimitRefreshOrigin::StatusCommand { request_id: 0 },
-                hard_stop_generation: generation,
-                result: Ok(fallback_response()),
-            },
-        )
-        .await?;
-        if generation == read_generation {
-            assert_eq!(app.chat_widget.current_model(), "gpt-5.5");
-            assert!(requests.lock().unwrap().is_empty());
-        }
-    }
+    app.chat_widget.update_backend_banner(&fallback_response());
+    app.apply_backend_banner_fallback(&mut server).await;
     let sent = requests.lock().unwrap().clone();
     assert_eq!(sent.len(), 1);
     assert_eq!(

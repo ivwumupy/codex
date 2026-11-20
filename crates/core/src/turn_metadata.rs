@@ -48,6 +48,7 @@ const MODEL_KEY: &str = "model";
 const CODEX_VERSION_KEY: &str = "codex_version";
 const REASONING_EFFORT_KEY: &str = "reasoning_effort";
 const USER_INPUT_REQUESTED_DURING_TURN_KEY: &str = "user_input_requested_during_turn";
+#[cfg(test)]
 const WORKSPACE_KIND_KEY: &str = "workspace_kind";
 
 fn is_targeted_continuation(value: &str) -> bool {
@@ -439,6 +440,7 @@ impl TurnMetadataState {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = metadata;
     }
 
+    #[cfg(test)]
     pub(crate) fn workspace_kind(&self) -> Option<String> {
         self.responsesapi_client_metadata
             .read()

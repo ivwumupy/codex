@@ -132,12 +132,7 @@ fn tool_names(body: &Value) -> Vec<String> {
 }
 
 fn configure_apps_without_search_tool(config: &mut Config, apps_base_url: &str) {
-    for feature in [
-        Feature::Apps,
-        Feature::Plugins,
-        Feature::RemotePlugin,
-        Feature::ToolSuggest,
-    ] {
+    for feature in [Feature::Apps, Feature::Plugins, Feature::ToolSuggest] {
         config
             .features
             .enable(feature)
@@ -167,25 +162,6 @@ async fn mount_recommendations(server: &wiremock::MockServer, response: Response
         .respond_with(response)
         .mount(server)
         .await;
-}
-
-async fn wait_for_startup_recommendations(server: &MockServer) -> Result<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if server
-                .received_requests()
-                .await
-                .unwrap_or_default()
-                .iter()
-                .any(|request| request.url.path() == "/ps/plugins/suggested/codex")
-            {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .context("session startup should request recommendations before the first turn")
 }
 
 fn assert_legacy_tools(body: &Value) {
@@ -266,29 +242,13 @@ async fn build_gated_step_preparation_test(
     builder.build_with_auto_env(server).await
 }
 
-async fn start_gated_step_preparation(test: &TestCodex, server: &MockServer) -> Result<PathUri> {
-    // Settle startup work before clearing its cache so these tests still exercise
-    // a fresh recommendation fetch alongside first-turn MCP discovery.
-    wait_for_startup_recommendations(server).await?;
-    let plugins_manager = test.thread_manager.plugins_manager();
-    let auth = test.thread_manager.auth_manager().auth().await;
-    plugins_manager
-        .recommended_plugins_mode_for_config(&test.config.plugins_config_input(), auth.as_ref())
-        .await;
-    plugins_manager.clear_recommended_plugins_cache();
-    let prior_recommendation_count = server
-        .received_requests()
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|request| request.url.path() == "/ps/plugins/suggested/codex")
-        .count();
+async fn start_gated_step_preparation(test: &TestCodex, _server: &MockServer) -> Result<PathUri> {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.config.cwd.as_path());
     test.codex
         .start_or_steer_turn(
             TurnInputRequest::user_input(vec![UserInput::Text {
-                text: "prepare MCP and plugin recommendations".to_string(),
+                text: "prepare MCP tools".to_string(),
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
@@ -304,25 +264,18 @@ async fn start_gated_step_preparation(test: &TestCodex, server: &MockServer) -> 
     let pid_file = PathUri::from_host_native_path(test.config.cwd.join("step-preparation.pid"))?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let mcp_started = fs
+            if fs
                 .read_file_text(&pid_file, Default::default(), /*sandbox*/ None)
                 .await
-                .is_ok_and(|pid| !pid.trim().is_empty());
-            let recommendation_count = server
-                .received_requests()
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|request| request.url.path() == "/ps/plugins/suggested/codex")
-                .count();
-            if mcp_started && recommendation_count > prior_recommendation_count {
+                .is_ok_and(|pid| !pid.trim().is_empty())
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
-    .context("MCP startup and plugin recommendations should begin before MCP is released")?;
+    .context("MCP startup should begin before it is released")?;
 
     PathUri::from_host_native_path(test.config.cwd.join("allow-step-preparation-initialize"))
         .map_err(Into::into)
@@ -461,7 +414,6 @@ async fn mount_remote_calendar_installed_plugins(server: &wiremock::MockServer) 
 #[test_case(Feature::RecommendedPlugins, None; "recommended plugins")]
 #[test_case(Feature::RecommendedPlugins, Some(Feature::Apps); "apps disabled")]
 #[test_case(Feature::RecommendedPlugins, Some(Feature::Plugins); "plugins disabled")]
-#[test_case(Feature::RecommendedPlugins, Some(Feature::RemotePlugin); "remote plugins disabled")]
 #[test_case(Feature::RecommendedPlugins, Some(Feature::RecommendedPlugins); "recommendations disabled")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn startup_recommendations_use_developer_message(
@@ -750,7 +702,7 @@ async fn catalog_plugin_recommendations_use_receiving_model(case: &str) -> Resul
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn mcp_discovery_overlaps_endpoint_plugin_recommendations() -> Result<()> {
+async fn mcp_discovery_waits_for_initialization() -> Result<()> {
     skip_if_wine_exec!(
         Ok(()),
         "requires a Windows test_stdio_server in the Wine-exec environment"
@@ -801,13 +753,6 @@ async fn mcp_discovery_overlaps_endpoint_plugin_recommendations() -> Result<()> 
     .await;
 
     let request = response.single_request();
-    assert!(
-        request
-            .message_input_texts("developer")
-            .join("\n")
-            .contains("github@openai-curated-remote"),
-        "the completed request should preserve endpoint recommendations"
-    );
     assert!(
         request
             .tool_by_name("mcp__step_preparation", "echo")
@@ -1165,10 +1110,6 @@ async fn local_plugin_skill_availability_reaches_tool_suggestion_candidates(
                     .set_permission_profile(PermissionProfile::Disabled)
                     .expect("test config should allow disabled permissions");
                 configure_apps_without_search_tool(config, apps_base_url.as_str());
-                config
-                    .features
-                    .disable(Feature::RemotePlugin)
-                    .expect("test config should allow local plugin suggestions");
                 config.tool_suggest.discoverables = vec![ToolSuggestDiscoverable {
                     kind: ToolSuggestDiscoverableType::Plugin,
                     id: "sample@openai-curated".to_string(),

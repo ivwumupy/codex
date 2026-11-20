@@ -5,7 +5,6 @@
 
 use super::*;
 use codex_config::ConfigLayerSource;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -126,11 +125,6 @@ pub(super) fn model_upgrade_for_migration(
     // to the owning provider, since other providers may still support the same model slug.
     let (target_model, current_name, target_name) = match (model_provider_id, model) {
         (OPENAI_PROVIDER_ID, "gpt-5.4") => ("gpt-6-sol", "GPT-5.4", "GPT-6 Sol"),
-        (AMAZON_BEDROCK_PROVIDER_ID, "openai.gpt-5.4") => (
-            "openai.gpt-6-sol",
-            "GPT-5.4 on Amazon Bedrock",
-            "GPT-6 Sol on Amazon Bedrock",
-        ),
         (OPENAI_PROVIDER_ID, "gpt-5.4-mini") => ("gpt-6-luna", "GPT-5.4 Mini", "GPT-6 Luna"),
         _ => return None,
     };

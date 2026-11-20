@@ -25,9 +25,6 @@ use wiremock::matchers::path;
 
 const TURN_COST_PATH: &str = "/v1/analytics/codex/turn-costs";
 
-#[path = "turn_cost_worker_chatgpt_tests.rs"]
-mod chatgpt;
-
 #[tokio::test]
 async fn worker_starts_with_otlp_metrics_exporter_without_log_exporter() {
     let server = MockServer::start().await;
@@ -45,7 +42,7 @@ async fn worker_starts_with_otlp_metrics_exporter_without_log_exporter() {
         .build()
         .await
         .expect("test config");
-    config.chatgpt_base_url = server.uri();
+    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     config.otel.exporter = OtelExporterKind::None;
     config.otel.metrics_exporter = OtelExporterKind::OtlpGrpc {
         endpoint: server.uri(),
@@ -404,7 +401,7 @@ async fn test_runtime(server: &MockServer, auth_manager: Arc<AuthManager>) -> Wo
         .build()
         .await
         .expect("test config");
-    config.chatgpt_base_url = server.uri();
+    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     let backend = TurnCostBackend::OpenAi(Arc::clone(&auth_manager));
     WorkerRuntime {
         config: Arc::new(config),

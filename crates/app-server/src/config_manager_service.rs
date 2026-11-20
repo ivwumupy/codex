@@ -35,6 +35,7 @@ use codex_core::path_utils;
 use codex_core::path_utils::SymlinkWritePaths;
 use codex_core::path_utils::resolve_symlink_write_paths;
 use codex_core::path_utils::write_atomically;
+#[cfg(test)]
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::protocol::AskForApproval;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -51,6 +52,7 @@ use toml_edit::Item as TomlItem;
 mod credential_edits;
 #[path = "config_manager_service_model_providers.rs"]
 mod model_providers;
+#[cfg(test)]
 #[path = "config_manager_service_provider_setup.rs"]
 mod provider_setup;
 #[path = "config_manager_service_provider_write.rs"]
@@ -127,6 +129,7 @@ impl ConfigManagerError {
     }
 }
 
+#[cfg(test)]
 pub(crate) struct PreparedProviderWrite {
     edits: Vec<ApiConfigEdit>,
     expected_version: String,
@@ -236,6 +239,7 @@ impl ConfigManager {
             .await
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_provider_config<'a>(
         &self,
         layers: &ConfigLayerStack,
@@ -272,6 +276,7 @@ impl ConfigManager {
         provider_setup::preview(layers, &user_path, provider_id, edits)
     }
 
+    #[cfg(test)]
     pub(crate) async fn commit_provider_config(
         &self,
         write: PreparedProviderWrite,

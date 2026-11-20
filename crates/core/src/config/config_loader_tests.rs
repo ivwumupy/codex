@@ -4574,13 +4574,6 @@ async fn project_root_markers_supports_alternate_markers() -> std::io::Result<()
 }
 
 mod requirements_exec_policy_tests {
-    use codex_config::ConfigLayerEntry;
-    use codex_config::ConfigLayerSource;
-    use codex_config::ConfigLayerStack;
-    use codex_config::ConfigRequirements;
-    use codex_config::ConfigRequirementsToml;
-    use codex_config::ConfigRequirementsWithSources;
-    use codex_config::RequirementSource;
     use codex_config::RequirementsExecPolicyDecisionToml;
     use codex_config::RequirementsExecPolicyParseError;
     use codex_config::RequirementsExecPolicyPatternTokenToml;
@@ -4589,11 +4582,7 @@ mod requirements_exec_policy_tests {
     use codex_execpolicy::Decision;
     use codex_execpolicy::Evaluation;
     use codex_execpolicy::RuleMatch;
-    use codex_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
-    use std::path::Path;
-    use tempfile::tempdir;
-    use toml::Value as TomlValue;
     use toml::from_str;
 
     fn tokens(cmd: &[&str]) -> Vec<String> {
@@ -4602,27 +4591,6 @@ mod requirements_exec_policy_tests {
 
     fn panic_if_called(_: &[String]) -> Decision {
         panic!("rule should match so heuristic should not be called");
-    }
-
-    fn config_stack_for_dot_codex_folder_with_requirements(
-        dot_codex_folder: &Path,
-        requirements: ConfigRequirements,
-    ) -> ConfigLayerStack {
-        let dot_codex_folder = AbsolutePathBuf::from_absolute_path(dot_codex_folder)
-            .expect("absolute dot_codex_folder");
-        let layer = ConfigLayerEntry::new(
-            ConfigLayerSource::Project { dot_codex_folder },
-            TomlValue::Table(Default::default()),
-        );
-        ConfigLayerStack::new(vec![layer], requirements, ConfigRequirementsToml::default())
-            .expect("ConfigLayerStack")
-    }
-
-    fn requirements_from_toml(toml_str: &str) -> ConfigRequirements {
-        let config: ConfigRequirementsToml = from_str(toml_str).expect("parse requirements toml");
-        let mut with_sources = ConfigRequirementsWithSources::default();
-        with_sources.merge_unset_fields(RequirementSource::Unknown, config);
-        ConfigRequirements::try_from(with_sources).expect("requirements")
     }
 
     #[test]

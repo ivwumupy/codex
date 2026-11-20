@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::collections::HashSet;
+#[cfg(test)]
 use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
@@ -23,7 +24,6 @@ use codex_network_proxy::NetworkMode;
 use codex_network_proxy::NetworkProxyConfig;
 #[cfg(test)]
 use codex_network_proxy::NetworkUnixSocketPermission as ProxyNetworkUnixSocketPermission;
-use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
@@ -35,10 +35,10 @@ use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::permissions::project_roots_glob_pattern;
+#[cfg(test)]
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 
-use super::ProjectConfig;
 use super::permission_path;
 #[cfg(test)]
 use super::permission_path::contains_glob_chars_for_platform;
@@ -48,6 +48,7 @@ pub(crate) const BUILT_IN_WORKSPACE_PROFILE: &str = BUILT_IN_PERMISSION_PROFILE_
 pub(crate) const BUILT_IN_DANGER_FULL_ACCESS_PROFILE: &str =
     BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
 
+#[cfg(test)]
 /// Keep the active apply_patch aliases readable without granting access to other
 /// sessions or the rest of CODEX_HOME. Preserve the alias directory, not its target.
 pub(super) fn active_arg0_helper_dir(
@@ -67,19 +68,6 @@ pub(super) fn active_arg0_helper_dir(
                     .is_some_and(|name| name.to_string_lossy().starts_with("codex-arg0"))
         })
         .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok())
-}
-
-pub(crate) fn default_builtin_permission_profile_name(
-    active_project: &ProjectConfig,
-    windows_sandbox_level: WindowsSandboxLevel,
-) -> &'static str {
-    if (active_project.is_trusted() || active_project.is_untrusted())
-        && !(cfg!(target_os = "windows") && windows_sandbox_level == WindowsSandboxLevel::Disabled)
-    {
-        BUILT_IN_WORKSPACE_PROFILE
-    } else {
-        BUILT_IN_READ_ONLY_PROFILE
-    }
 }
 
 pub(crate) fn is_builtin_permission_profile_name(profile_name: &str) -> bool {

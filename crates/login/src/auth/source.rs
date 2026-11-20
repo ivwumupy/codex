@@ -17,11 +17,6 @@ pub(super) fn same_source(previous: Option<&CodexAuth>, current: Option<&CodexAu
     {
         return false;
     }
-    let previous_subject = previous.api_workload_identity();
-    let current_subject = current.api_workload_identity();
-    if previous_subject != current_subject {
-        return false;
-    }
     if let (CodexAuth::AgentIdentity(previous), CodexAuth::AgentIdentity(current)) =
         (previous, current)
     {
@@ -34,13 +29,10 @@ pub(super) fn same_source(previous: Option<&CodexAuth>, current: Option<&CodexAu
     if previous_token == current_token {
         return true;
     }
-    let platform_wif = previous_subject.is_some();
-    if !platform_wif
-        && !matches!(
-            previous,
-            CodexAuth::Chatgpt(_) | CodexAuth::ChatgptAuthTokens(_)
-        )
-    {
+    if !matches!(
+        previous,
+        CodexAuth::Chatgpt(_) | CodexAuth::ChatgptAuthTokens(_)
+    ) {
         return false;
     }
     match (
@@ -50,10 +42,6 @@ pub(super) fn same_source(previous: Option<&CodexAuth>, current: Option<&CodexAu
         (Some(previous), Some(current)) => previous == current,
         _ => false,
     }
-}
-
-pub(super) fn has_session_claim(token: &str) -> bool {
-    parse_oauth_source(token).is_some()
 }
 
 fn parse_oauth_source(token: &str) -> Option<OAuthSource> {

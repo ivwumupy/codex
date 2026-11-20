@@ -194,12 +194,7 @@ impl<H: ReviewHost> SynchronousApprovalReviewer for ReviewRequest<'_, H> {
                 self.telemetry
                     .guardian_assessment(event, completed.assessment_outcome);
             }
-            report.track(
-                self.telemetry,
-                completed.analytics,
-                completed_at_ms,
-                elapsed,
-            );
+            report.track(self.telemetry, completed.analytics, elapsed);
             if let Some(message) = completed.warning {
                 self.host
                     .emit(EventMsg::GuardianWarning(WarningEvent { message }))

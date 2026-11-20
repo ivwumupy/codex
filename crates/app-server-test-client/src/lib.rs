@@ -25,7 +25,6 @@ use anyhow::bail;
 use clap::ArgAction;
 use clap::Parser;
 use clap::Subcommand;
-use codex_app_server_protocol::AccountLoginCompletedNotification;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::ClientInfo;
 use codex_app_server_protocol::ClientRequest;
@@ -37,7 +36,6 @@ use codex_app_server_protocol::DynamicToolSpec;
 use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
 use codex_app_server_protocol::FileChangeRequestApprovalResponse;
-use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::InitializeCapabilities;
 use codex_app_server_protocol::InitializeParams;
 use codex_app_server_protocol::InitializeResponse;
@@ -45,7 +43,6 @@ use codex_app_server_protocol::JSONRPCMessage;
 use codex_app_server_protocol::JSONRPCNotification;
 use codex_app_server_protocol::JSONRPCRequest;
 use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::ModelListParams;
 use codex_app_server_protocol::ModelListResponse;
@@ -88,10 +85,6 @@ use tungstenite::stream::MaybeTlsStream;
 use url::Url;
 use uuid::Uuid;
 
-mod loopback_responses_server;
-mod plugin_analytics_capture;
-mod plugin_analytics_mutation_smoke;
-mod plugin_analytics_smoke;
 mod request_user_input;
 
 const NOTIFICATIONS_TO_OPT_OUT: &[&str] = &[
@@ -219,25 +212,8 @@ enum CliCommand {
         /// Follow-up user message for the second turn.
         follow_up_message: String,
     },
-    /// Trigger a ChatGPT or Amazon Bedrock login flow.
-    TestLogin {
-        /// Use the device-code login flow instead of the browser callback flow.
-        #[arg(long, default_value_t = false, conflicts_with = "amazon_bedrock")]
-        device_code: bool,
-        /// Use a Codex-managed Amazon Bedrock API key.
-        #[arg(long, default_value_t = false, conflicts_with = "device_code")]
-        amazon_bedrock: bool,
-        /// Amazon Bedrock API key.
-        #[arg(long, value_name = "API_KEY")]
-        api_key: Option<String>,
-        /// AWS Region for the Amazon Bedrock Mantle endpoint.
-        #[arg(long, value_name = "REGION")]
-        region: Option<String>,
-    },
     /// Log out of the current account and wait for the account update.
     TestLogout,
-    /// Fetch the current account rate limits from the Codex app-server.
-    GetAccountRateLimits,
     /// List the available models from the Codex app-server.
     #[command(name = "model-list")]
     ModelList,
@@ -278,45 +254,6 @@ enum CliCommand {
         #[arg(long, default_value_t = 15)]
         hold_seconds: u64,
     },
-    /// Exercise remote plugin analytics through production app-server RPC paths.
-    #[command(name = "plugin-analytics-smoke")]
-    PluginAnalyticsSmoke {
-        /// Installed local plugin id, such as `linear@openai-curated-remote`.
-        #[arg(long)]
-        plugin_id: String,
-        /// JSONL output path. Defaults to a PID-specific file under the system temp directory.
-        #[arg(long)]
-        capture_file: Option<PathBuf>,
-    },
-    /// Install and uninstall one remote plugin while validating analytics capture.
-    #[command(name = "plugin-analytics-mutation-smoke")]
-    PluginAnalyticsMutationSmoke {
-        /// Backend remote plugin id. The plugin must be initially uninstalled.
-        #[arg(long)]
-        remote_plugin_id: String,
-        /// Acknowledge that this command mutates the active account's plugin state.
-        #[arg(long)]
-        confirm_account_mutation: bool,
-        /// JSONL output path. Defaults to a PID-specific file under the system temp directory.
-        #[arg(long)]
-        capture_file: Option<PathBuf>,
-    },
-    /// Best-effort recovery command that uninstalls one remote plugin.
-    #[command(name = "plugin-remote-uninstall")]
-    PluginRemoteUninstall {
-        /// Backend remote plugin id to uninstall.
-        #[arg(long)]
-        remote_plugin_id: String,
-        /// Acknowledge that this command mutates the active account's plugin state.
-        #[arg(long)]
-        confirm_account_mutation: bool,
-    },
-}
-
-enum TestLoginMode {
-    ChatgptBrowser,
-    ChatgptDeviceCode,
-    AmazonBedrock { api_key: String, region: String },
 }
 
 pub async fn run() -> Result<()> {
@@ -405,34 +342,10 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        CliCommand::TestLogin {
-            device_code,
-            amazon_bedrock,
-            api_key,
-            region,
-        } => {
-            ensure_dynamic_tools_unused(&dynamic_tools, "test-login")?;
-            let endpoint = resolve_endpoint(codex_bin, url)?;
-            let mode = if amazon_bedrock {
-                let api_key = api_key.context("--api-key is required with --amazon-bedrock")?;
-                let region = region.context("--region is required with --amazon-bedrock")?;
-                TestLoginMode::AmazonBedrock { api_key, region }
-            } else if device_code {
-                TestLoginMode::ChatgptDeviceCode
-            } else {
-                TestLoginMode::ChatgptBrowser
-            };
-            test_login(&endpoint, &config_overrides, mode).await
-        }
         CliCommand::TestLogout => {
             ensure_dynamic_tools_unused(&dynamic_tools, "test-logout")?;
             let endpoint = resolve_endpoint(codex_bin, url)?;
             test_logout(&endpoint, &config_overrides).await
-        }
-        CliCommand::GetAccountRateLimits => {
-            ensure_dynamic_tools_unused(&dynamic_tools, "get-account-rate-limits")?;
-            let endpoint = resolve_endpoint(codex_bin, url)?;
-            get_account_rate_limits(&endpoint, &config_overrides).await
         }
         CliCommand::ModelList => {
             ensure_dynamic_tools_unused(&dynamic_tools, "model-list")?;
@@ -469,58 +382,6 @@ pub async fn run() -> Result<()> {
                 workspace,
                 script,
                 hold_seconds,
-            )
-        }
-        CliCommand::PluginAnalyticsSmoke {
-            plugin_id,
-            capture_file,
-        } => {
-            ensure_dynamic_tools_unused(&dynamic_tools, "plugin-analytics-smoke")?;
-            if url.is_some() {
-                bail!("plugin-analytics-smoke requires --codex-bin and does not support --url");
-            }
-            let codex_bin = codex_bin.context("plugin-analytics-smoke requires --codex-bin")?;
-            plugin_analytics_smoke::run(&codex_bin, &config_overrides, &plugin_id, capture_file)
-        }
-        CliCommand::PluginAnalyticsMutationSmoke {
-            remote_plugin_id,
-            confirm_account_mutation,
-            capture_file,
-        } => {
-            ensure_dynamic_tools_unused(&dynamic_tools, "plugin-analytics-mutation-smoke")?;
-            if url.is_some() {
-                bail!(
-                    "plugin-analytics-mutation-smoke requires --codex-bin and does not support --url"
-                );
-            }
-            let codex_bin =
-                codex_bin.context("plugin-analytics-mutation-smoke requires --codex-bin")?;
-            plugin_analytics_mutation_smoke::run(
-                &codex_bin,
-                &config_overrides,
-                &remote_plugin_id,
-                plugin_analytics_mutation_smoke::AccountMutationConfirmation::from_flag(
-                    confirm_account_mutation,
-                ),
-                capture_file,
-            )
-        }
-        CliCommand::PluginRemoteUninstall {
-            remote_plugin_id,
-            confirm_account_mutation,
-        } => {
-            ensure_dynamic_tools_unused(&dynamic_tools, "plugin-remote-uninstall")?;
-            if url.is_some() {
-                bail!("plugin-remote-uninstall requires --codex-bin and does not support --url");
-            }
-            let codex_bin = codex_bin.context("plugin-remote-uninstall requires --codex-bin")?;
-            plugin_analytics_mutation_smoke::run_cleanup(
-                &codex_bin,
-                &config_overrides,
-                &remote_plugin_id,
-                plugin_analytics_mutation_smoke::AccountMutationConfirmation::from_flag(
-                    confirm_account_mutation,
-                ),
             )
         }
     }
@@ -1025,105 +886,6 @@ async fn send_follow_up_v2(
 
         Ok(())
     })
-    .await
-}
-
-async fn test_login(
-    endpoint: &Endpoint,
-    config_overrides: &[String],
-    mode: TestLoginMode,
-) -> Result<()> {
-    with_client("test-login", endpoint, config_overrides, |client| {
-        let initialize = client.initialize()?;
-        println!("< initialize response: {initialize:?}");
-
-        let login_response = match mode {
-            TestLoginMode::ChatgptBrowser => client.login_account_chatgpt()?,
-            TestLoginMode::ChatgptDeviceCode => client.login_account_chatgpt_device_code()?,
-            TestLoginMode::AmazonBedrock { api_key, region } => {
-                let request_id = client.request_id();
-                let login_response: LoginAccountResponse = client.send_request(
-                    ClientRequest::LoginAccount {
-                        request_id: request_id.clone(),
-                        params: codex_app_server_protocol::LoginAccountParams::AmazonBedrock {
-                            api_key,
-                            region,
-                        },
-                    },
-                    request_id,
-                    "account/login/start",
-                )?;
-                println!("< account/login/start response: {login_response:?}");
-
-                let completion =
-                    client.wait_for_account_login_completion(/*expected_login_id*/ None)?;
-                println!("< account/login/completed notification: {completion:?}");
-
-                loop {
-                    let notification = client.next_notification()?;
-                    if let Ok(ServerNotification::AccountUpdated(account_updated)) =
-                        ServerNotification::try_from(notification)
-                    {
-                        println!("< account/updated notification: {account_updated:?}");
-                        break;
-                    }
-                }
-                return Ok(());
-            }
-        };
-        println!("< account/login/start response: {login_response:?}");
-        let login_id = match login_response {
-            LoginAccountResponse::Chatgpt { login_id, auth_url } => {
-                println!("Open the following URL in your browser to continue:\n{auth_url}");
-                login_id
-            }
-            LoginAccountResponse::ChatgptDeviceCode {
-                login_id,
-                verification_url,
-                user_code,
-            } => {
-                println!(
-                    "Open the following URL and enter the code to continue:\n{verification_url}\n\nCode: {user_code}"
-                );
-                login_id
-            }
-            _ => bail!("expected chatgpt login response"),
-        };
-
-        let completion = client.wait_for_account_login_completion(Some(&login_id))?;
-        println!("< account/login/completed notification: {completion:?}");
-
-        if completion.success {
-            println!("Login succeeded.");
-            Ok(())
-        } else {
-            bail!(
-                "login failed: {}",
-                completion
-                    .error
-                    .as_deref()
-                    .unwrap_or("unknown error from account/login/completed")
-            );
-        }
-    })
-    .await
-}
-
-async fn get_account_rate_limits(endpoint: &Endpoint, config_overrides: &[String]) -> Result<()> {
-    with_client(
-        "get-account-rate-limits",
-        endpoint,
-        config_overrides,
-        |client| {
-            let initialize = client.initialize()?;
-            println!("< initialize response: {initialize:?}");
-
-            let response = client.get_account_rate_limits()?;
-            println!("< account/rateLimits/read response: {response:?}");
-
-            Ok(())
-        },
-    )
     .await
 }
 
@@ -1667,40 +1429,6 @@ impl CodexClient {
         self.send_request(request, request_id, "turn/start")
     }
 
-    fn login_account_chatgpt(&mut self) -> Result<LoginAccountResponse> {
-        let request_id = self.request_id();
-        let request = ClientRequest::LoginAccount {
-            request_id: request_id.clone(),
-            params: codex_app_server_protocol::LoginAccountParams::Chatgpt {
-                app_brand: None,
-                codex_streamlined_login: false,
-                use_hosted_login_success_page: false,
-            },
-        };
-
-        self.send_request(request, request_id, "account/login/start")
-    }
-
-    fn login_account_chatgpt_device_code(&mut self) -> Result<LoginAccountResponse> {
-        let request_id = self.request_id();
-        let request = ClientRequest::LoginAccount {
-            request_id: request_id.clone(),
-            params: codex_app_server_protocol::LoginAccountParams::ChatgptDeviceCode,
-        };
-
-        self.send_request(request, request_id, "account/login/start")
-    }
-
-    fn get_account_rate_limits(&mut self) -> Result<GetAccountRateLimitsResponse> {
-        let request_id = self.request_id();
-        let request = ClientRequest::GetAccountRateLimits {
-            request_id: request_id.clone(),
-            params: None,
-        };
-
-        self.send_request(request, request_id, "account/rateLimits/read")
-    }
-
     fn logout_account(&mut self) -> Result<LogoutAccountResponse> {
         let request_id = self.request_id();
         let request = ClientRequest::LogoutAccount {
@@ -1755,34 +1483,6 @@ impl CodexClient {
         };
 
         self.send_request(request, request_id, "thread/decrement_elicitation")
-    }
-
-    fn wait_for_account_login_completion(
-        &mut self,
-        expected_login_id: Option<&str>,
-    ) -> Result<AccountLoginCompletedNotification> {
-        loop {
-            let notification = self.next_notification()?;
-
-            if let Ok(server_notification) = ServerNotification::try_from(notification) {
-                match server_notification {
-                    ServerNotification::AccountLoginCompleted(completion) => {
-                        if completion.login_id.as_deref() == expected_login_id {
-                            return Ok(completion);
-                        }
-
-                        println!(
-                            "[ignoring account/login/completed for unexpected login_id: {:?}]",
-                            completion.login_id
-                        );
-                    }
-                    ServerNotification::AccountRateLimitsUpdated(snapshot) => {
-                        println!("< accountRateLimitsUpdated notification: {snapshot:?}");
-                    }
-                    _ => {}
-                }
-            }
-        }
     }
 
     fn stream_turn(&mut self, thread_id: &str, turn_id: &str) -> Result<()> {

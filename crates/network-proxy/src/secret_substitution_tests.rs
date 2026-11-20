@@ -35,7 +35,7 @@ async fn substitutes_split_markers_and_updates_framing() {
     ]));
     let request = Request::builder()
         .method("PUT")
-        .uri("https://bucket.s3.amazonaws.com/object")
+        .uri("https://uploads.example.com/object")
         .header("transfer-encoding", "chunked")
         .header("content-encoding", "Identity, identity")
         .header("content-encoding", "IDENTITY")

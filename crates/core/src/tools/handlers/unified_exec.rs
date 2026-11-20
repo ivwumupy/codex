@@ -84,8 +84,6 @@ pub(crate) struct ExecCommandArgs {
     additional_permissions: Option<AdditionalPermissionProfile>,
     #[serde(default)]
     justification: Option<String>,
-    #[serde(default)]
-    prefix_rule: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

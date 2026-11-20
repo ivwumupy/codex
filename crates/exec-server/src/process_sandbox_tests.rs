@@ -4,31 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codex_exec_server_protocol::JSONRPCErrorError;
-#[cfg(unix)]
-use codex_file_system::WindowsSandboxSelection;
-#[cfg(target_os = "macos")]
-use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_network_proxy::NetworkPolicyAuditObserver;
 use codex_network_proxy::NetworkPolicyDecider;
 use codex_network_proxy::NetworkProxyConfig;
-#[cfg(target_os = "macos")]
-use codex_network_proxy::NetworkUnixSocketPermission;
-#[cfg(target_os = "macos")]
-use codex_network_proxy::NetworkUnixSocketPermissions;
 use codex_network_proxy::PROXY_ATTRIBUTION_TOKEN_ENV_KEY;
 use codex_network_proxy::RemoteNetworkProxyConfig;
 use codex_network_proxy::RemoteNetworkProxyLaunchConfig;
-#[cfg(windows)]
-use codex_protocol::config_types::WindowsSandboxLevel;
-#[cfg(any(unix, windows))]
-use codex_protocol::models::PermissionProfile;
-#[cfg(target_os = "linux")]
-use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
-#[cfg(unix)]
-use tempfile::tempdir;
 use test_case::test_case;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -36,12 +20,8 @@ use tokio::time::timeout;
 
 use super::PreparedExecRequest;
 use super::prepare_exec_request_with_telemetry;
-#[cfg(unix)]
-use crate::CODEX_ARG0_EXEC_HELPER_ARG1;
 use crate::ExecParams;
 use crate::ExecServerRuntimeOptions;
-#[cfg(any(unix, windows))]
-use crate::FileSystemSandboxContext;
 use crate::ProcessId;
 use crate::process_telemetry::ProcessTelemetry;
 

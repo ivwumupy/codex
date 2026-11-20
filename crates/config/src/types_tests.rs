@@ -18,10 +18,6 @@ default_tools_approval_mode = "approve"
 enabled = true
 ["disabled@market"]
 enabled = false
-["remote@market"]
-remote_plugin_id = "remote-plugin-123"
-release_id = "plugin-release-123"
-auto_provision = true
 "#
         ))
         .expect("plugin activation config");
@@ -32,10 +28,9 @@ auto_provision = true
                 "approval@market",
                 "enabled@market",
                 "disabled@market",
-                "remote@market"
             ]
             .map(|plugin_id| config.plugins[plugin_id].enabled),
-            [None, None, None, Some(true), Some(false), None],
+            [None, None, None, Some(true), Some(false)],
         );
         assert_eq!(
             [
@@ -45,13 +40,12 @@ auto_provision = true
                 "approval@market",
                 "enabled@market",
                 "disabled@market",
-                "remote@market"
             ]
             .map(|plugin_id| config.allows_plugin(plugin_id)),
             match default_enabled {
-                None => [true, true, true, true, true, true, true],
-                Some(false) => [false, false, false, false, true, false, false],
-                Some(true) => [true, true, true, true, true, false, true],
+                None => [true, true, true, true, true, true],
+                Some(false) => [false, false, false, false, true, false],
+                Some(true) => [true, true, true, true, true, false],
             },
         );
         let round_trip: PluginsConfigToml =
@@ -136,33 +130,6 @@ fn memories_config_clamps_count_limits_to_nonzero_values() {
         MemoriesConfig {
             max_raw_memories_for_consolidation: 1,
             max_rollouts_per_startup: 1,
-            ..MemoriesConfig::default()
-        }
-    );
-}
-
-#[test]
-fn memories_config_clamps_rate_limit_remaining_threshold() {
-    let config = MemoriesConfig::from(MemoriesToml {
-        min_rate_limit_remaining_percent: Some(101),
-        ..Default::default()
-    });
-    assert_eq!(
-        config,
-        MemoriesConfig {
-            min_rate_limit_remaining_percent: 100,
-            ..MemoriesConfig::default()
-        }
-    );
-
-    let config = MemoriesConfig::from(MemoriesToml {
-        min_rate_limit_remaining_percent: Some(-1),
-        ..Default::default()
-    });
-    assert_eq!(
-        config,
-        MemoriesConfig {
-            min_rate_limit_remaining_percent: 0,
             ..MemoriesConfig::default()
         }
     );

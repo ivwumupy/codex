@@ -1,4 +1,4 @@
-//! Shared leases bound buffers across quota checks, secret substitution, and signing.
+//! Shared leases bound buffers across quota checks and secret substitution.
 //! Eight requests each reserve space for a 16 MiB input and 16 MiB transformed output.
 
 use anyhow::Result;

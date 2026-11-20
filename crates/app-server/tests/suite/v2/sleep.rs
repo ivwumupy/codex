@@ -18,7 +18,6 @@ use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput as V2UserInput;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
-use serde_json::json;
 use std::time::Duration;
 use tempfile::TempDir;
 use test_case::test_case;

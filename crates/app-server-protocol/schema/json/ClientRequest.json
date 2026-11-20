@@ -5,13 +5,6 @@
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
       "type": "string"
     },
-    "AddCreditsNudgeCreditType": {
-      "enum": [
-        "credits",
-        "usage_limit"
-      ],
-      "type": "string"
-    },
     "AdditionalContextEntry": {
       "properties": {
         "kind": {
@@ -219,13 +212,6 @@
           "type": "object"
         }
       ]
-    },
-    "BedrockProviderId": {
-      "enum": [
-        "amazon-bedrock",
-        "amazon-bedrock-runtime"
-      ],
-      "type": "string"
     },
     "ByteRange": {
       "properties": {
@@ -621,25 +607,6 @@
       },
       "required": [
         "effort"
-      ],
-      "type": "object"
-    },
-    "ConsumeAccountRateLimitResetCreditParams": {
-      "properties": {
-        "creditId": {
-          "description": "Opaque reset-credit identifier to redeem. When omitted, the backend selects the next available credit.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "idempotencyKey": {
-          "description": "Identifies one logical reset attempt. A UUID is recommended; reuse the same value when retrying that attempt.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "idempotencyKey"
       ],
       "type": "object"
     },
@@ -1685,73 +1652,11 @@
       ],
       "type": "object"
     },
-    "GatewayOAuthLoginParams": {
-      "description": "Authorize a configured provider without changing the default or any thread's provider.",
-      "properties": {
-        "deviceAuth": {
-          "description": "Select device authorization when the server advertises support for it.",
-          "type": "boolean"
-        },
-        "modelProvider": {
-          "description": "Defaults to the current provider when omitted.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "GatewayOAuthReadParams": {
-      "description": "Read credential readiness for a configured provider without starting browser login.",
-      "properties": {
-        "modelProvider": {
-          "description": "Defaults to the current provider when omitted.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "GcpProviderId": {
-      "enum": [
-        "gcp"
-      ],
-      "type": "string"
-    },
     "GetAccountParams": {
       "properties": {
         "refreshToken": {
           "description": "When `true`, requests a proactive token refresh before returning.\n\nIn managed auth mode this triggers the normal refresh-token flow. In external auth mode this flag is ignored. Clients should refresh tokens themselves and call `account/login/start` with `chatgptAuthTokens`.",
           "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "GetAccountRateLimitsParams": {
-      "description": "Usage-read capabilities of the requesting client, never inferred from its experiment arm.",
-      "properties": {
-        "excludeResetCreditDetails": {
-          "description": "Skip the separate reset-credit detail lookup for background usage polls. The usage response still includes the available count; omitted/false preserves detailed reads.",
-          "type": "boolean"
-        },
-        "supportsLunaReserve": {
-          "description": "The client supports automatic Luna Reserve fallback. For eligible ChatGPT CLI users, allow the backend to record experiment exposure after ordinary usage is blocked.",
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "GetAccountTokenUsageParams": {
-      "properties": {
-        "threadId": {
-          "description": "When present, read estimated usage for this thread instead of account-wide token activity.",
-          "type": [
-            "string",
-            "null"
-          ]
         }
       },
       "type": "object"
@@ -2007,158 +1912,8 @@
           ],
           "title": "ApiKeyLoginAccountParams",
           "type": "object"
-        },
-        {
-          "properties": {
-            "appBrand": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/LoginAppBrand"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "codexStreamlinedLogin": {
-              "type": "boolean"
-            },
-            "type": {
-              "enum": [
-                "chatgpt"
-              ],
-              "title": "ChatgptLoginAccountParamsType",
-              "type": "string"
-            },
-            "useHostedLoginSuccessPage": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "ChatgptLoginAccountParams",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "chatgptDeviceCode"
-              ],
-              "title": "ChatgptDeviceCodeLoginAccountParamsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "ChatgptDeviceCodeLoginAccountParams",
-          "type": "object"
-        },
-        {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
-          "properties": {
-            "accessToken": {
-              "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
-              "type": "string"
-            },
-            "chatgptAccountId": {
-              "description": "Workspace/account identifier supplied by the client.",
-              "type": "string"
-            },
-            "chatgptPlanType": {
-              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "chatgptAuthTokens"
-              ],
-              "title": "ChatgptAuthTokensLoginAccountParamsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessToken",
-            "chatgptAccountId",
-            "type"
-          ],
-          "title": "ChatgptAuthTokensLoginAccountParams",
-          "type": "object"
-        },
-        {
-          "description": "[UNSTABLE] Managed Amazon Bedrock login is experimental.",
-          "properties": {
-            "apiKey": {
-              "type": "string"
-            },
-            "region": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "amazonBedrock"
-              ],
-              "title": "AmazonBedrockLoginAccountParamsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "apiKey",
-            "region",
-            "type"
-          ],
-          "title": "AmazonBedrockLoginAccountParams",
-          "type": "object"
-        },
-        {
-          "description": "[UNSTABLE] Managed Amazon Bedrock AWS access key login is experimental.",
-          "properties": {
-            "accessKeyId": {
-              "type": "string"
-            },
-            "region": {
-              "type": "string"
-            },
-            "secretAccessKey": {
-              "type": "string"
-            },
-            "sessionToken": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "amazonBedrockAccessKeys"
-              ],
-              "title": "AmazonBedrockAccessKeysLoginAccountParamsType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "accessKeyId",
-            "region",
-            "secretAccessKey",
-            "type"
-          ],
-          "title": "AmazonBedrockAccessKeysLoginAccountParams",
-          "type": "object"
         }
       ]
-    },
-    "LoginAppBrand": {
-      "enum": [
-        "codex",
-        "chatgpt"
-      ],
-      "type": "string"
     },
     "MarketplaceAddParams": {
       "properties": {
@@ -2615,12 +2370,6 @@
         },
         "pluginName": {
           "type": "string"
-        },
-        "remoteMarketplaceName": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       },
       "required": [
@@ -2653,16 +2402,6 @@
       },
       "type": "object"
     },
-    "PluginListMarketplaceKind": {
-      "enum": [
-        "local",
-        "vertical",
-        "workspace-directory",
-        "shared-with-me",
-        "created-by-me-remote"
-      ],
-      "type": "string"
-    },
     "PluginListParams": {
       "properties": {
         "cwds": {
@@ -2676,18 +2415,8 @@
           ]
         },
         "forceRefetch": {
-          "description": "Whether the client requests a fresh remote plugin catalog fetch.",
+          "description": "Wait for configured plugin caches to refresh before listing.",
           "type": "boolean"
-        },
-        "marketplaceKinds": {
-          "description": "Optional marketplace kind filter. When omitted, only local marketplaces are queried, plus the default remote catalog when enabled by feature flag.",
-          "items": {
-            "$ref": "#/definitions/PluginListMarketplaceKind"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
         }
       },
       "type": "object"
@@ -2706,12 +2435,6 @@
         },
         "pluginName": {
           "type": "string"
-        },
-        "remoteMarketplaceName": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       },
       "required": [
@@ -2719,177 +2442,12 @@
       ],
       "type": "object"
     },
-    "PluginReconcileParams": {
-      "properties": {
-        "reason": {
-          "description": "Optional client-provided reason recorded with the reconciliation attempt.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
     "PluginSearchScope": {
       "enum": [
         "global",
-        "workspace",
         "personal"
       ],
       "type": "string"
-    },
-    "PluginShareCheckoutParams": {
-      "properties": {
-        "remotePluginId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "remotePluginId"
-      ],
-      "type": "object"
-    },
-    "PluginShareDeleteParams": {
-      "properties": {
-        "remotePluginId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "remotePluginId"
-      ],
-      "type": "object"
-    },
-    "PluginShareDiscoverability": {
-      "enum": [
-        "LISTED",
-        "UNLISTED",
-        "PRIVATE"
-      ],
-      "type": "string"
-    },
-    "PluginShareListParams": {
-      "type": "object"
-    },
-    "PluginSharePrincipalType": {
-      "enum": [
-        "user",
-        "group",
-        "workspace"
-      ],
-      "type": "string"
-    },
-    "PluginShareSaveParams": {
-      "properties": {
-        "discoverability": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/PluginShareDiscoverability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "pluginPath": {
-          "$ref": "#/definitions/AbsolutePathBuf"
-        },
-        "remotePluginId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "shareTargets": {
-          "items": {
-            "$ref": "#/definitions/PluginShareTarget"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "pluginPath"
-      ],
-      "type": "object"
-    },
-    "PluginShareTarget": {
-      "properties": {
-        "principalId": {
-          "type": "string"
-        },
-        "principalType": {
-          "$ref": "#/definitions/PluginSharePrincipalType"
-        },
-        "role": {
-          "$ref": "#/definitions/PluginShareTargetRole"
-        }
-      },
-      "required": [
-        "principalId",
-        "principalType",
-        "role"
-      ],
-      "type": "object"
-    },
-    "PluginShareTargetRole": {
-      "enum": [
-        "reader",
-        "editor"
-      ],
-      "type": "string"
-    },
-    "PluginShareUpdateDiscoverability": {
-      "enum": [
-        "UNLISTED",
-        "PRIVATE",
-        "LISTED"
-      ],
-      "type": "string"
-    },
-    "PluginShareUpdateTargetsParams": {
-      "properties": {
-        "discoverability": {
-          "$ref": "#/definitions/PluginShareUpdateDiscoverability"
-        },
-        "remotePluginId": {
-          "type": "string"
-        },
-        "shareTargets": {
-          "items": {
-            "$ref": "#/definitions/PluginShareTarget"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "discoverability",
-        "remotePluginId",
-        "shareTargets"
-      ],
-      "type": "object"
-    },
-    "PluginSkillReadParams": {
-      "properties": {
-        "remoteMarketplaceName": {
-          "type": "string"
-        },
-        "remotePluginId": {
-          "type": "string"
-        },
-        "skillName": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "remoteMarketplaceName",
-        "remotePluginId",
-        "skillName"
-      ],
-      "type": "object"
     },
     "PluginUninstallParams": {
       "properties": {
@@ -3001,80 +2559,6 @@
           ],
           "title": "CustomGatewayProviderSettingsPatch",
           "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "AWS configuration fields for built-in Bedrock providers.",
-          "properties": {
-            "profile": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "providerId": {
-              "$ref": "#/definitions/BedrockProviderId"
-            },
-            "region": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "bedrock"
-              ],
-              "title": "BedrockProviderSettingsPatchType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "providerId",
-            "type"
-          ],
-          "title": "BedrockProviderSettingsPatch",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "GCP configuration fields. Credential-file paths refer to the app-server host.",
-          "properties": {
-            "credentialFile": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "location": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "projectId": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "providerId": {
-              "$ref": "#/definitions/GcpProviderId"
-            },
-            "type": {
-              "enum": [
-                "gcp"
-              ],
-              "title": "GcpProviderSettingsPatchType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "providerId",
-            "type"
-          ],
-          "title": "GcpProviderSettingsPatch",
-          "type": "object"
         }
       ]
     },
@@ -3170,22 +2654,6 @@
           "type": "string"
         }
       ]
-    },
-    "RemoteControlDisableParams": {
-      "properties": {
-        "ephemeral": {
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "RemoteControlEnableParams": {
-      "properties": {
-        "ephemeral": {
-          "type": "boolean"
-        }
-      },
-      "type": "object"
     },
     "RequestId": {
       "anyOf": [
@@ -4378,17 +3846,6 @@
       "required": [
         "id",
         "location"
-      ],
-      "type": "object"
-    },
-    "SendAddCreditsNudgeEmailParams": {
-      "properties": {
-        "creditType": {
-          "$ref": "#/definitions/AddCreditsNudgeCreditType"
-        }
-      },
-      "required": [
-        "creditType"
       ],
       "type": "object"
     },
@@ -7372,30 +6829,6 @@
         },
         "method": {
           "enum": [
-            "plugin/reconcile"
-          ],
-          "title": "Plugin/reconcileRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginReconcileParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/reconcileRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
             "plugin/read"
           ],
           "title": "Plugin/readRequestMethod",
@@ -7411,150 +6844,6 @@
         "params"
       ],
       "title": "Plugin/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/skill/read"
-          ],
-          "title": "Plugin/skill/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginSkillReadParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/skill/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/share/save"
-          ],
-          "title": "Plugin/share/saveRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginShareSaveParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/share/saveRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/share/updateTargets"
-          ],
-          "title": "Plugin/share/updateTargetsRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginShareUpdateTargetsParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/share/updateTargetsRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/share/list"
-          ],
-          "title": "Plugin/share/listRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginShareListParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/share/listRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/share/checkout"
-          ],
-          "title": "Plugin/share/checkoutRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginShareCheckoutParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/share/checkoutRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "plugin/share/delete"
-          ],
-          "title": "Plugin/share/deleteRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/PluginShareDeleteParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Plugin/share/deleteRequest",
       "type": "object"
     },
     {
@@ -8044,89 +7333,6 @@
         },
         "method": {
           "enum": [
-            "account/gatewayOAuth/read"
-          ],
-          "title": "Account/gatewayOAuth/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/GatewayOAuthReadParams"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/gatewayOAuth/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/gatewayOAuth/login"
-          ],
-          "title": "Account/gatewayOAuth/loginRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/GatewayOAuthLoginParams"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/gatewayOAuth/loginRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/gatewayOAuth/cancel"
-          ],
-          "title": "Account/gatewayOAuth/cancelRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "type": "null"
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/gatewayOAuth/cancelRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
             "modelProvider/list"
           ],
           "title": "ModelProvider/listRequestMethod",
@@ -8499,160 +7705,6 @@
         "method"
       ],
       "title": "Account/logoutRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/securitySetup/read"
-          ],
-          "title": "Account/securitySetup/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "type": "null"
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/securitySetup/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/rateLimits/read"
-          ],
-          "title": "Account/rateLimits/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/GetAccountRateLimitsParams"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/rateLimits/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/rateLimitResetCredit/consume"
-          ],
-          "title": "Account/rateLimitResetCredit/consumeRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/ConsumeAccountRateLimitResetCreditParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Account/rateLimitResetCredit/consumeRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/usage/read"
-          ],
-          "title": "Account/usage/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/GetAccountTokenUsageParams"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/usage/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/workspaceMessages/read"
-          ],
-          "title": "Account/workspaceMessages/readRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "type": "null"
-        }
-      },
-      "required": [
-        "id",
-        "method"
-      ],
-      "title": "Account/workspaceMessages/readRequest",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "enum": [
-            "account/sendAddCreditsNudgeEmail"
-          ],
-          "title": "Account/sendAddCreditsNudgeEmailRequestMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/SendAddCreditsNudgeEmailParams"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "Account/sendAddCreditsNudgeEmailRequest",
       "type": "object"
     },
     {

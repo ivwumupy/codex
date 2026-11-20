@@ -1138,7 +1138,6 @@ mod tests {
     use super::emit_hook_completed_events;
     use super::emit_hook_started_events;
     use super::hook_run_metric_tags;
-    use crate::session::tests::make_session_and_context;
     use crate::session::tests::make_session_and_context_with_rx;
     use codex_protocol::protocol::HookCompletedEvent;
     use codex_protocol::protocol::HookRunSummary;

@@ -12,8 +12,6 @@ use codex_otel::SkillInvocationEvent;
 use codex_otel::SkillInvocationType;
 use codex_otel::sanitize_metric_tag_value;
 use codex_protocol::protocol::SkillScope;
-use codex_protocol::skill_invocation::InvocationType;
-use codex_protocol::skill_invocation::SkillInvocation;
 use codex_protocol::skill_invocation::SkillInvocationLocation;
 use codex_skills::SkillMetadata;
 use codex_skills_extension::HostSkillsLoadInput;

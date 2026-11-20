@@ -44,7 +44,6 @@ use std::collections::BTreeMap;
 use tempfile::TempDir;
 use test_case::test_case;
 use tokio::time::timeout;
-use wiremock::ResponseTemplate;
 
 // macOS and Windows Bazel CI can spend tens of seconds starting app-server
 // subprocesses or processing test RPCs under load.

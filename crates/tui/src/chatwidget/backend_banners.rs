@@ -18,6 +18,7 @@ use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::popup_consts::accept_cancel_hint_line;
 use crate::keymap::ListAction;
 use crate::model_catalog::LUNA_RESERVE_MODEL;
+#[cfg(test)]
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
@@ -309,6 +310,7 @@ impl ChatWidget {
         self.refresh_backend_banner_visibility();
     }
 
+    #[cfg(test)]
     pub(crate) fn update_backend_banner(&mut self, response: &GetAccountRateLimitsResponse) {
         self.observe_backend_banner_view();
         self.backend_banner_state.account_id = response.account_id.clone();
@@ -431,8 +433,6 @@ impl ChatWidget {
         });
         self.backend_banner_state.presented = banner.cloned();
         if content.is_some() {
-            self.bottom_pane
-                .dismiss_view_by_id(super::rate_limits::WORKSPACE_NUDGE_VIEW_ID);
             if self
                 .bottom_pane
                 .dismiss_view_by_id(super::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID)
@@ -447,7 +447,6 @@ impl ChatWidget {
         }
         self.bottom_pane
             .dismiss_view_by_id(LUNA_RESERVE_RECOVERY_VIEW_ID);
-        self.clear_security_setup_banner();
         match (is_reserve, content) {
             (true, Some(content)) => {
                 self.bottom_pane.set_inline_banner(/*banner*/ None);
@@ -517,7 +516,6 @@ impl ChatWidget {
     }
 
     pub(crate) fn clear_backend_banner(&mut self) {
-        self.clear_security_setup_banner();
         self.backend_banner_state = BackendBannerState::default();
         self.backend_banner_notice_model = None;
         self.bottom_pane

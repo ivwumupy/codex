@@ -1,13 +1,19 @@
+#[cfg(test)]
 use codex_execpolicy::Decision as ExecPolicyDecision;
+#[cfg(test)]
 use codex_execpolicy::NetworkRuleProtocol as ExecPolicyNetworkRuleProtocol;
 use codex_network_proxy::BlockedRequest;
 use codex_network_proxy::NetworkPolicyDecision;
 use codex_protocol::approvals::NetworkApprovalContext;
+#[cfg(test)]
 use codex_protocol::approvals::NetworkApprovalProtocol;
+#[cfg(test)]
 use codex_protocol::approvals::NetworkPolicyAmendment;
+#[cfg(test)]
 use codex_protocol::approvals::NetworkPolicyRuleAction;
 use codex_protocol::network_policy::NetworkPolicyDecisionPayload;
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExecPolicyNetworkRuleAmendment {
     pub protocol: ExecPolicyNetworkRuleProtocol,
@@ -71,6 +77,7 @@ pub(crate) fn denied_network_policy_message(blocked: &BlockedRequest) -> Option<
     ))
 }
 
+#[cfg(test)]
 pub(crate) fn execpolicy_network_rule_amendment(
     amendment: &NetworkPolicyAmendment,
     network_approval_context: &NetworkApprovalContext,

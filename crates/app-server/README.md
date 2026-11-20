@@ -306,7 +306,7 @@ context before calling. Verify does not require a pending elicitation; a UI with
 its own authenticator can return proof directly in elicitation response content.
 The calling flow owns pending-request checks and discards late proofs.
 Native enroll, delete, and verify accept local stdio and in-process connections.
-WebSocket and remote-control peers must use their own device authenticator;
+WebSocket peers must use their own device authenticator;
 status remains available for local readiness. Dropping an embedded RPC, disconnecting,
 or changing authentication cancels its native operation. Responses recheck the
 captured identity after waiting for outbound queue capacity.
@@ -461,17 +461,15 @@ Attachment creation and deletion requests using the same thread ID are serialize
 
 # Thread plugin settings
 
-Plugin summaries returned by `plugin/list`, `plugin/installed`, `plugin/read`,
-and `plugin/share/list` report effective `enabled` state. When
+Plugin summaries returned by `plugin/list`, `plugin/installed`,
+and `plugin/read` report effective `enabled` state. When
 `plugins._default.enabled` is configured, an explicit
 `plugins."<plugin-name>@<marketplace-name>".enabled` overrides that default;
 a plugin disabled at its source remains disabled. Omitting the default preserves
-existing source and account enablement. Other plugin settings, including remembered
+existing source enablement. Other plugin settings, including remembered
 tool approvals, inherit the activation default unless `enabled` is explicitly set.
 `plugin/search` retains its discovery behavior: results report `enabled: false`
 while preserving their installation state.
-Remote `plugin/install` still installs a policy-disabled package, but skips MCP and
-Apps authentication setup without writing an `enabled` override.
 
 `thread/settings/update` and `turn/start` accept `disabledPluginIds`, a list of
 `PluginSummary.id` values from `plugin/list`, in the

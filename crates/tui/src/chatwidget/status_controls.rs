@@ -296,6 +296,7 @@ impl ChatWidget {
         });
     }
 
+    #[cfg(test)]
     pub(crate) fn finish_status_rate_limit_refresh(
         &mut self,
         request_id: u64,

@@ -1,7 +1,6 @@
-//! Bounded byte-exact secret substitution after destination authorization, before signing.
+//! Bounded byte-exact secret substitution after destination authorization.
 //! Placeholder bindings and resolved secret values are private to the trusted proxy.
 
-use crate::aws_sigv4::ProxySecretSource;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -15,6 +14,40 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::time::Duration;
+
+/// A credential source in the trusted proxy process, never in the executor environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProxySecretSource {
+    EnvVar(String),
+    File(String),
+}
+
+impl ProxySecretSource {
+    pub(crate) fn validate(&self) -> Result<()> {
+        match self {
+            Self::EnvVar(name) if !name.is_empty() && !name.contains(['=', '\0']) => Ok(()),
+            Self::File(path) if std::path::Path::new(path).is_absolute() => Ok(()),
+            Self::EnvVar(_) | Self::File(_) => Err(anyhow!("invalid proxy secret source")),
+        }
+    }
+
+    pub(crate) fn resolve(
+        &self,
+        env: &impl Fn(&str) -> Option<String>,
+        file: &impl Fn(&AbsolutePathBuf) -> Result<String>,
+    ) -> Result<String> {
+        self.validate()?;
+        let value = match self {
+            Self::EnvVar(name) => env(name).ok_or_else(|| anyhow!("missing proxy credential"))?,
+            Self::File(path) => file(&AbsolutePathBuf::from_absolute_path(path)?)?,
+        };
+        if value.is_empty() || value.len() > 65_536 {
+            return Err(anyhow!("proxy credential is empty or exceeds 64 KiB"));
+        }
+        Ok(value)
+    }
+}
 
 // Bound the worst-case number of bytes compared by the placeholder window scans.
 const MAX_SUBSTITUTION_SEARCH_BYTES: usize = 256 * 1024 * 1024;

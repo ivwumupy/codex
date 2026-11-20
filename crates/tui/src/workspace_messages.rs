@@ -1,4 +1,6 @@
+#[cfg(test)]
 use codex_app_server_protocol::GetWorkspaceMessagesResponse;
+#[cfg(test)]
 use codex_app_server_protocol::WorkspaceMessageType;
 use std::time::Duration;
 
@@ -6,10 +8,12 @@ pub(crate) const WORKSPACE_HEADLINE_REFRESH_INTERVAL: Duration = Duration::from_
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum WorkspaceHeadlineFetchResult {
+    #[cfg(test)]
     Available(Option<String>),
     FeatureDisabled,
 }
 
+#[cfg(test)]
 pub(crate) fn workspace_headline_from_response(
     response: GetWorkspaceMessagesResponse,
 ) -> WorkspaceHeadlineFetchResult {

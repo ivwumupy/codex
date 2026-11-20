@@ -535,8 +535,6 @@ async fn stored_agent_identity_jwt_keeps_auth_json_unchanged() -> anyhow::Result
             last_refresh: None,
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity.clone())),
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::Direct,
@@ -617,8 +615,6 @@ async fn login_with_access_token_writes_only_personal_access_token() {
             last_refresh: None,
             agent_identity: None,
             personal_access_token: Some("at-login-test".to_string()),
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         }
     );
     assert_eq!(auth.resolved_mode(), AuthMode::PersonalAccessToken);
@@ -1263,8 +1259,6 @@ async fn pro_account_with_no_api_key_uses_chatgpt_auth() {
             last_refresh: Some(last_refresh),
             agent_identity: None,
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         },
         auth_dot_json
     );
@@ -1344,8 +1338,6 @@ fn logout_removes_auth_file() -> Result<(), std::io::Error> {
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
-        bedrock_api_key: None,
-        bedrock_access_keys: None,
     };
     super::save_auth(
         dir.path(),
@@ -2798,8 +2790,6 @@ async fn workspace_policy_rejects_agent_identity_before_hydration() {
                 last_refresh: None,
                 agent_identity: Some(stored_agent_identity),
                 personal_access_token: None,
-                bedrock_api_key: None,
-                bedrock_access_keys: None,
             },
             AuthCredentialsStoreMode::File,
             AuthKeyringBackendKind::Direct,
@@ -3040,8 +3030,6 @@ async fn enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismat
             last_refresh: None,
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity)),
             personal_access_token: None,
-            bedrock_api_key: None,
-            bedrock_access_keys: None,
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),

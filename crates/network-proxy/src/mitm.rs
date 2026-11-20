@@ -285,7 +285,6 @@ async fn handle_mitm_request(
     mut req: Request,
     request_ctx: Arc<MitmRequestContext>,
 ) -> Result<Response, std::convert::Infallible> {
-    crate::aws_sigv4::preserve_signing_headers(&mut req);
     crate::secret_substitution::preserve_body_substitution_headers(&mut req);
     let response = match (request_ctx.policy.scheme == Scheme::HTTPS)
         .then(RemoveRequestHeaderLayer::hop_by_hop)
@@ -315,27 +314,10 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         MitmPolicyDecision::Block(response) => return Ok(response),
     };
 
-    // Select the credential from the guest's headers before injecting or stripping anything.
-    let mut signing = None;
     let client = req
         .extensions()
         .get::<SocketInfo>()
         .map(|info| info.peer_addr().to_string());
-    if let Some(signer) = hook_actions
-        .as_ref()
-        .and_then(|actions| actions.aws_sigv4.as_ref())
-    {
-        match signer.plan(&req) {
-            Ok(Some(guest)) => signing = Some((signer, guest)),
-            Ok(None) => {}
-            Err(_) => {
-                return Ok(request_ctx
-                    .policy
-                    .deny_hook(req.method().as_str(), client)
-                    .await);
-            }
-        }
-    }
     let target_host = request_ctx.policy.target_host.clone();
     let target_port = request_ctx.policy.target_port;
     let mitm = request_ctx.mitm.clone();
@@ -386,12 +368,6 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             return Ok(request_ctx.policy.deny_hook(&method, client).await);
         };
         upstream_req = substituted;
-    }
-    if let Some((signer, guest)) = signing {
-        let Ok(signed) = signer.sign(upstream_req, &guest).await else {
-            return Ok(request_ctx.policy.deny_hook(&method, client).await);
-        };
-        upstream_req = signed;
     }
     if let Some(policy) = &request_ctx.dial_policy {
         upstream_req.extensions_mut().insert(policy.clone());

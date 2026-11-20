@@ -48,7 +48,6 @@ pub struct PluginStore {
 }
 
 pub(crate) struct ActivePluginInstallation {
-    pub(crate) plugin_id: PluginId,
     pub(crate) root: AbsolutePathBuf,
     remote_plugin_install_metadata_path: AbsolutePathBuf,
 }
@@ -163,7 +162,6 @@ impl PluginStore {
         plugin_id: &PluginId,
     ) -> Option<ActivePluginInstallation> {
         Some(ActivePluginInstallation {
-            plugin_id: plugin_id.clone(),
             root: self.active_plugin_root(plugin_id)?,
             remote_plugin_install_metadata_path: self
                 .remote_plugin_install_metadata_path(plugin_id),

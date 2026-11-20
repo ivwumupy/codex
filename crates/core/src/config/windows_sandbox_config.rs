@@ -4,18 +4,23 @@
 //! Validate MXC requirements only after bootstrap has loaded the complete config.
 
 use super::Config;
+#[cfg(test)]
 use super::EffectivePermissionSelection;
 use super::apply_requirement_constrained_value;
 use super::network_proxy_toml_config;
+#[cfg(test)]
 use super::permissions::network_proxy_config_for_profile_selection;
+#[cfg(test)]
 use super::profile_allows_configured_network_proxy;
 use codex_config::ConstrainedWithSource;
 use codex_config::NetworkConstraints;
 use codex_config::Sourced;
+#[cfg(test)]
 use codex_config::config_toml::ConfigToml;
 use codex_config::types::WindowsSandboxModeToml;
 use codex_features::FeaturesToml;
 use codex_protocol::config_types::WindowsSandboxLevel;
+#[cfg(test)]
 use codex_protocol::models::PermissionProfile;
 use codex_sandboxing::SandboxType;
 
@@ -125,6 +130,7 @@ pub fn prepare_windows_sandbox_config(
     })
 }
 
+#[cfg(test)]
 /// Preserve ordinary and managed MXC opt-outs plus network binding denials.
 pub(super) fn config_allows_mxc(
     windows_sandbox_mode: &ConstrainedWithSource<Option<WindowsSandboxModeToml>>,

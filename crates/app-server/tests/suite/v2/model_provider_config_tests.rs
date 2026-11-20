@@ -280,7 +280,7 @@ async fn cloud_provider_patches_are_rejected_without_writing_config() -> Result<
         let error = server
             .read_stream_until_error_message(RequestId::Integer(write))
             .await?;
-        assert!(error.error.message.contains("unsupported"));
+        assert!(error.error.message.contains("unknown variant"), "{error:?}");
         assert_eq!(std::fs::read_to_string(&config_path)?, config);
     }
     Ok(())

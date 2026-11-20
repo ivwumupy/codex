@@ -376,7 +376,7 @@ async fn default_turn_context_assigns_missing_response_item_ids() {
             tools: Arc::from([]),
         },
     ];
-    let (items, _) = session
+    let items = session
         .prepare_conversation_items_for_history(&turn_context, turn_context.model_info(), &items)
         .await;
 
@@ -10438,92 +10438,6 @@ async fn record_context_update_items(
     history.raw_items().skip(previous_len).cloned().collect()
 }
 
-#[tokio::test]
-async fn build_initial_context_reuses_in_flight_recommendation_prewarm() {
-    use wiremock::Mock;
-    use wiremock::ResponseTemplate;
-    use wiremock::matchers::method;
-    use wiremock::matchers::path;
-    use wiremock::matchers::query_param;
-
-    core_test_support::skip_if_no_network!();
-
-    let server = start_mock_server().await;
-    Mock::given(method("GET"))
-        .and(path("/ps/plugins/suggested/codex"))
-        .and(query_param("scope", "GLOBAL"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "enabled": true,
-            "plugins": [{
-                "id": "plugin_github",
-                "name": "github",
-                "display_name": "GitHub"
-            }]
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-    let (session, turn_context, _rx_event) = make_session_and_context_with_auth_and_config_and_rx(
-        CodexAuth::create_dummy_chatgpt_auth_for_testing(),
-        /*dynamic_tools*/ Vec::new(),
-        |config| {
-            config.chatgpt_base_url = server.uri();
-            config
-                .features
-                .disable(Feature::ToolSuggest)
-                .expect("test config should allow feature update");
-            for enabled_feature in [
-                Feature::Apps,
-                Feature::Plugins,
-                Feature::RemotePlugin,
-                Feature::RecommendedPlugins,
-            ] {
-                config
-                    .features
-                    .enable(enabled_feature)
-                    .expect("test config should allow feature update");
-            }
-        },
-    )
-    .await;
-    let plugins_manager = &session.services.plugins_manager;
-    let plugins_config = turn_context.config.plugins_config_input();
-    let auth = session.services.auth_manager.auth().await;
-    // Cached plugin loading and auth let initial context reach the shared recommendation lookup
-    // without awaiting unrelated I/O.
-    plugins_manager.plugins_for_config(&plugins_config).await;
-    let prewarm =
-        plugins_manager.recommended_plugins_mode_for_config(&plugins_config, auth.as_ref());
-    tokio::pin!(prewarm);
-    assert!(futures::poll!(prewarm.as_mut()).is_pending());
-
-    // Keep the OnceCell initializer unpolled while first-thread context joins its in-flight fetch.
-    // This does not depend on how quickly the HTTP server returns its response.
-    let world_state = WorldState::default();
-    let step_context = StepContext::for_test(Arc::clone(&turn_context));
-    let initial_context =
-        session.build_initial_context_with_world_state(&step_context, &world_state);
-    tokio::pin!(initial_context);
-    assert!(futures::poll!(initial_context.as_mut()).is_pending());
-
-    let (_, (initial_context, _)) = tokio::join!(prewarm, initial_context);
-    let initial_context =
-        crate::context_manager::updates::merge_world_state_updates(initial_context);
-    assert_eq!(
-        developer_input_texts(&initial_context)
-            .into_iter()
-            .filter(|text| text.starts_with("<recommended_plugins>"))
-            .collect::<Vec<_>>(),
-        vec![concat!(
-            "<recommended_plugins>\n",
-            "Here is a list of plugins that are available but not installed.\n\n",
-            "- GitHub (github@openai-curated-remote)\n",
-            "</recommended_plugins>",
-        )]
-    );
-    server.verify().await;
-}
-
 async fn make_multi_agent_v2_usage_hint_test_session(
     enable_multi_agent_v2: bool,
 ) -> (Arc<Session>, Arc<TurnContext>) {
@@ -10925,7 +10839,7 @@ async fn turn_context_item_preserves_file_system_restrictions() {
     let permission_profile = PermissionProfile::from_runtime_permissions_with_enforcement(
         turn_context.permission_profile().enforcement(),
         &file_system_sandbox_policy,
-        turn_context.network_sandbox_policy(),
+        turn_context.permission_profile().network_sandbox_policy(),
     );
     let TurnEnvironmentState::Ready(environment) =
         &mut turn_context.initial_environments.environments[0]
@@ -11097,7 +11011,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_permissi
     let permission_profile = PermissionProfile::from_runtime_permissions_with_enforcement(
         turn_context.permission_profile().enforcement(),
         &file_system_sandbox_policy,
-        turn_context.network_sandbox_policy(),
+        turn_context.permission_profile().network_sandbox_policy(),
     );
     let TurnEnvironmentState::Ready(environment) =
         &mut turn_context.initial_environments.environments[0]

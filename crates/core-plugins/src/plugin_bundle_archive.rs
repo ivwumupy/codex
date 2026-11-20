@@ -1,16 +1,22 @@
+#[cfg(test)]
 use crate::manifest::load_plugin_manifest;
+#[cfg(test)]
 use flate2::Compression;
 use flate2::read::GzDecoder;
+#[cfg(test)]
 use flate2::write::GzEncoder;
+#[cfg(test)]
 use std::fmt;
 use std::fs;
 use std::io;
 use std::io::Read;
+#[cfg(test)]
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
 
+#[cfg(test)]
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PluginBundlePackError {
     #[error("invalid plugin path `{path}`: {reason}")]
@@ -50,6 +56,7 @@ impl PluginBundleUnpackError {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn pack_plugin_bundle_tar_gz(
     plugin_path: &Path,
     max_bytes: usize,
@@ -79,6 +86,7 @@ pub(crate) fn pack_plugin_bundle_tar_gz(
         .map_err(archive_io_error)
 }
 
+#[cfg(test)]
 fn append_plugin_tree<W: Write>(
     archive: &mut tar::Builder<W>,
     plugin_root: &Path,
@@ -110,6 +118,7 @@ fn append_plugin_tree<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
 fn archive_io_error(source: io::Error) -> PluginBundlePackError {
     if let Some(limit) = source
         .get_ref()
@@ -257,11 +266,13 @@ fn enforce_total_extracted_size(
     Ok(())
 }
 
+#[cfg(test)]
 struct SizeLimitedBuffer {
     bytes: Vec<u8>,
     max_bytes: usize,
 }
 
+#[cfg(test)]
 impl SizeLimitedBuffer {
     fn new(max_bytes: usize) -> Self {
         Self {
@@ -275,6 +286,7 @@ impl SizeLimitedBuffer {
     }
 }
 
+#[cfg(test)]
 impl Write for SizeLimitedBuffer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let next_len = self.bytes.len().checked_add(buf.len()).ok_or_else(|| {
@@ -299,12 +311,14 @@ impl Write for SizeLimitedBuffer {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 struct ArchiveSizeLimitExceeded {
     bytes: usize,
     max_bytes: usize,
 }
 
+#[cfg(test)]
 impl fmt::Display for ArchiveSizeLimitExceeded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -315,6 +329,7 @@ impl fmt::Display for ArchiveSizeLimitExceeded {
     }
 }
 
+#[cfg(test)]
 impl std::error::Error for ArchiveSizeLimitExceeded {}
 
 #[cfg(test)]

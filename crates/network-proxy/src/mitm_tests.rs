@@ -30,7 +30,6 @@ fn github_write_hook() -> crate::mitm_hook::MitmHookConfig {
         },
         actions: crate::mitm_hook::MitmHookActionsConfig {
             body_secret_substitution: None,
-            aws_sigv4: None,
             strip_request_headers: vec!["authorization".to_string()],
             inject_request_headers: vec![crate::mitm_hook::InjectedHeaderConfig {
                 placeholder: None,
@@ -574,7 +573,6 @@ fn request_credentials_apply_hook_after_brokerage() {
     secret.set_sensitive(true);
     let actions = crate::mitm_hook::MitmHookActions {
         body_secret_substitution: None,
-        aws_sigv4: None,
         strip_request_headers: vec![HeaderName::from_static("authorization")],
         inject_request_headers: vec![crate::mitm_hook::ResolvedInjectedHeader {
             placeholder: Some(placeholder),

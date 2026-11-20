@@ -1,7 +1,6 @@
 use crate::context::UserGoalUpdate;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Instant;
 
 use crate::Prompt;
 use crate::client::ModelClientSession;
@@ -37,7 +36,6 @@ use codex_protocol::compaction::CompactionImplementation;
 use codex_protocol::compaction::CompactionPhase;
 use codex_protocol::compaction::CompactionReason;
 
-use codex_protocol::compaction::CompactionStrategy;
 use codex_protocol::compaction::CompactionTrigger;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
@@ -51,7 +49,6 @@ use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::time::now_unix_seconds;
 use codex_protocol::user_input::UserInput;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_utils_output_truncation::approx_token_count;

@@ -196,17 +196,6 @@ impl ChatWidget {
         let mut flex = FlexRenderable::new();
         flex.push(/*flex*/ 1, active_cell_renderable);
 
-        if let Some(cell) = self.pending_rate_limit_reset_hint() {
-            flex.push(
-                /*flex*/ 1,
-                RenderableItem::Owned(Box::new(TranscriptAreaRenderable {
-                    child: cell,
-                    top: 1,
-                    right: active_cell_right_reserve,
-                    persistent_layout: None,
-                })),
-            );
-        }
         flex.push(
             /*flex*/ 0,
             self.bottom_pane_renderable(crate::bottom_pane::ComposerRenderOptions::default())
@@ -311,18 +300,7 @@ impl ChatWidget {
         width: u16,
         render_cell: impl Fn(&dyn HistoryCell, u16) -> Vec<HyperlinkLine>,
     ) -> Option<Vec<HyperlinkLine>> {
-        let cells = self.transcript.active_cell.as_deref().into_iter().chain(
-            self.pending_rate_limit_reset_hint()
-                .map(|cell| cell as &dyn HistoryCell),
-        );
-        let mut lines = Vec::new();
-        for cell in cells {
-            let cell_lines = render_cell(cell, width);
-            if !cell_lines.is_empty() && !lines.is_empty() {
-                lines.push(HyperlinkLine::from(""));
-            }
-            lines.extend(cell_lines);
-        }
+        let lines = render_cell(self.transcript.active_cell.as_deref()?, width);
         (!lines.is_empty()).then_some(lines)
     }
 

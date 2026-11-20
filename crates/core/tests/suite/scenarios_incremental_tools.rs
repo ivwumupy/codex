@@ -5,9 +5,6 @@ use codex_core::ForkSnapshot;
 use codex_core::McpServersDisabled;
 use codex_core::compact::AutoCompactionDisabled;
 use codex_features::Feature;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
-use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_otel::MetricsClient;
 use codex_otel::MetricsConfig;
@@ -152,22 +149,15 @@ async fn prediction_fork_keeps_inherited_tools() -> Result<()> {
     Ok(())
 }
 
-#[test_case(true, None, true, OPENAI_PROVIDER_ID; "responses_lite")]
-#[test_case(true, Some(true), true, OPENAI_PROVIDER_ID; "announcements_suppressed")]
-#[test_case(false, None, false, OPENAI_PROVIDER_ID; "responses_api")]
-#[test_case(false, None, false, AMAZON_BEDROCK_PROVIDER_ID; "mantle_provider_id")]
-#[test_case(false, None, true, AMAZON_BEDROCK_PROVIDER_ID; "mantle_provider_id_incremental")]
-#[test_case(false, None, false, AMAZON_BEDROCK_RUNTIME_PROVIDER_ID; "runtime_provider_id")]
-#[test_case(false, None, true, AMAZON_BEDROCK_RUNTIME_PROVIDER_ID; "runtime_provider_id_incremental")]
-#[test_case(false, None, false, GCP_PROVIDER_ID; "gcp_provider_id")]
-#[test_case(false, None, true, GCP_PROVIDER_ID; "gcp_provider_id_incremental")]
+#[test_case(true, None; "responses_lite")]
+#[test_case(true, Some(true); "announcements_suppressed")]
+#[test_case(false, None; "responses_api")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn incremental_tools_append_changed_catalog_without_rewriting_history(
     use_responses_lite: bool,
     suppress_model_change_announcements: Option<bool>,
-    incremental_tools: bool,
-    provider_id: &'static str,
 ) -> Result<()> {
+    let incremental_tools = use_responses_lite;
     skip_if_no_network!(Ok(()));
     let server = responses::start_mock_server().await;
     let mock = responses::mount_sse_sequence(
@@ -213,17 +203,7 @@ async fn incremental_tools_append_changed_catalog_without_rewriting_history(
             }
         })
         .with_config(move |config| {
-            config.model_provider_id = provider_id.to_string();
-            if !use_responses_lite && incremental_tools {
-                config
-                    .features
-                    .disable(Feature::IncrementalTools)
-                    .expect("disable the Lite flag");
-                config
-                    .features
-                    .enable(Feature::IncrementalToolsLegacy)
-                    .expect("enable incremental tools on regular Responses");
-            }
+            config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
             if let Some(suppress) = suppress_model_change_announcements {
                 config
                     .features
@@ -311,15 +291,6 @@ async fn incremental_tools_append_changed_catalog_without_rewriting_history(
         }
         for request in &requests {
             let body = request.body_json();
-            if !use_responses_lite {
-                assert!(
-                    body["tools"]
-                        .as_array()
-                        .expect("hosted tools")
-                        .iter()
-                        .any(|tool| tool["type"] == "web_search")
-                );
-            }
             if let Some(tools) = body["tools"].as_array() {
                 assert!(tools.iter().all(|tool| tool["type"] == "web_search"));
             }
@@ -438,10 +409,8 @@ async fn incremental_tools_append_changed_catalog_without_rewriting_history(
     insta::assert_snapshot!(
         if suppress_model_change_announcements == Some(true) {
             "incremental_tools_suppressed_announcements"
-        } else if incremental_tools && use_responses_lite {
-            "incremental_tools"
         } else if incremental_tools {
-            "incremental_tools_regular_responses"
+            "incremental_tools"
         } else {
             "incremental_tools_responses_api"
         },
@@ -463,13 +432,11 @@ async fn incremental_tools_append_changed_catalog_without_rewriting_history(
     Ok(())
 }
 
-#[test_case(false, true; "bundled")]
-#[test_case(true, true; "catalog_messages")]
-#[test_case(false, false; "responses_api")]
+#[test_case(false; "bundled")]
+#[test_case(true; "catalog_messages")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
     catalog_messages: bool,
-    use_responses_lite: bool,
 ) -> Result<()> {
     skip_if_wine_exec!(
         Ok(()),
@@ -493,7 +460,7 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
     let restored_server = server_config(&["echo", "cwd"], "Echo service instructions.")?;
     let test = test_codex()
         .with_model_info_override("gpt-5.5", move |model| {
-            model.use_responses_lite = use_responses_lite;
+            model.use_responses_lite = true;
             model.supports_search_tool = false;
             model.tool_mode = Some(ToolMode::Direct);
             if catalog_messages {
@@ -516,16 +483,9 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
             }
         })
         .with_config(move |config| {
-            if !use_responses_lite {
-                config.model_provider_id = AMAZON_BEDROCK_PROVIDER_ID.to_string();
-            }
             config
                 .features
-                .enable(if use_responses_lite {
-                    Feature::IncrementalTools
-                } else {
-                    Feature::IncrementalToolsLegacy
-                })
+                .enable(Feature::IncrementalTools)
                 .expect("enable incremental tools");
             if catalog_messages {
                 config
@@ -682,11 +642,6 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
             "incremental_tool_removals",
             "MCP refreshes remove one tool, then its whole namespace, before restoring both tools. Removal notices append alone; restoration appends one developer notice before both namespace declarations. Unchanged turns do not repeat updates.",
         )
-    };
-    let snapshot_name = if use_responses_lite {
-        snapshot_name
-    } else {
-        "incremental_tool_removals_regular_responses"
     };
     insta::assert_snapshot!(
         snapshot_name,

@@ -2404,7 +2404,7 @@ async fn spawn_agent_reapplies_runtime_sandbox_after_role_config() {
         expected_file_system_sandbox_policy
     );
     assert_eq!(
-        child_turn.network_sandbox_policy(),
+        child_turn.permission_profile().network_sandbox_policy(),
         expected_network_sandbox_policy
     );
     assert_eq!(child_turn.permission_profile(), expected_permission_profile);

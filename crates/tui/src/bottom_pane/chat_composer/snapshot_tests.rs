@@ -8,14 +8,11 @@ use crate::bottom_pane::footer::FooterMode;
 use crate::key_hint;
 use crate::key_hint::ShortcutHint;
 use crate::keymap::RuntimeKeymap;
-use crate::render::renderable::Renderable;
 use codex_plugin::PluginCapabilitySummary;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
 use pretty_assertions::assert_eq;
-use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
 
 #[test]
 fn plugin_mention_uses_display_name_for_opaque_id() {
