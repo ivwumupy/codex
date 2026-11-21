@@ -155,8 +155,6 @@ pub enum Feature {
     CodeModeBufferedExec,
     /// Run JavaScript code mode in the standalone host process.
     CodeModeHost,
-    /// Use gRPC over stdio for the process-owned code-mode host.
-    CodeModeHostGrpc,
     /// Truncate output in the process-owned code-mode host before sending it to Core.
     CodeModeHostOutputTruncation,
     /// Establish the code-mode host connection during session startup.
@@ -1299,12 +1297,6 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::CodeModeHost,
         key: "code_mode_host",
-        stage: Stage::Stable,
-        default_enabled: true,
-    },
-    FeatureSpec {
-        id: Feature::CodeModeHostGrpc,
-        key: "code_mode_host_grpc",
         stage: Stage::Stable,
         default_enabled: true,
     },
