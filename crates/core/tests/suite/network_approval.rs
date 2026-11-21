@@ -115,8 +115,6 @@ use tokio::io::AsyncWriteExt;
 const NETWORK_TEST_HOST: &str = "codex-network-test.invalid";
 const NETWORK_TEST_TARGET: &str = "http://codex-network-test.invalid:80";
 
-#[test_case("experimental_network"; "legacy_requirements")]
-#[test_case("network_proxy"; "proxy_requirements")]
 #[test_case("permissions.network"; "canonical_requirements")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg_attr(
@@ -1139,8 +1137,6 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
     Ok(())
 }
 
-#[test_case("experimental_network"; "legacy_requirements")]
-#[test_case("network_proxy"; "proxy_requirements")]
 #[test_case("permissions.network"; "canonical_requirements")]
 #[tokio::test]
 #[cfg_attr(
@@ -1848,7 +1844,7 @@ async fn unattributed_network_request_uses_active_turn_environment_fallback(
                         .clone(),
                     windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                     windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                    use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                    use_legacy_landlock: false,
                     exec_policy: None,
                     mcp_policy: None,
                     network_policy: None,
@@ -2820,7 +2816,7 @@ async fn owner_network_policy_follows_the_selected_remote_command() -> Result<()
                 shell_environment_policy: test.config.permissions.shell_environment_policy.clone(),
                 windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                 windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                use_legacy_landlock: false,
                 exec_policy: None,
                 mcp_policy: None,
                 network_policy: Some(EnvironmentNetworkPolicy::from_config(
@@ -3046,7 +3042,7 @@ async fn escalated_owner_network_terminal_requires_stdin_approval(
         shell_environment_policy: test.config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         exec_policy: None,
         mcp_policy: None,
         network_policy: Some(EnvironmentNetworkPolicy::from_config(

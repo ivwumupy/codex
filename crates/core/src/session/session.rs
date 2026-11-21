@@ -1108,9 +1108,7 @@ impl Session {
             AgentControlInit::Local(control) => {
                 let control = control.with_session_id(
                     session_id,
-                    config
-                        .effective_agent_max_threads(MultiAgentVersion::V2)
-                        .unwrap_or(usize::MAX),
+                    config.max_spawned_agent_threads(),
                 );
                 if parent_thread_id.is_none() {
                     control.propagate_config_update(AgentConfigUpdate::ServiceTier(
@@ -1412,15 +1410,6 @@ impl Session {
             };
             let mut post_session_configured_events = Vec::<Event>::new();
 
-            for usage in config.features.legacy_feature_usages() {
-                post_session_configured_events.push(Event {
-                    id: INITIAL_SUBMIT_ID.to_owned(),
-                    msg: EventMsg::DeprecationNotice(DeprecationNoticeEvent {
-                        summary: usage.summary.clone(),
-                        details: usage.details.clone(),
-                    }),
-                });
-            }
             for message in &config.startup_warnings {
                 post_session_configured_events.push(Event {
                     id: "".to_owned(),
@@ -1540,7 +1529,6 @@ impl Session {
                 &config.permissions.effective_permission_profile(),
                 session_configuration.cwd().as_path(),
                 mcp_server_names.iter().map(String::as_str).collect(),
-                &crate::config::legacy_multi_agent_disabled_sources(&config.config_layer_stack),
             );
 
             let default_shell = session_configuration

@@ -25,19 +25,16 @@ use codex_app_server_protocol::ThreadStatus;
 use codex_app_server_protocol::ThreadUnarchiveParams;
 use codex_app_server_protocol::ThreadUnarchiveResponse;
 use codex_app_server_protocol::ThreadUnarchivedNotification;
-use codex_app_server_protocol::TurnCompletedNotification;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
 use codex_core::ARCHIVED_SESSIONS_SUBDIR;
 use codex_core::find_archived_thread_path_by_id_str;
 use codex_core::find_thread_path_by_id_str;
-use codex_features::Feature;
 use codex_protocol::ThreadId;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use codex_state::StateRuntime;
 use codex_utils_absolute_path::test_support::PathExt;
-use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -46,12 +43,6 @@ use tempfile::TempDir;
 use tokio::time::timeout;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-
-fn body_contains(request: &wiremock::Request, text: &str) -> bool {
-    String::from_utf8(request.body.clone())
-        .ok()
-        .is_some_and(|body| body.contains(text))
-}
 
 #[tokio::test]
 async fn thread_archive_rejects_owned_unmaterialized_paginated_descendant() -> Result<()> {
@@ -124,14 +115,9 @@ async fn thread_archive_rejects_owned_unmaterialized_paginated_descendant() -> R
 
 #[tokio::test]
 async fn thread_archive_shuts_down_resumed_archived_descendant() -> Result<()> {
-    const RESUME_PROMPT: &str = "resume the child";
-    const RESUME_CALL_ID: &str = "resume-call-1";
-
-    let server = responses::start_mock_server().await;
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::Collab)
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&server.uri()).write(codex_home.path())?;
     let parent_id = create_fake_paginated_rollout(
         codex_home.path(),
         "2025-01-01T00-00-00",
@@ -187,58 +173,16 @@ async fn thread_archive_shuts_down_resumed_archived_descendant() -> Result<()> {
         })
         .await?;
 
-    let resume_args = serde_json::to_string(&json!({ "id": child_thread_id }))?;
-    let _parent_resume = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| {
-            body_contains(request, RESUME_PROMPT) && !body_contains(request, RESUME_CALL_ID)
-        },
-        responses::sse(vec![
-            responses::ev_response_created("resp-parent-resume"),
-            responses::ev_function_call_with_namespace(
-                RESUME_CALL_ID,
-                "multi_agent_v1",
-                "resume_agent",
-                &resume_args,
-            ),
-            responses::ev_completed("resp-parent-resume"),
-        ]),
-    )
-    .await;
-    let _parent_resume_follow_up = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| body_contains(request, RESUME_CALL_ID),
-        responses::sse(vec![
-            responses::ev_response_created("resp-parent-resume-follow-up"),
-            responses::ev_assistant_message("msg-parent-resume", "parent done"),
-            responses::ev_completed("resp-parent-resume-follow-up"),
-        ]),
-    )
-    .await;
-
-    let _: TurnStartResponse = mcp
-        .request(|request_id| ClientRequest::TurnStart {
+    unarchive(&mut mcp, &child_id).await?;
+    let _: ThreadResumeResponse = mcp
+        .request(|request_id| ClientRequest::ThreadResume {
             request_id,
-            params: TurnStartParams {
-                thread_id: parent_id.clone(),
-                input: vec![UserInput::Text {
-                    text: RESUME_PROMPT.to_string(),
-                    text_elements: Vec::new(),
-                }],
+            params: ThreadResumeParams {
+                thread_id: child_id.clone(),
                 ..Default::default()
             },
         })
         .await?;
-    timeout(DEFAULT_READ_TIMEOUT, async {
-        loop {
-            let completed: TurnCompletedNotification =
-                mcp.read_notification("turn/completed").await?;
-            if completed.thread_id == parent_id {
-                return Ok::<(), anyhow::Error>(());
-            }
-        }
-    })
-    .await??;
 
     let ThreadLoadedListResponse { data, .. } = mcp
         .request(|request_id| ClientRequest::ThreadLoadedList {

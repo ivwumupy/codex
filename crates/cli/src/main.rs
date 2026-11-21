@@ -90,7 +90,7 @@ use codex_core::config::find_codex_home;
 use codex_core::config::resolve_profile_v2_config_path;
 use codex_features::FEATURES;
 use codex_features::Stage;
-use codex_features::is_known_feature_key;
+use codex_features::feature_enabled_key;
 use codex_home::CodexHomeUserInstructionsProvider;
 use codex_login::AuthManager;
 use codex_memories_write::clear_memory_roots_contents;
@@ -443,22 +443,6 @@ impl clap::FromArgMatches for SessionTuiCli {
 struct LoginCommand {
     #[clap(skip)]
     config_overrides: CliConfigOverrides,
-
-    #[arg(
-        long = "with-api-key",
-        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`)"
-    )]
-    with_api_key: bool,
-
-    #[arg(
-        long = "api-key",
-        num_args = 0..=1,
-        default_missing_value = "",
-        value_name = "API_KEY",
-        help = "(deprecated) Previously accepted the API key directly; now exits with guidance to use --with-api-key",
-        hide = true
-    )]
-    api_key: Option<String>,
 
     #[command(subcommand)]
     action: Option<LoginSubcommand>,
@@ -843,11 +827,11 @@ async fn run_debug_app_server_command(cmd: DebugAppServerCommand) -> anyhow::Res
 
 #[derive(Debug, Default, Parser, Clone)]
 struct FeatureToggles {
-    /// Enable a feature (repeatable). Equivalent to `-c features.<name>=true`.
+    /// Enable a feature (repeatable).
     #[arg(long = "enable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     enable: Vec<String>,
 
-    /// Disable a feature (repeatable). Equivalent to `-c features.<name>=false`.
+    /// Disable a feature (repeatable).
     #[arg(long = "disable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     disable: Vec<String>,
 }
@@ -871,17 +855,17 @@ impl FeatureToggles {
         let mut v = Vec::new();
         for feature in &self.enable {
             Self::validate_feature(feature)?;
-            v.push(format!("features.{feature}=true"));
+            v.push(format!("{}=true", feature_enabled_key(feature)));
         }
         for feature in &self.disable {
             Self::validate_feature(feature)?;
-            v.push(format!("features.{feature}=false"));
+            v.push(format!("{}=false", feature_enabled_key(feature)));
         }
         Ok(v)
     }
 
     fn validate_feature(feature: &str) -> anyhow::Result<()> {
-        if is_known_feature_key(feature) {
+        if codex_features::feature_for_key(feature).is_some() {
             Ok(())
         } else {
             anyhow::bail!("Unknown feature flag: {feature}")
@@ -916,8 +900,6 @@ fn stage_str(stage: Stage) -> &'static str {
         Stage::UnderDevelopment => "under development",
         Stage::Experimental { .. } => "experimental",
         Stage::Stable => "stable",
-        Stage::Deprecated => "deprecated",
-        Stage::Removed => "removed",
     }
 }
 
@@ -1499,15 +1481,8 @@ async fn dispatch_cli(
                     run_login_status(login_cli.config_overrides).await;
                 }
                 None => {
-                    if login_cli.api_key.is_some() {
-                        eprintln!(
-                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`."
-                        );
-                        std::process::exit(1);
-                    } else {
                         let api_key = read_api_key_from_stdin();
                         run_login_with_api_key(login_cli.config_overrides, api_key).await;
-                    }
                 }
             }
         }
@@ -2869,15 +2844,15 @@ mod tests {
             "--ask-for-approval",
             "--approve-for-me",
             "--not-so-yolo",
+            "--yolo",
+            "--dangerously-bypass-approvals-and-sandbox",
         ] {
             for args in [vec!["codex", flag], vec!["codex", "exec", flag]] {
                 let err = MultitoolCli::try_parse_from(args).expect_err("removed mode");
                 assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
             }
         }
-        for args in [vec!["codex"], vec!["codex", "--yolo"]] {
-            assert!(MultitoolCli::try_parse_from(args).is_ok());
-        }
+        assert!(MultitoolCli::try_parse_from(["codex"]).is_ok());
     }
 
     fn app_server_from_args(args: &[&str]) -> AppServerCommand {
@@ -3491,22 +3466,6 @@ mod tests {
         assert!(!interactive.resume_picker);
         assert!(!interactive.resume_last);
         assert_eq!(interactive.resume_session_id.as_deref(), Some("sid"));
-    }
-
-    #[test]
-    fn resume_merges_dangerously_bypass_flag() {
-        let interactive = finalize_resume_from_args(
-            [
-                "codex",
-                "resume",
-                "--dangerously-bypass-approvals-and-sandbox",
-            ]
-            .as_ref(),
-        );
-        assert!(interactive.dangerously_bypass_approvals_and_sandbox);
-        assert!(interactive.resume_picker);
-        assert!(!interactive.resume_last);
-        assert_eq!(interactive.resume_session_id, None);
     }
 
     #[test]
@@ -4141,63 +4100,17 @@ mod tests {
     #[test]
     fn feature_toggles_known_features_generate_overrides() {
         let toggles = FeatureToggles {
-            enable: vec!["web_search_request".to_string()],
+            enable: vec!["code_mode".to_string()],
             disable: vec!["unified_exec".to_string()],
         };
         let overrides = toggles.to_overrides().expect("valid features");
         assert_eq!(
             overrides,
             vec![
-                "features.web_search_request=true".to_string(),
+                "features.code_mode.enabled=true".to_string(),
                 "features.unified_exec=false".to_string(),
             ]
         );
-    }
-
-    #[test]
-    fn feature_toggles_accept_legacy_linux_sandbox_flag() {
-        let toggles = FeatureToggles {
-            enable: vec!["use_linux_sandbox_bwrap".to_string()],
-            disable: Vec::new(),
-        };
-        let overrides = toggles.to_overrides().expect("valid features");
-        assert_eq!(
-            overrides,
-            vec!["features.use_linux_sandbox_bwrap=true".to_string(),]
-        );
-    }
-
-    #[test]
-    fn feature_toggles_accept_removed_image_detail_original_flag() {
-        let toggles = FeatureToggles {
-            enable: vec!["image_detail_original".to_string()],
-            disable: Vec::new(),
-        };
-        let overrides = toggles.to_overrides().expect("valid features");
-        assert_eq!(
-            overrides,
-            vec!["features.image_detail_original=true".to_string(),]
-        );
-    }
-
-    #[test]
-    fn feature_toggles_accept_removed_enable_fanout_flag() {
-        let toggles = FeatureToggles {
-            enable: vec!["enable_fanout".to_string()],
-            disable: Vec::new(),
-        };
-        let overrides = toggles.to_overrides().expect("valid features");
-        assert_eq!(overrides, vec!["features.enable_fanout=true".to_string(),]);
-    }
-
-    #[test]
-    fn feature_toggles_accept_removed_item_ids_flag() {
-        let toggles = FeatureToggles {
-            enable: vec!["item_ids".to_string()],
-            disable: Vec::new(),
-        };
-        let overrides = toggles.to_overrides().expect("valid features");
-        assert_eq!(overrides, vec!["features.item_ids=true".to_string()]);
     }
 
     #[test]

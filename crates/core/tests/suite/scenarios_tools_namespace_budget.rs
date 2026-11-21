@@ -48,7 +48,7 @@ async fn descriptions_share_space_without_hiding_late_namespaces() -> Result<()>
         .with_config(|config| {
             super::configure_scenario_catalog(config);
             configure_search_capable_model(config);
-            config.agents_enabled = false;
+            config.features.disable(Feature::MultiAgentV2).unwrap();
             config
                 .features
                 .enable(Feature::DeferredToolWorldState)

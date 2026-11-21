@@ -4,7 +4,6 @@ use codex_config::Sourced;
 use codex_config::config_toml::ConfigToml;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::FeedbackConfigToml;
-use codex_features::FeatureToml;
 use codex_login::default_client::RESIDENCY_HEADER_NAME;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
@@ -46,7 +45,7 @@ pub(super) fn apply_to_config(
         .can_set(&ApprovalsReviewer::User)
         .is_err()
     {
-        config.features.get_or_insert_default().guardianv2 = Some(FeatureToml::Enabled(false));
+        config.features.get_or_insert_default().guardianv2 = Some(codex_features::GuardianV2ConfigToml { enabled: Some(false), ..Default::default() });
     }
     apply_feedback_requirement(
         &mut config.feedback,

@@ -141,10 +141,6 @@ fn configure_multi_agent_v2_with_role(
 ) {
     config
         .features
-        .enable(Feature::Collab)
-        .expect("test config should allow feature update");
-    config
-        .features
         .enable(Feature::MultiAgentV2)
         .expect("test config should allow feature update");
     config.multi_agent_v2.subagent_developer_instructions =

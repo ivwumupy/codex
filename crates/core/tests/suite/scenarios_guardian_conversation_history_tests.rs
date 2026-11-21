@@ -83,7 +83,7 @@ async fn guardian_conversation_history(scenario: HistoryScenario) -> anyhow::Res
     let test = apps_enabled_builder(apps.chatgpt_base_url)
         .with_cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                "[features]\napps = true\nnon_prefixed_mcp_tool_names = true\n",
+                "[features]\napps = true\nnon_prefixed_mcp_tool_names.enabled = true\n",
             ),
         )
         .with_model("gpt-5.5")

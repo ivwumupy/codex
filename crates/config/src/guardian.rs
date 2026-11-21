@@ -1,7 +1,6 @@
 //! Translates legacy Guardian settings and applies captured managed constraints.
 //! Catalog policies take precedence over legacy scope and feature settings.
 
-use codex_features::FeatureToml;
 use codex_features::GuardianV2ConfigToml;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::openai_models::GuardianModelPolicy;
@@ -19,11 +18,8 @@ pub struct GuardianPolicyLoader {
 }
 
 impl GuardianPolicyLoader {
-    pub fn new(legacy: Option<&FeatureToml<GuardianV2ConfigToml>>) -> Self {
-        let scope = match legacy {
-            Some(FeatureToml::Config(config)) => config.review_scope.as_ref(),
-            Some(FeatureToml::Enabled(_)) | None => None,
-        };
+    pub fn new(legacy: Option<&GuardianV2ConfigToml>) -> Self {
+        let scope = legacy.and_then(|config| config.review_scope.as_ref());
         let computer_use_only = scope
             .and_then(|scope| scope.computer_use_only)
             .unwrap_or(/*default*/ true);
@@ -53,7 +49,7 @@ impl GuardianPolicyLoader {
                         .unwrap_or(/*default*/ false),
             ),
         };
-        let enabled = legacy.and_then(FeatureToml::enabled);
+        let enabled = legacy.and_then(|config| config.enabled);
         Self {
             default,
             scoring_disabled: !enabled.unwrap_or(/*default*/ false),

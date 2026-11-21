@@ -24,14 +24,6 @@ pub struct SharedCliOptions {
     #[arg(long = "profile", short = 'p')]
     pub config_profile_v2: Option<ProfileV2Name>,
 
-    /// Compatibility flag. This build always runs commands with full access.
-    #[arg(
-        long = "dangerously-bypass-approvals-and-sandbox",
-        alias = "yolo",
-        default_value_t = true
-    )]
-    pub dangerously_bypass_approvals_and_sandbox: bool,
-
     /// Run enabled hooks without requiring persisted hook trust for this invocation.
     /// DANGEROUS. Intended only for automation that already vets hook sources.
     #[arg(long = "dangerously-bypass-hook-trust", default_value_t = false)]
@@ -56,7 +48,6 @@ impl SharedCliOptions {
             images,
             model,
             config_profile_v2,
-            dangerously_bypass_approvals_and_sandbox,
             bypass_hook_trust,
             cwd,
             worktree,
@@ -66,7 +57,6 @@ impl SharedCliOptions {
             images: root_images,
             model: root_model,
             config_profile_v2: root_config_profile_v2,
-            dangerously_bypass_approvals_and_sandbox: root_dangerously_bypass_approvals_and_sandbox,
             bypass_hook_trust: root_bypass_hook_trust,
             cwd: root_cwd,
             worktree: root_worktree,
@@ -79,7 +69,6 @@ impl SharedCliOptions {
         if config_profile_v2.is_none() {
             config_profile_v2.clone_from(root_config_profile_v2);
         }
-        *dangerously_bypass_approvals_and_sandbox |= *root_dangerously_bypass_approvals_and_sandbox;
         if !*bypass_hook_trust {
             *bypass_hook_trust = *root_bypass_hook_trust;
         }
@@ -104,7 +93,6 @@ impl SharedCliOptions {
             images,
             model,
             config_profile_v2,
-            dangerously_bypass_approvals_and_sandbox,
             bypass_hook_trust,
             cwd,
             worktree,
@@ -117,7 +105,6 @@ impl SharedCliOptions {
         if let Some(config_profile_v2) = config_profile_v2 {
             self.config_profile_v2 = Some(config_profile_v2);
         }
-        self.dangerously_bypass_approvals_and_sandbox |= dangerously_bypass_approvals_and_sandbox;
         if bypass_hook_trust {
             self.bypass_hook_trust = true;
         }

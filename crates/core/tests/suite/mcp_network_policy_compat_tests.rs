@@ -16,7 +16,7 @@ async fn trusted_server_without_policy_support_keeps_caller_metadata() -> anyhow
     let server = start_mock_server().await;
     let mcp = NetworkPolicyMcp::start_with_capabilities(json!({})).await?;
     let requirements = CloudConfigBundleFixture::loader_with_enterprise_requirement(
-        "[experimental_network]\nenabled = false\ndomains = { 'blocked.example' = 'deny' }",
+        "[permissions.network]\nenabled = false\ndomains = { 'blocked.example' = 'deny' }",
     );
     let fixture = test_codex()
         .with_exec_server_url(mcp.executor_url.clone())

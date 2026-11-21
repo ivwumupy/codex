@@ -156,11 +156,12 @@ impl App {
         let has_non_primary_agent_thread = self
             .agent_navigation
             .has_non_primary_thread(self.primary_thread_id);
-        if !self.config.features.enabled(Feature::Collab) && !has_non_primary_agent_thread {
+        if !self.config.features.enabled(Feature::MultiAgentV2) && !has_non_primary_agent_thread {
             if let Some(primary_thread_id) = self.primary_thread_id {
                 self.refresh_agent_picker_threads(app_server, primary_thread_id);
             }
-            self.chat_widget.open_feature_enable_prompt(Feature::Collab);
+            self.chat_widget
+                .open_feature_enable_prompt(Feature::MultiAgentV2);
             return;
         }
 

@@ -1,5 +1,3 @@
-use crate::agent::exceeds_thread_spawn_depth_limit;
-use crate::agent::next_thread_spawn_depth;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::image_preparation::unified_image_budget_enabled;
 use crate::session::session::Session;
@@ -32,15 +30,9 @@ use crate::tools::handlers::ViewImageHandler;
 use crate::tools::handlers::WaitForEnvironmentHandler;
 use crate::tools::handlers::WriteStdinHandler;
 use crate::tools::handlers::extension_tools::ExtensionToolAdapter;
-use crate::tools::handlers::multi_agents::CloseAgentHandler;
-use crate::tools::handlers::multi_agents::ResumeAgentHandler;
-use crate::tools::handlers::multi_agents::SendInputHandler;
-use crate::tools::handlers::multi_agents::SpawnAgentHandler;
-use crate::tools::handlers::multi_agents::WaitAgentHandler;
 use crate::tools::handlers::multi_agents_common::DEFAULT_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MAX_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MIN_WAIT_TIMEOUT_MS;
-use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_v2::FollowupTaskHandler as FollowupTaskHandlerV2;
@@ -765,18 +757,10 @@ fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
 }
 
 fn collab_tools_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
-    match turn_context.multi_agent_version {
-        MultiAgentVersion::Disabled => false,
-        MultiAgentVersion::V1 => !exceeds_thread_spawn_depth_limit(
-            next_thread_spawn_depth(&turn_context.session_source),
-            turn_context.config.agent_max_depth,
-        ),
-        MultiAgentVersion::V2 => {
-            !turn_context.config.multi_agent_v2.disable_native_tools
-                && (turn_context.session_source.get_agent_path().is_none()
-                    || model_info.multi_agent_version == Some(MultiAgentVersion::V2))
-        }
-    }
+    multi_agent_v2_enabled(turn_context)
+        && !turn_context.config.multi_agent_v2.disable_native_tools
+        && (turn_context.session_source.get_agent_path().is_none()
+            || model_info.multi_agent_version == Some(MultiAgentVersion::V2))
 }
 
 fn required_child_management_tool_names(
@@ -787,32 +771,23 @@ fn required_child_management_tool_names(
         return Vec::new();
     }
 
-    let (namespace, names): (_, &[&str]) = match turn_context.multi_agent_version {
-        MultiAgentVersion::Disabled => return Vec::new(),
-        MultiAgentVersion::V1 => (
-            Some(MULTI_AGENT_V1_NAMESPACE),
-            &["send_input", "wait_agent", "resume_agent", "close_agent"],
-        ),
-        MultiAgentVersion::V2 => (
-            turn_context.config.multi_agent_v2.tool_namespace.as_deref(),
-            if turn_context.config.multi_agent_v2.disable_direct_message {
-                &["interrupt_agent", "list_agents"]
-            } else {
-                &[
-                    "send_message",
-                    "followup_task",
-                    "interrupt_agent",
-                    "list_agents",
-                ]
-            },
-        ),
+    let config = &turn_context.config.multi_agent_v2;
+    let namespace = config.tool_namespace.as_deref();
+    let names: &[&str] = if config.disable_direct_message {
+        &["interrupt_agent", "list_agents"]
+    } else {
+        &[
+            "send_message",
+            "followup_task",
+            "interrupt_agent",
+            "list_agents",
+        ]
     };
     let mut tools = names
         .iter()
         .map(|name| ToolName::new(namespace.map(str::to_owned), (*name).to_owned()))
         .collect::<Vec<_>>();
-    if multi_agent_v2_enabled(turn_context) && turn_context.config.multi_agent_v2.wait_agent_enabled
-    {
+    if config.wait_agent_enabled {
         tools.push(ToolName::new(namespace.map(str::to_owned), "wait_agent"));
     }
     tools
@@ -1437,17 +1412,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     if features.enabled(Feature::SleepTool)
         && match turn_context.config.sleep_tool_mode {
             SleepToolMode::AlwaysOn => true,
-            SleepToolMode::ModelDriven => {
-                if current_time_reminder_enabled {
-                    turn_context
-                        .config
-                        .current_time_reminder
-                        .as_ref()
-                        .is_some_and(|config| config.sleep_tool)
-                } else {
-                    model_has_clock
-                }
-            }
+            SleepToolMode::ModelDriven => model_has_clock,
         }
     {
         registry.add(SleepHandler);
@@ -1501,125 +1466,33 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
 #[instrument(level = "trace", skip_all)]
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
-    if collab_tools_enabled(turn_context, context.model_info) {
-        if multi_agent_v2_enabled(turn_context) {
-            let model_messages = ResolvedModelMessages::from_model(context.model_info);
-            let spawn_agent_description =
-                model_messages.multi_agent_tool_description_override("spawn_agent");
-            let exposure = if turn_context.config.multi_agent_v2.non_code_mode_only {
-                ToolExposure::DirectModelOnly
-            } else {
-                ToolExposure::Direct
-            };
-            let tool_namespace = turn_context.config.multi_agent_v2.tool_namespace.as_deref();
-            let native_review = if turn_context
-                .config
-                .guardian_native_multi_agent_history_enabled()
-            {
-                NativeReview::Required
-            } else {
-                NativeReview::Disabled
-            };
-            let agent_type_description =
-                agent_type_description(turn_context, context.default_agent_type_description);
-            let hide_spawn_agent_metadata =
-                turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
-            registry.register_trusted_with_native_review(
-                multi_agent_v2_handler(
-                    SpawnAgentHandlerV2::new(
-                        SpawnAgentToolOptions {
-                            available_models: turn_context.available_models.clone(),
-                            multi_agent_version: turn_context.multi_agent_version,
-                            model_catalog_in_context: turn_context
-                                .config
-                                .features
-                                .enabled(Feature::ModelCatalogInContext),
-                            agent_type_description,
-                            expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                            hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
-                            expose_spawn_agent_model_overrides: turn_context
-                                .config
-                                .multi_agent_v2
-                                .expose_spawn_agent_model_overrides,
-                            usage_hint_text: turn_context
-                                .config
-                                .multi_agent_v2
-                                .usage_hint_text
-                                .clone(),
-                        },
-                        spawn_agent_description.map(str::to_owned),
-                    ),
-                    tool_namespace,
-                    // Spawn composes the selected description with inheritance and usage guidance.
-                    /*description_override*/
-                    None,
-                    model_messages.multi_agent_tool_parameters_override("spawn_agent"),
-                ),
-                exposure,
-                native_review,
-            );
-            if !turn_context.config.multi_agent_v2.disable_direct_message {
-                registry.register_trusted_with_native_review(
-                    multi_agent_v2_handler(
-                        SendMessageHandlerV2,
-                        tool_namespace,
-                        model_messages.multi_agent_tool_description_override("send_message"),
-                        model_messages.multi_agent_tool_parameters_override("send_message"),
-                    ),
-                    exposure,
-                    native_review,
-                );
-                registry.register_trusted_with_native_review(
-                    multi_agent_v2_handler(
-                        FollowupTaskHandlerV2,
-                        tool_namespace,
-                        model_messages.multi_agent_tool_description_override("followup_task"),
-                        model_messages.multi_agent_tool_parameters_override("followup_task"),
-                    ),
-                    exposure,
-                    native_review,
-                );
-            }
-            if turn_context.config.multi_agent_v2.wait_agent_enabled {
-                registry.register_trusted_with_exposure(
-                    multi_agent_v2_handler(
-                        WaitAgentHandlerV2::new(context.wait_agent_timeouts),
-                        tool_namespace,
-                        model_messages.multi_agent_tool_description_override("wait_agent"),
-                        model_messages.multi_agent_tool_parameters_override("wait_agent"),
-                    ),
-                    exposure,
-                );
-            }
-            registry.register_trusted_with_native_review(
-                multi_agent_v2_handler(
-                    InterruptAgentHandler,
-                    tool_namespace,
-                    model_messages.multi_agent_tool_description_override("interrupt_agent"),
-                    model_messages.multi_agent_tool_parameters_override("interrupt_agent"),
-                ),
-                exposure,
-                native_review,
-            );
-            registry.register_trusted_with_exposure(
-                multi_agent_v2_handler(
-                    ListAgentsHandlerV2,
-                    tool_namespace,
-                    model_messages.multi_agent_tool_description_override("list_agents"),
-                    model_messages.multi_agent_tool_parameters_override("list_agents"),
-                ),
-                exposure,
-            );
-        } else {
-            let agent_type_description =
-                agent_type_description(turn_context, context.default_agent_type_description);
-            let exposure = if context.model_info.supports_search_tool {
-                ToolExposure::Deferred
-            } else {
-                ToolExposure::Direct
-            };
-            registry.add_with_exposure(
-                SpawnAgentHandler::new(SpawnAgentToolOptions {
+    if !collab_tools_enabled(turn_context, context.model_info) {
+        return;
+    }
+    let model_messages = ResolvedModelMessages::from_model(context.model_info);
+    let spawn_agent_description =
+        model_messages.multi_agent_tool_description_override("spawn_agent");
+    let exposure = if turn_context.config.multi_agent_v2.non_code_mode_only {
+        ToolExposure::DirectModelOnly
+    } else {
+        ToolExposure::Direct
+    };
+    let tool_namespace = turn_context.config.multi_agent_v2.tool_namespace.as_deref();
+    let native_review = if turn_context
+        .config
+        .guardian_native_multi_agent_history_enabled()
+    {
+        NativeReview::Required
+    } else {
+        NativeReview::Disabled
+    };
+    let agent_type_description =
+        agent_type_description(turn_context, context.default_agent_type_description);
+    let hide_spawn_agent_metadata = turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
+    registry.register_trusted_with_native_review(
+        multi_agent_v2_handler(
+            SpawnAgentHandlerV2::new(
+                SpawnAgentToolOptions {
                     available_models: turn_context.available_models.clone(),
                     multi_agent_version: turn_context.multi_agent_version,
                     model_catalog_in_context: turn_context
@@ -1628,19 +1501,80 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                         .enabled(Feature::ModelCatalogInContext),
                     agent_type_description,
                     expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                    hide_agent_type_model_reasoning: false,
-                    expose_spawn_agent_model_overrides: true,
-                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                }),
-                exposure,
-            );
-            registry.add_with_exposure(SendInputHandler, exposure);
-            registry.add_with_exposure(ResumeAgentHandler, exposure);
-            registry
-                .add_with_exposure(WaitAgentHandler::new(context.wait_agent_timeouts), exposure);
-            registry.add_with_exposure(CloseAgentHandler, exposure);
-        }
+                    hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
+                    expose_spawn_agent_model_overrides: turn_context
+                        .config
+                        .multi_agent_v2
+                        .expose_spawn_agent_model_overrides,
+                    usage_hint_text: turn_context
+                        .config
+                        .multi_agent_v2
+                        .usage_hint_text
+                        .clone(),
+                },
+                spawn_agent_description.map(str::to_owned),
+            ),
+            tool_namespace,
+            // Spawn composes the selected description with inheritance and usage guidance.
+            /*description_override*/
+            None,
+            model_messages.multi_agent_tool_parameters_override("spawn_agent"),
+        ),
+        exposure,
+        native_review,
+    );
+    if !turn_context.config.multi_agent_v2.disable_direct_message {
+        registry.register_trusted_with_native_review(
+            multi_agent_v2_handler(
+                SendMessageHandlerV2,
+                tool_namespace,
+                model_messages.multi_agent_tool_description_override("send_message"),
+                model_messages.multi_agent_tool_parameters_override("send_message"),
+            ),
+            exposure,
+            native_review,
+        );
+        registry.register_trusted_with_native_review(
+            multi_agent_v2_handler(
+                FollowupTaskHandlerV2,
+                tool_namespace,
+                model_messages.multi_agent_tool_description_override("followup_task"),
+                model_messages.multi_agent_tool_parameters_override("followup_task"),
+            ),
+            exposure,
+            native_review,
+        );
     }
+    if turn_context.config.multi_agent_v2.wait_agent_enabled {
+        registry.register_trusted_with_exposure(
+            multi_agent_v2_handler(
+                WaitAgentHandlerV2::new(context.wait_agent_timeouts),
+                tool_namespace,
+                model_messages.multi_agent_tool_description_override("wait_agent"),
+                model_messages.multi_agent_tool_parameters_override("wait_agent"),
+            ),
+            exposure,
+        );
+    }
+    registry.register_trusted_with_native_review(
+        multi_agent_v2_handler(
+            InterruptAgentHandler,
+            tool_namespace,
+            model_messages.multi_agent_tool_description_override("interrupt_agent"),
+            model_messages.multi_agent_tool_parameters_override("interrupt_agent"),
+        ),
+        exposure,
+        native_review,
+    );
+    registry.register_trusted_with_exposure(
+        multi_agent_v2_handler(
+            ListAgentsHandlerV2,
+            tool_namespace,
+            model_messages.multi_agent_tool_description_override("list_agents"),
+            model_messages.multi_agent_tool_parameters_override("list_agents"),
+        ),
+        exposure,
+    );
 }
 
 #[instrument(level = "trace", skip_all, fields(dynamic_tool_count = dynamic_tools.len()))]

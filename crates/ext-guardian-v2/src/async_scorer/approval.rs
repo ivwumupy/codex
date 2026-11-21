@@ -83,7 +83,7 @@ impl GuardianApprovalReviewer {
         let mut policy = guardian_config.as_ref().map_or_else(
             || {
                 codex_config::GuardianPolicyLoader::new(Some(
-                    &codex_features::FeatureToml::Enabled(true),
+                    &codex_features::GuardianV2ConfigToml { enabled: Some(true), ..Default::default() },
                 ))
                 .resolve(model.as_deref(), requirements)
             },

@@ -23,7 +23,6 @@ async fn heartbeat_keeps_user_restriction_after_status_questions(
         .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::GuardianRootHandoffContext,
             ] {
@@ -196,8 +195,7 @@ async fn heartbeat_root_projection_uses_latest_turn_skills(
     let server = start_mock_server().await;
     let test = test_codex()
         .with_config(move |config| {
-            for feature in [Feature::Collab, Feature::MultiAgentV2]
-                .into_iter()
+            for feature in std::iter::once(Feature::MultiAgentV2)
                 .chain(enabled_features.iter().copied())
             {
                 config.features.enable(feature).expect("enable feature");

@@ -49,7 +49,7 @@ fn set_service_tier_saves_default_as_default() {
 }
 
 #[test]
-fn set_service_tier_saves_priority_as_fast() {
+fn set_service_tier_saves_priority() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path();
 
@@ -59,7 +59,7 @@ fn set_service_tier_saves_priority_as_fast() {
         .expect("persist");
 
     let contents = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    assert_eq!(contents, "service_tier = \"fast\"\n");
+    assert_eq!(contents, "service_tier = \"priority\"\n");
 }
 
 #[test]
@@ -170,9 +170,9 @@ fn network_proxy_feature_toggle_preserves_credential_broker_configuration() {
     let config_path = codex_home.join(CONFIG_TOML_FILE);
     for (initial, disabled, enabled_again) in [
         (
-            "[features]\nnetwork_proxy = true\n",
-            "[features]\n",
-            "[features]\nnetwork_proxy = true\n",
+            "[features]\nnetwork_proxy.enabled = true\n",
+            "[features]\nnetwork_proxy.enabled = false\n",
+            "[features]\nnetwork_proxy.enabled = true\n",
         ),
         (
             "[features.network_proxy]\nenabled = true\ncredential_broker = true\ndomains = { \"github.com\" = \"allow\" }\n",
@@ -199,16 +199,15 @@ fn network_proxy_feature_toggle_preserves_credential_broker_configuration() {
     }
 }
 
-/// Adding nested multi-agent settings must retain an existing legacy boolean toggle.
 #[test]
-fn multi_agent_v2_nested_edit_preserves_legacy_boolean_toggle() {
+fn multi_agent_v2_nested_edits_preserve_sibling_fields() {
     for feature_path in ["features", "profiles.work.features"] {
         let tmp = tempdir().expect("tmpdir");
         let codex_home = tmp.path();
         let config_path = codex_home.join(CONFIG_TOML_FILE);
         std::fs::write(
             &config_path,
-            format!("[{feature_path}]\nmulti_agent_v2 = true\n"),
+            format!("[{feature_path}]\nmulti_agent_v2.enabled = true\n"),
         )
         .expect("write config");
         let mut feature_segments = feature_path
@@ -238,9 +237,11 @@ fn multi_agent_v2_nested_edit_preserves_legacy_boolean_toggle() {
             .expect("parse expected config")
         );
 
+        let mut enabled_segments = feature_segments.clone();
+        enabled_segments.push("enabled".to_string());
         ConfigEditsBuilder::new(codex_home)
             .with_edits([ConfigEdit::SetPath {
-                segments: feature_segments.clone(),
+                segments: enabled_segments,
                 value: value(false),
             }])
             .apply_blocking()

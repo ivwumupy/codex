@@ -44,7 +44,6 @@ fn login_with_api_key_reads_stdin_and_writes_auth_json() -> Result<()> {
             "-c",
             "forced_login_method=\"api\"",
             "login",
-            "--with-api-key",
         ])
         .write_stdin("sk-test\n")
         .assert()
@@ -95,7 +94,7 @@ fn api_key_auth_commands_work_when_log_dir_is_unavailable() -> Result<()> {
     )?;
 
     codex_command(codex_home.path())?
-        .args(["login", "--with-api-key"])
+        .arg("login")
         .write_stdin("sk-test\n")
         .assert()
         .success()
@@ -155,7 +154,12 @@ fn stored_bedrock_key_is_ignored() -> Result<()> {
 #[test]
 fn removed_login_methods_are_rejected() -> Result<()> {
     let home = TempDir::new()?;
-    for flag in ["--device-auth", "--with-access-token"] {
+    for flag in [
+        "--device-auth",
+        "--with-access-token",
+        "--api-key",
+        "--with-api-key",
+    ] {
         codex_command(home.path())?
             .args(["login", flag])
             .assert()

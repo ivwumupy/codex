@@ -30,7 +30,7 @@ async fn exits_non_zero_when_required_mcp_server_fails_to_initialize() -> anyhow
         test.cmd_with_server(&server)
             .arg("--cd")
             .arg(&cwd)
-            .args(["--ephemeral", "--experimental-json"])
+            .args(["--ephemeral", "--json"])
             .args(args)
             .arg("hello")
             .assert()

@@ -54,7 +54,6 @@ use codex_config::ResidencyRequirement as CoreResidencyRequirement;
 use codex_config::SandboxModeRequirement as CoreSandboxModeRequirement;
 use codex_core::ThreadManager;
 use codex_features::Feature;
-use codex_features::canonical_feature_for_key;
 use codex_features::feature_for_key;
 use codex_model_provider::create_model_provider;
 use codex_protocol::config_types::ForcedLoginMethod;
@@ -79,7 +78,6 @@ const SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT: &[&str] = &[
     "mentions_v2",
     "remote_plugin",
     "tool_suggest",
-    "windows_sandbox_service",
 ];
 
 #[derive(Clone)]
@@ -302,7 +300,7 @@ impl ConfigRequestProcessor {
         let ExperimentalFeatureEnablementSetParams { mut enablement } = params;
         let mut invalid_keys = Vec::new();
         enablement.retain(|key, _| {
-            let valid = canonical_feature_for_key(key).is_some()
+            let valid = feature_for_key(key).is_some()
                 && SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT.contains(&key.as_str());
             if !valid {
                 invalid_keys.push(key.clone());
@@ -439,8 +437,7 @@ pub(crate) fn map_requirements_to_api(
         .permissions
         .as_ref()
         .and_then(|permissions| permissions.network.as_deref())
-        .cloned()
-        .or_else(|| requirements.network.clone());
+        .cloned();
 
     Some(ConfigRequirements {
         model_provider: requirements.model_provider,
@@ -1091,7 +1088,7 @@ client_id = "mcp-client"
                 new_thread: Some(NewThreadModelDefaultsToml {
                     model: Some("gpt-managed".to_string()),
                     model_reasoning_effort: Some(ReasoningEffort::Medium),
-                    service_tier: Some("fast".to_string()),
+                    service_tier: Some("priority".to_string()),
                 }),
             }),
             ..ConfigRequirementsToml::default()
@@ -1111,7 +1108,7 @@ client_id = "mcp-client"
             defaults.model_reasoning_effort,
             Some(ReasoningEffort::Medium)
         );
-        assert_eq!(defaults.service_tier.as_deref(), Some("fast"));
+        assert_eq!(defaults.service_tier.as_deref(), Some("priority"));
     }
 
     #[test]

@@ -740,10 +740,10 @@ async fn environment_local_binding_preserves_explicit_denials_and_inherits_omitt
 -> anyhow::Result<()> {
     let managed: codex_config::ConfigRequirementsToml = toml::from_str(
         r#"
-        [experimental_network]
+        [permissions.network]
         enabled = true
         managed_allowed_domains_only = true
-        allowed_domains = ["example.com"]
+        domains = { "example.com" = "allow" }
         "#,
     )?;
     let empty = Policy::empty();
@@ -763,7 +763,7 @@ async fn environment_local_binding_preserves_explicit_denials_and_inherits_omitt
         (
             "managed_omitted",
             Some(None),
-            managed.network.map(Into::into),
+            managed.permissions.and_then(|p| p.network).map(|network| (*network).into()),
             [false, false, true, true, false, true],
         ),
         ("configured_deny", Some(Some(false)), None, [false; 6]),

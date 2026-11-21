@@ -105,17 +105,14 @@ fn local_exec_server_ignores_invalid_config_without_strict_config() -> Result<()
     Ok(())
 }
 
-/// Real global CLI flags must reach executor config reads; unrelated startup flags stay private.
 #[tokio::test]
-async fn local_exec_server_projects_global_mxc_preference() -> Result<()> {
+async fn local_exec_server_keeps_startup_flags_private() -> Result<()> {
     let home = TempDir::new()?;
     let cwd = url::Url::from_directory_path(home.path())
         .map_err(|()| anyhow::anyhow!("could not convert home to file URL"))?;
     let mut child = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
         .env("CODEX_HOME", home.path())
         .args([
-            "-c",
-            "features.prefer_mxc=true",
             "-c",
             "model='private-startup-model'",
             "exec-server",
@@ -132,7 +129,7 @@ async fn local_exec_server_projects_global_mxc_preference() -> Result<()> {
         send_json_line(
             &mut stdin,
             &serde_json::json!({"id": 1, "method": "initialize",
-                "params": {"clientName": "mxc-test", "resumeSessionId": null}}),
+                "params": {"clientName": "config-test", "resumeSessionId": null}}),
         )
         .await?;
         wait_for_response(&mut stdout, /*expected_id*/ 1).await?;
@@ -144,7 +141,7 @@ async fn local_exec_server_projects_global_mxc_preference() -> Result<()> {
         send_json_line(
             &mut stdin,
             &serde_json::json!({"id": 2, "method": "environmentConfig/read", "params": {
-                "cwd": cwd, "configPaths": [["features", "prefer_mxc"], ["model"]],
+                "cwd": cwd, "configPaths": [["model"]],
                 "requirementsPaths": []
             }}),
         )
@@ -156,14 +153,10 @@ async fn local_exec_server_projects_global_mxc_preference() -> Result<()> {
     let layers = result["result"]["config"]["layers"]
         .as_array()
         .context("config layers")?;
-    let session = layers
-        .iter()
-        .find(|l| l["source"] == "session-flags")
-        .context("session flags")?;
-    let value: toml::Value = toml::from_str(session["toml"].as_str().context("session TOML")?)?;
-    assert_eq!(
-        value,
-        toml::Value::Table(toml::toml! { [features] prefer_mxc = true })
+    assert!(
+        layers
+            .iter()
+            .all(|layer| layer["source"] != "session-flags")
     );
     drop(stdin);
     assert!(

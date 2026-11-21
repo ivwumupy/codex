@@ -133,13 +133,13 @@ fn should_classify_tool(
 fn legacy_loader(
     scope: Option<&GuardianV2ReviewScopeConfigToml>,
 ) -> codex_config::GuardianPolicyLoader {
-    codex_config::GuardianPolicyLoader::new(Some(&codex_features::FeatureToml::Config(
+    codex_config::GuardianPolicyLoader::new(Some(&
         codex_features::GuardianV2ConfigToml {
             enabled: Some(true),
             review_scope: scope.cloned(),
             ..Default::default()
         },
-    )))
+    ))
 }
 
 fn legacy_policy(scope: Option<&GuardianV2ReviewScopeConfigToml>) -> GuardianModelPolicy {
@@ -1010,7 +1010,6 @@ async fn sample_configured_conversation_history_with_delivery(
                     Feature::Apps,
                     Feature::CodeMode,
                     Feature::CodeModeInterrupt,
-                    Feature::Collab,
                     Feature::MultiAgentV2,
                 ] {
                     config.features.enable(feature).expect("enable Code Mode");
@@ -2704,7 +2703,7 @@ async fn cached_score_survives_compaction_and_internal_context_but_not_user_inpu
         Vec::new(),
         r#"{"path":"README.md"}"#,
         Some(TEST_GUARDIAN_POLICY),
-        "[features]\ntoken_budget = true\n[features.guardianv2]\nenabled = true\n",
+        "[features]\ntoken_budget.enabled = true\n[features.guardianv2]\nenabled = true\n",
         /*model_defaults*/ None,
     )
     .await?;

@@ -90,12 +90,7 @@ async fn thread_creator_survives_resume_and_forks_use_current_auth() -> Result<(
         CodexAuth::from_api_key("test"),
     ] {
         let expected_creator = (auth.get_chatgpt_user_id(), auth.get_account_id());
-        let mut builder = test_codex().with_auth(auth).with_config(|config| {
-            config
-                .features
-                .enable(Feature::Sqlite)
-                .expect("enable SQLite");
-        });
+        let mut builder = test_codex().with_auth(auth).with_config(|_| {});
         let test = builder.build_with_auto_env(&server).await?;
         test.submit_turn("persist creator").await?;
         let thread_id = test.session_configured.thread_id;
@@ -121,13 +116,7 @@ async fn thread_creator_survives_resume_and_forks_use_current_auth() -> Result<(
         );
 
         let mut resume_builder = test_codex()
-            .with_auth(chatgpt_auth("resuming-user", "resuming-account")?)
-            .with_config(|config| {
-                config
-                    .features
-                    .enable(Feature::Sqlite)
-                    .expect("enable SQLite");
-            });
+            .with_auth(chatgpt_auth("resuming-user", "resuming-account")?);
         let resumed = resume_builder
             .resume(&server, test.home.clone(), rollout_path.clone())
             .await?;
@@ -201,12 +190,7 @@ async fn thread_creator_survives_resume_and_forks_use_current_auth() -> Result<(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let test = builder.build(&server).await?;
 
     let thread_id = test.session_configured.thread_id;
@@ -262,12 +246,7 @@ async fn staged_metadata_is_persisted_on_first_turn() -> Result<()> {
         responses::sse(vec![ev_response_created("resp-1"), ev_completed("resp-1")]),
     )
     .await;
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let test = builder.build_with_auto_env(&server).await?;
     let thread_id = test.thread_manager.reserve_thread_id();
     test.thread_store
@@ -347,12 +326,7 @@ async fn resume_restores_dynamic_tools_from_rollout_with_sqlite_enabled() -> Res
             },
         )],
     });
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let base_test = builder.build(&server).await?;
     let started = base_test
         .thread_manager
@@ -381,12 +355,7 @@ async fn resume_restores_dynamic_tools_from_rollout_with_sqlite_enabled() -> Res
     .await;
 
     started.thread.shutdown_and_wait().await?;
-    let mut resume_builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut resume_builder = test_codex().with_config(|_| {});
     let resumed = resume_builder
         .resume(&server, base_test.home.clone(), rollout_path)
         .await?;
@@ -443,12 +412,7 @@ async fn resume_restores_legacy_dynamic_tools_from_rollout_with_sqlite_enabled()
         "required": ["query"],
         "additionalProperties": false,
     });
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let base_test = builder.build(&server).await?;
     let started = base_test
         .thread_manager
@@ -498,12 +462,7 @@ async fn resume_restores_legacy_dynamic_tools_from_rollout_with_sqlite_enabled()
         .join("\n");
     fs::write(&rollout_path, format!("{rollout}\n"))?;
 
-    let mut resume_builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut resume_builder = test_codex().with_config(|_| {});
     let resumed = resume_builder
         .resume(&server, base_test.home.clone(), rollout_path)
         .await?;
@@ -616,12 +575,6 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
                 .collect::<Vec<_>>()
                 .join("\n");
             fs::write(&rollout_path, format!("{jsonl}\n")).expect("should write rollout file");
-        })
-        .with_config(|config| {
-            config
-                .features
-                .enable(Feature::Sqlite)
-                .expect("test config should allow feature update");
         });
 
     let test = builder.build(&server).await?;
@@ -669,12 +622,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let test = builder.build(&server).await?;
 
     let db_path = test.config.sqlite.state_db_path();
@@ -724,10 +672,6 @@ async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Resul
     .await;
 
     let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
         config.memories.disable_on_external_context = true;
     });
     let test = builder.build(&server).await?;
@@ -796,10 +740,6 @@ async fn standalone_web_search_marks_thread_memory_mode_polluted_when_configured
         .with_config(|config| {
             config
                 .features
-                .enable(Feature::Sqlite)
-                .expect("test config should allow feature update");
-            config
-                .features
                 .enable(Feature::StandaloneWebSearch)
                 .expect("standalone web search should be enabled");
             config.memories.disable_on_external_context = true;
@@ -860,10 +800,6 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
 
     let rmcp_test_server_bin = stdio_server_bin()?;
     let mut builder = test_codex().with_config(move |config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
         config.memories.disable_on_external_context = true;
 
         let mut servers = config.mcp_servers.get().clone();
@@ -983,12 +919,7 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let test = builder.build(&server).await?;
     let db = test.codex.state_db().expect("state db enabled");
     let expected_thread_id = test.session_configured.thread_id.to_string();

@@ -2588,7 +2588,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
             .expect("set sandbox policy");
         config
             .features
-            .enable(Feature::Collab)
+            .enable(Feature::MultiAgentV2)
             .expect("test config should allow feature update");
     });
     let test = builder.build(&server).await?;
@@ -2603,6 +2603,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     let _ = fs::remove_file(&child_file);
 
     let spawn_args = serde_json::to_string(&json!({
+        "task_name":"worker", "fork_turns":"none",
         "message": CHILD_PROMPT,
     }))?;
     mount_sse_once_match(
@@ -2612,7 +2613,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
             ev_response_created("resp-parent-1"),
             ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -3199,7 +3200,7 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
         | "flat_yolo"
         | "flat_yolo_profile_transition"
         | "flat_yolo_unnamed_transition"
-        | "flat_yolo_legacy_transition" => "credential_masking = true, network_proxy = true",
+        | "flat_yolo_legacy_transition" => "credential_masking = true, network_proxy.enabled = true",
         "flat_managed" => concat!(
             "credential_masking = true, network_proxy = { enabled = false, ",
             "credentials = { custom = { env = [\"CUSTOM_API_KEY\"], ",
@@ -3221,19 +3222,19 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
                 String::new()
             };
             CloudConfigBundleFixture::loader_with_enterprise_requirement(format!(
-                "{feature_requirements}\n[experimental_network]\nenabled = true\nallow_local_binding = true\n\
-                 [experimental_network.domains]\n\"credential-masking-denied.invalid\" = \"deny\"\n"
+                "{feature_requirements}\n[permissions.network]\nenabled = true\nallow_local_binding = true\n\
+                 [permissions.network.domains]\n\"credential-masking-denied.invalid\" = \"deny\"\n"
             ))
         }
         "flat_no_proxy" | "flat_profile_transition" => {
             CloudConfigBundleFixture::loader_with_enterprise_requirement("")
         }
         "flat_disabled_proxy" => CloudConfigBundleFixture::loader_with_enterprise_requirement(
-            "[experimental_network]\nenabled = false",
+            "[permissions.network]\nenabled = false",
         ),
         "flat_policy_without_proxy" => {
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                "[experimental_network]\nallow_local_binding = true",
+                "[permissions.network]\nallow_local_binding = true",
             )
         }
         _ => managed_network_requirements_loader(),

@@ -33,7 +33,7 @@ async fn code_mode_spawn_delivers_plaintext() -> Result<()> {
             model.use_responses_lite = true;
         })
         .with_config(|config| {
-            for feature in [Feature::Collab, Feature::MultiAgentV2, Feature::CodeMode] {
+            for feature in [Feature::MultiAgentV2, Feature::CodeMode] {
                 config
                     .features
                     .enable(feature)

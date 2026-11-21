@@ -5,7 +5,6 @@ use crate::format_config_layer_source;
 
 use super::fingerprint::record_origins;
 use super::fingerprint::version_for_toml;
-use super::key_aliases::normalize_key_aliases;
 use super::merge::merge_toml_values;
 use crate::CloudConfigBundleLoader;
 use crate::ConfigLayer;
@@ -699,7 +698,7 @@ impl ConfigLayerStack {
         let mut provider_paths = vec!["features.network_proxy.credentials.".to_string()];
 
         for layer in self.layers_low_to_high() {
-            let config = normalize_key_aliases(&layer.config);
+            let config = &layer.config;
             if let Some(profiles) = config.get("profiles").and_then(TomlValue::as_table) {
                 provider_paths.extend(
                     profiles
@@ -708,7 +707,7 @@ impl ConfigLayerStack {
                 );
             }
             record_origins(
-                &config,
+                config,
                 &layer.metadata(),
                 &mut path,
                 &mut origins,

@@ -180,7 +180,6 @@ async fn replayed_failed_turns_preserve_overload_warnings_between_retries() {
 #[tokio::test]
 async fn restored_conversation_ultra_remains_selected_after_switching_to_plan() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::High));
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {

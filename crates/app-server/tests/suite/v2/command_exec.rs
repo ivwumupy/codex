@@ -1382,7 +1382,7 @@ fn insert_networked_permission_profile_config(
         .unwrap_or_default();
     let inserted_config = format!(
         r#"{default_permissions}[features]
-network_proxy = true
+network_proxy.enabled = true
 
 [permissions.networked.filesystem]
 ":root" = "read"

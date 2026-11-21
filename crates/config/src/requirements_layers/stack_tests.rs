@@ -167,7 +167,7 @@ service_tier = "flex"
 [models.new_thread]
 model = "high-priority-model"
 model_reasoning_effort = "high"
-service_tier = "fast"
+service_tier = "priority"
 "#,
         ),
     ])
@@ -181,7 +181,7 @@ service_tier = "fast"
 [models.new_thread]
 model = "high-priority-model"
 model_reasoning_effort = "high"
-service_tier = "fast"
+service_tier = "priority"
 "#
         )
     );
@@ -651,35 +651,6 @@ approval_mode = "approve"
 }
 
 #[test]
-fn feature_aliases_merge_with_layer_precedence() {
-    for (low_key, high_key) in [
-        ("features", "feature_requirements"),
-        ("feature_requirements", "features"),
-    ] {
-        let composed = compose(vec![
-            layer(
-                "req_low",
-                "Low",
-                &format!("[{low_key}]\nchronicle = true\nshell_snapshot = false"),
-            ),
-            layer(
-                "req_high",
-                "High",
-                &format!("[{high_key}]\nchronicle = false\napps = false"),
-            ),
-        ])
-        .expect("compose mixed feature aliases");
-
-        assert_eq!(
-            composed,
-            Some(expected_requirements(
-                "[features]\nchronicle = false\nshell_snapshot = false\napps = false"
-            ))
-        );
-    }
-}
-
-#[test]
 fn merged_table_source_is_composite_in_priority_order() {
     let high_source = RequirementSource::EnterpriseManaged {
         id: "req_high".to_string(),
@@ -770,12 +741,12 @@ fn network_maps_use_regular_toml_merge() {
             "req_low",
             "Low",
             r#"
-[experimental_network.domains]
+[permissions.network.domains]
 "example.com" = "deny"
 "low.example.com" = "deny"
 "internal.example.com" = "allow"
 
-[experimental_network.unix_sockets]
+[permissions.network.unix_sockets]
 "/tmp/shared.sock" = "deny"
 "/tmp/low.sock" = "allow"
 "/tmp/admin.sock" = "allow"
@@ -785,12 +756,12 @@ fn network_maps_use_regular_toml_merge() {
             "req_high",
             "High",
             r#"
-[experimental_network.domains]
+[permissions.network.domains]
 "example.com" = "allow"
 "high.example.com" = "allow"
 "internal.example.com" = "deny"
 
-[experimental_network.unix_sockets]
+[permissions.network.unix_sockets]
 "/tmp/shared.sock" = "allow"
 "/tmp/high.sock" = "allow"
 "/tmp/admin.sock" = "deny"
@@ -804,13 +775,13 @@ fn network_maps_use_regular_toml_merge() {
         composed,
         expected_requirements(
             r#"
-[experimental_network.domains]
+[permissions.network.domains]
 "example.com" = "allow"
 "high.example.com" = "allow"
 "internal.example.com" = "deny"
 "low.example.com" = "deny"
 
-[experimental_network.unix_sockets]
+[permissions.network.unix_sockets]
 "/tmp/admin.sock" = "deny"
 "/tmp/high.sock" = "allow"
 "/tmp/low.sock" = "allow"
@@ -821,70 +792,26 @@ fn network_maps_use_regular_toml_merge() {
 }
 
 #[test]
-fn network_aliases_merge_with_layer_precedence_and_sources() {
-    for (low_key, high_key) in [
-        ("network_proxy", "experimental_network"),
-        ("experimental_network", "network_proxy"),
+fn retired_tables_identify_the_policy_layer_to_update() {
+    for (old, new) in [
+        ("experimental_network", "permissions.network"),
+        ("network_proxy", "permissions.network"),
+        ("feature_requirements", "features"),
     ] {
         let low = layer(
-            "req_low",
-            "Low",
-            &format!(
-                "[{low_key}]\nenabled = true\nallow_local_binding = false\n\
-                 [{low_key}.domains]\n'low.example.com' = 'allow'\n'shared.example.com' = 'allow'"
-            ),
+            "retired",
+            "Retired policy",
+            &format!("[{old}]\nenabled = false"),
         );
-        let high = layer(
-            "req_high",
-            "High",
-            &format!(
-                "[{high_key}]\nenabled = false\nallow_upstream_proxy = true\n\
-                 [{high_key}.domains]\n'high.example.com' = 'allow'\n'shared.example.com' = 'deny'"
-            ),
+        let source = low.source.to_string();
+        let high = layer("current", "Current policy", "[features]\napps = false");
+        let err = compose_requirements_for_hostname(vec![low, high], None)
+            .expect_err("retired policy must fail before merging")
+            .to_string();
+        assert!(
+            err.contains(&source) && err.contains(old) && err.contains(new),
+            "{err}"
         );
-        let expected_source =
-            RequirementSource::composite([high.source.clone(), low.source.clone()]);
-        let composed = compose_requirements_for_hostname(vec![low, high], /*hostname*/ None)
-            .expect("compose network aliases")
-            .expect("requirements present");
-        assert_eq!(
-            composed.network,
-            Some(Sourced::new(
-                expected_requirements(
-                    "[network_proxy]\nenabled = false\nallow_local_binding = false\nallow_upstream_proxy = true\n\
-                     [network_proxy.domains]\n'low.example.com' = 'allow'\n'high.example.com' = 'allow'\n'shared.example.com' = 'deny'"
-                )
-                .network
-                .expect("network requirements"),
-                expected_source,
-            ))
-        );
-    }
-}
-
-#[test]
-fn permissions_network_conflicts_with_top_level_network_across_layers() {
-    for table in ["network_proxy", "experimental_network"] {
-        for (root_first, root_values) in [(true, "enabled = true"), (false, "")] {
-            let root = layer("root", "Root", &format!("[{table}]\n{root_values}"));
-            let permissions = layer(
-                "permissions",
-                "Permissions",
-                "[permissions.network]\nenabled = true",
-            );
-            let root_source = root.source.clone();
-            let permissions_source = permissions.source.clone();
-            let layers = if root_first {
-                vec![root, permissions]
-            } else {
-                vec![permissions, root]
-            };
-            let err = compose_requirements_for_hostname(layers, /*hostname*/ None)
-                .expect_err("network requirement surfaces must not coexist")
-                .to_string();
-            assert!(err.contains(&root_source.to_string()), "{err}");
-            assert!(err.contains(&permissions_source.to_string()), "{err}");
-        }
     }
 }
 

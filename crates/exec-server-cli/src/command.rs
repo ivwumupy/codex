@@ -34,11 +34,6 @@ pub struct ExecServerCommand {
     )]
     pub strict_config: bool,
 
-    /// Linux PID namespace: isolate (default) or inherit. Inherit allows signals to
-    /// other same-UID processes; enable only when provisioning a dedicated environment.
-    #[arg(long, value_name = "MODE", default_value = "isolate", global = true)]
-    linux_sandbox_pid_namespace: codex_sandboxing::LinuxSandboxPidNamespace,
-
     /// Allow permitted private IP destinations to use the configured upstream proxy.
     /// If no valid upstream proxy applies to the request protocol, connect directly.
     /// Loopback stays local. This flag does not require upstream routing.
@@ -149,21 +144,11 @@ impl ExecServerCommand {
             .codex_self_exe
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Codex executable path is not configured"))?;
-        let mut runtime_paths = ExecServerRuntimeOptions::new(
+        let runtime_paths = ExecServerRuntimeOptions::new(
             codex_self_exe,
             arg0_paths.codex_linux_sandbox_exe.clone(),
         )?
-        .with_linux_sandbox_pid_namespace(self.linux_sandbox_pid_namespace)
         .with_proxy_private_ips_via_upstream(self.proxy_private_ips_via_upstream);
-        // Config loading below owns error handling (non-strict stdio can proceed
-        // without config). Never retain other startup flags in the executor.
-        if let Ok(overrides) = root_config_overrides.parse_overrides() {
-            let cli_flags = codex_config::build_cli_overrides_layer(&overrides);
-            runtime_paths.prefer_mxc = cli_flags
-                .get("features")
-                .and_then(|features| features.get("prefer_mxc"))
-                .and_then(toml::Value::as_bool);
-        }
         if let Some(base_url) = self.remote.take() {
             let environment_id = self.environment_id.take().ok_or_else(|| {
                 anyhow::anyhow!("--environment-id is required when --remote is set")

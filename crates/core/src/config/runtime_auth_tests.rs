@@ -16,7 +16,7 @@ async fn managed_runtime_mode_pins_defaults_and_rejects_overrides() -> anyhow::R
         let requirement: codex_config::ConfigRequirementsToml = toml::from_str(&format!(
             "[features.runtime_agent_instances]\nenabled = true\nmode = '{name}'"
         ))?;
-        for local in ["", "[features]\nruntime_agent_instances = true"] {
+        for local in ["", "[features]\nruntime_agent_instances.enabled = true"] {
             let mut sourced = codex_config::ConfigRequirementsWithSources::default();
             sourced.merge_unset_fields(RequirementSource::Unknown, requirement.clone());
             let stack = codex_config::ConfigLayerStack::new(
@@ -67,7 +67,7 @@ fn unmanaged_runtime_modes_and_legacy_boolean_requirements_work() -> anyhow::Res
     for (text, expected) in [
         ("", RuntimeAuthMode::DualHeader),
         (
-            "[features]\nruntime_agent_instances = true",
+            "[features]\nruntime_agent_instances.enabled = true",
             RuntimeAuthMode::DualHeader,
         ),
         (
@@ -84,7 +84,7 @@ fn unmanaged_runtime_modes_and_legacy_boolean_requirements_work() -> anyhow::Res
         );
     }
     let requirement: codex_config::ConfigRequirementsToml =
-        toml::from_str("[features]\nruntime_agent_instances = false")?;
+        toml::from_str("[features]\nruntime_agent_instances.enabled = false")?;
     let requirement = requirement.feature_requirements.unwrap();
     assert_eq!(
         requirement.entries.get("runtime_agent_instances"),

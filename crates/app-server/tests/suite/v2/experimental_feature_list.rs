@@ -74,8 +74,6 @@ async fn experimental_feature_list_returns_feature_metadata_with_stage() -> Resu
                     (ExperimentalFeatureStage::UnderDevelopment, None, None, None)
                 }
                 Stage::Stable => (ExperimentalFeatureStage::Stable, None, None, None),
-                Stage::Deprecated => (ExperimentalFeatureStage::Deprecated, None, None, None),
-                Stage::Removed => (ExperimentalFeatureStage::Removed, None, None, None),
             };
 
             ExperimentalFeature {

@@ -115,8 +115,8 @@ fn project_config_uses_platform_case_for_custom_credential_environment_keys() {
 #[test]
 fn project_config_cannot_change_configured_credential_broker_state() {
     for project_config in [
-        "[features]\nnetwork_proxy = true",
-        "[features]\nnetwork_proxy = false",
+        "[features]\nnetwork_proxy.enabled = true",
+        "[features]\nnetwork_proxy.enabled = false",
         "[features.network_proxy]\nenabled = true",
         "[features.network_proxy]\nenabled = false",
         "[features]\nshell_snapshot = true",
@@ -159,7 +159,7 @@ fn project_config_cannot_change_configured_credential_broker_state() {
 #[test]
 fn disabled_credential_broker_preserves_project_shell_settings() {
     let mut config: TomlValue = toml::from_str(
-        "[features]\nnetwork_proxy = true\nshell_snapshot = false\n\
+        "[features]\nnetwork_proxy.enabled = true\nshell_snapshot = false\n\
          [shell_environment_policy]\nexperimental_use_profile = true\n\
          [shell_environment_policy.set]\n\
          GH_HOST = 'attacker.example'\n\
@@ -170,7 +170,7 @@ fn disabled_credential_broker_preserves_project_shell_settings() {
 
     let ignored = sanitize_project_config(&mut config, CredentialBrokerProjectState::Disabled, &[]);
 
-    assert_eq!(ignored, vec!["features.network_proxy".to_string()]);
+    assert_eq!(ignored, vec!["features.network_proxy.enabled".to_string()]);
     assert_eq!(
         config,
         toml::from_str::<TomlValue>(
@@ -193,7 +193,7 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
 
     for (features, requirements, broker_state) in [
         (
-            "[features]\ncredential_masking=true\nnetwork_proxy=true",
+            "[features]\ncredential_masking=true\nnetwork_proxy.enabled=true",
             "",
             Enabled,
         ),
@@ -204,21 +204,21 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
         ),
         (
             "[features]\ncredential_masking=true",
-            "[experimental_network]\nenabled=true",
+            "[permissions.network]\nenabled=true",
             Enabled,
         ),
         (
-            "[features]\ncredential_masking=true\nnetwork_proxy=false",
+            "[features]\ncredential_masking=true\nnetwork_proxy.enabled=false",
             "",
             Enabled,
         ),
         (
-            "[features]\ncredential_masking=false\nnetwork_proxy=true",
+            "[features]\ncredential_masking=false\nnetwork_proxy.enabled=true",
             "[features]\ncredential_masking=true",
             Enabled,
         ),
         (
-            "[features]\ncredential_masking=true\nnetwork_proxy=true",
+            "[features]\ncredential_masking=true\nnetwork_proxy.enabled=true",
             "[features]\ncredential_masking=false",
             Unconfigured,
         ),
@@ -228,23 +228,23 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
             Enabled,
         ),
         (
-            "[features]\ncredential_masking=true\nnetwork_proxy=true",
-            "[experimental_network]\nenabled=false",
+            "[features]\ncredential_masking=true\nnetwork_proxy.enabled=true",
+            "[permissions.network]\nenabled=false",
             Disabled,
         ),
         (
-            "[features]\ncredential_masking=false\nnetwork_proxy=true",
-            "[features]\ncredential_masking=true\n[experimental_network]\nenabled=false",
+            "[features]\ncredential_masking=false\nnetwork_proxy.enabled=true",
+            "[features]\ncredential_masking=true\n[permissions.network]\nenabled=false",
             Disabled,
         ),
         (
             "[features]\ncredential_masking=false\n[features.network_proxy]\nenabled=true\ncredential_broker=true",
-            "[experimental_network]\nenabled=false",
+            "[permissions.network]\nenabled=false",
             Disabled,
         ),
         (
-            "[features]\ncredential_masking=true\nnetwork_proxy=true",
-            "[features]\nnetwork_proxy=false\n[experimental_network]\nenabled=true",
+            "[features]\ncredential_masking=true\nnetwork_proxy.enabled=true",
+            "[features]\nnetwork_proxy.enabled=false\n[permissions.network]\nenabled=true",
             Enabled,
         ),
     ] {
@@ -261,7 +261,7 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
             format!("project_root_markers=['.project-root']\n[projects.{project_key}]\ntrust_level='trusted'\n{features}"),
         )
         .expect("write trusted config");
-        let project_config = "[features]\ncredential_masking=false\nnetwork_proxy=false\nshell_snapshot=false\n\
+        let project_config = "[features]\ncredential_masking=false\nnetwork_proxy.enabled=false\nshell_snapshot=false\n\
             [shell_environment_policy]\nexperimental_use_profile=true\n\
             [shell_environment_policy.set]\nGH_HOST='untrusted.example'\nGH_TOKEN='project-value'\n\
             ZDOTDIR='/project-startup'\nBASH_ENV='/project-startup'\nUNCHANGED='allowed'";
@@ -297,7 +297,7 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
             }
             Disabled => project_config
                 .replace("credential_masking=false\n", "")
-                .replace("network_proxy=false\n", ""),
+                .replace("network_proxy.enabled=false\n", ""),
             Unconfigured => project_config.replace("credential_masking=false\n", ""),
         };
         let expected: TomlValue = toml::from_str(&expected).expect("expected project config");
@@ -322,12 +322,8 @@ async fn credential_masking_preserves_project_protections_in_both_loaders() {
 #[test]
 fn project_environment_filters_preserve_child_policy() {
     for project_config in [
-        "[shell_environment_policy]\ninclude_only = ['GH_ENTERPRISE_TOKEN']",
-        "[shell_environment_policy]\nexclude = ['*HOST*', '*BASE_URL*', 'OTHER']",
         "[shell_environment_policy.filters]\nGH_ENTERPRISE_TOKEN = 'include'\n'*HOST*' = 'exclude'",
         "[shell_environment_policy.filters]\n'*HOST*' = 'exclude'\nOTHER = 'exclude'",
-        "[shell_environment_policy]\nexclude = ['*']",
-        "[shell_environment_policy]\ninclude_only = ['STRIPE_API_KEY']",
         "[shell_environment_policy.filters]\nSTRIPE_API_KEY = 'include'\n'*HOST*' = 'exclude'",
     ] {
         let expected: TomlValue = toml::from_str(project_config).expect("valid project config");
@@ -353,9 +349,8 @@ fn project_environment_filters_keep_excluded_hosts_out_of_children() {
     for project_policy in [
         "inherit = 'none'",
         "inherit = 'core'",
-        "exclude = ['*']",
         "filters = { '*' = 'exclude' }",
-        "include_only = ['GH_ENTERPRISE_TOKEN']",
+        "filters = { GH_ENTERPRISE_TOKEN = 'include' }",
     ] {
         let mut project: TomlValue = toml::from_str(&format!(
             "[shell_environment_policy]\n{project_policy}\n\
@@ -716,63 +711,6 @@ async fn missing_packaged_defaults_file_returns_an_error() {
             packaged_defaults_path.display()
         )
     );
-}
-
-#[tokio::test]
-async fn multi_agent_warns_for_explicit_user_and_project_settings() -> std::io::Result<()> {
-    let home = tempdir()?;
-    let workspace = tempdir()?;
-    let cwd = AbsolutePathBuf::try_from(workspace.path())?;
-    let trust_key = TomlValue::String(project_trust_key(workspace.path()));
-    let project_config_dir = workspace.path().join(".codex");
-    std::fs::create_dir(&project_config_dir)?;
-    let session_flags = [(
-        "features.multi_agent".to_string(),
-        TomlValue::Boolean(false),
-    )];
-    for (user, project, flags, warn) in [
-        ("", "", session_flags.as_slice(), false),
-        ("[features]\nmulti_agent = false", "", &[], true),
-        (
-            "",
-            "[features]\nmulti_agent = true",
-            session_flags.as_slice(),
-            true,
-        ),
-    ] {
-        std::fs::write(
-            home.path().join(CONFIG_TOML_FILE),
-            format!("[projects.{trust_key}]\ntrust_level = 'trusted'\n{user}"),
-        )?;
-        std::fs::write(project_config_dir.join(CONFIG_TOML_FILE), project)?;
-        let stack = load_config_layers_state(
-            &TestFileSystem,
-            home.path(),
-            Some(cwd.clone()),
-            flags,
-            LoaderOverrides::without_managed_config_for_tests(),
-            &crate::NoopThreadConfigLoader,
-        )
-        .await?;
-        let warned = stack
-            .startup_warnings()
-            .unwrap_or_default()
-            .iter()
-            .any(|warning| {
-                warning.contains(
-                    "`[features].multi_agent` is deprecated. It still controls the V1 fallback.",
-                )
-            });
-        assert_eq!(
-            (
-                stack.effective_config()["features"]["multi_agent"].as_bool(),
-                warned
-            ),
-            (Some(false), warn),
-            "user={user:?}, project={project:?}"
-        );
-    }
-    Ok(())
 }
 
 #[cfg(windows)]

@@ -30,6 +30,7 @@ fn strict_config_rejects_unknown_config_override() -> Result<()> {
     for (config_override, ignored_path) in [
         ("foo=bar", "foo"),
         ("tui.bogus_key_xyz=1", "tui.bogus_key_xyz"),
+        ("disable_paste_burst=true", "disable_paste_burst"),
     ] {
         let codex_home = TempDir::new()?;
         let mut cmd = codex_command(codex_home.path())?;

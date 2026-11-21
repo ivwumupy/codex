@@ -1,6 +1,12 @@
-# Configuration docs moved
+# Configuration
 
-This file has moved. Please see the latest configuration documentation here:
+The [configuration schema](crates/core/config.schema.json) lists the settings available in this fork's `config.toml`. Run `codex features list` to see feature defaults and `codex --help` for command-line options.
 
-- Full config docs: [docs/config.md](https://github.com/openai/codex/blob/main/docs/config.md)
-- MCP servers section: [docs/config.md#connecting-to-mcp-servers](https://github.com/openai/codex/blob/main/docs/config.md#connecting-to-mcp-servers)
+Features with their own settings use an `enabled` field in the feature table. For example:
+
+```toml
+[features.code_mode]
+enabled = true
+```
+
+For a boolean-only feature, set the key directly under `[features]`, for example `shell_snapshot = false`. CLI feature switches use the same paths when saving changes.

@@ -62,7 +62,6 @@ pub(crate) async fn handoff_scenario(native_history: bool) -> Result<Vec<Respons
         .with_extensions(Arc::new(extensions.build()))
         .with_config(move |config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::GuardianRootHandoffContext,
             ] {

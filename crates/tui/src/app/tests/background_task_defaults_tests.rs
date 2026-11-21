@@ -245,7 +245,7 @@ async fn command_center_new_reads_server_defaults_for_actual_destination() -> Re
         std::fs::write(
             server_home.path().join("config.toml"),
             format!(
-                "{}model_reasoning_effort = \"high\"\nservice_tier = \"fast\"\n{}",
+                "{}model_reasoning_effort = \"high\"\nservice_tier = \"priority\"\n{}",
                 if mode == "remote-null-fast" {
                     ""
                 } else {

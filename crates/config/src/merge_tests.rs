@@ -1,171 +1,17 @@
 use super::*;
-use crate::config_toml::AgentsToml;
-use crate::config_toml::ConfigToml;
-use crate::types::MemoriesToml;
 use pretty_assertions::assert_eq;
 
 fn parse_toml(value: &str) -> TomlValue {
     toml::from_str(value).expect("TOML should parse")
 }
 
+/// Higher layers can add settings without changing enablement.
 #[test]
-fn merge_toml_values_normalizes_legacy_key_from_base_layer() {
-    let mut base = parse_toml(
-        r#"
-[memories]
-no_memories_if_mcp_or_web_search = false
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = true
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    let expected = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = true
-"#,
-    );
-    assert_eq!(base, expected);
-
-    let config: ConfigToml = base.try_into().expect("merged config should deserialize");
-    assert_eq!(
-        config.memories,
-        Some(MemoriesToml {
-            disable_on_external_context: Some(true),
-            ..Default::default()
-        })
-    );
-}
-
-#[test]
-fn merge_toml_values_normalizes_legacy_key_from_overlay_layer() {
-    let mut base = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = false
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[memories]
-no_memories_if_mcp_or_web_search = true
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    let expected = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = true
-"#,
-    );
-    assert_eq!(base, expected);
-
-    let config: ConfigToml = base.try_into().expect("merged config should deserialize");
-    assert_eq!(
-        config.memories,
-        Some(MemoriesToml {
-            disable_on_external_context: Some(true),
-            ..Default::default()
-        })
-    );
-}
-
-#[test]
-fn merge_toml_values_prefers_canonical_key_when_one_layer_has_both_names() {
-    let mut base = TomlValue::Table(toml::map::Map::new());
-    let overlay = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = true
-no_memories_if_mcp_or_web_search = false
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    let expected = parse_toml(
-        r#"
-[memories]
-disable_on_external_context = true
-"#,
-    );
-    assert_eq!(base, expected);
-}
-
-#[test]
-fn merge_toml_values_normalizes_legacy_agents_key_across_layers() {
-    let mut base = parse_toml(
-        r#"
-[agents]
-max_threads = 4
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[agents]
-max_concurrent_threads_per_session = 7
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    let expected = parse_toml(
-        r#"
-[agents]
-max_concurrent_threads_per_session = 7
-"#,
-    );
-    assert_eq!(base, expected);
-
-    let config: ConfigToml = base.try_into().expect("merged config should deserialize");
-    assert_eq!(
-        config.agents,
-        Some(AgentsToml {
-            max_concurrent_threads_per_session: Some(7),
-            ..Default::default()
-        })
-    );
-}
-
-#[test]
-fn merge_toml_values_normalizes_legacy_agents_key_from_overlay() {
-    let mut base = parse_toml(
-        r#"
-[agents]
-max_concurrent_threads_per_session = 4
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[agents]
-max_threads = 7
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    let expected = parse_toml(
-        r#"
-[agents]
-max_concurrent_threads_per_session = 7
-"#,
-    );
-    assert_eq!(base, expected);
-}
-
-/// Feature tables added above legacy toggles retain the lower layer's enabled state.
-#[test]
-fn merge_multi_agent_v2_table_preserves_legacy_boolean_toggle() {
+fn merge_multi_agent_v2_table_preserves_enabled() {
     for feature_path in ["features", "profiles.work.features"] {
-        let mut base = parse_toml(&format!("[{feature_path}]\nmulti_agent_v2 = true\n"));
+        let mut base = parse_toml(&format!(
+            "[{feature_path}]\nmulti_agent_v2.enabled = true\n"
+        ));
         let overlay = parse_toml(&format!(
             "[{feature_path}.multi_agent_v2]\nsubagent_usage_hint_text = \"Delegate carefully.\"\n",
         ));
@@ -181,14 +27,16 @@ fn merge_multi_agent_v2_table_preserves_legacy_boolean_toggle() {
     }
 }
 
-/// Legacy feature toggles update enabled state without discarding nested configuration.
+/// Changing enablement preserves lower-layer settings.
 #[test]
-fn merge_multi_agent_v2_boolean_preserves_existing_feature_table() {
+fn merge_multi_agent_v2_enabled_preserves_existing_feature_table() {
     for feature_path in ["features", "profiles.work.features"] {
         let mut base = parse_toml(&format!(
             "[{feature_path}.multi_agent_v2]\nenabled = true\nsubagent_usage_hint_text = \"Delegate carefully.\"\n",
         ));
-        let overlay = parse_toml(&format!("[{feature_path}]\nmulti_agent_v2 = false\n"));
+        let overlay = parse_toml(&format!(
+            "[{feature_path}]\nmulti_agent_v2.enabled = false\n"
+        ));
 
         merge_toml_values(&mut base, &overlay);
 
@@ -233,7 +81,7 @@ fn multi_agent_v2_cli_overrides_preserve_boolean_and_nested_configuration() {
             TomlValue::String("Delegate carefully.".to_string()),
         );
         let enabled = (
-            format!("{feature_path}.multi_agent_v2"),
+            format!("{feature_path}.multi_agent_v2.enabled"),
             TomlValue::Boolean(true),
         );
         let feature_table = (
@@ -260,7 +108,7 @@ fn code_mode_overrides_preserve_enabled_state_and_cell_overhead() {
     for feature_path in ["features", "profiles.work.features"] {
         for enabled in [true, false] {
             let toggle = (
-                format!("{feature_path}.code_mode"),
+                format!("{feature_path}.code_mode.enabled"),
                 TomlValue::Boolean(enabled),
             );
             let overhead = (
@@ -279,7 +127,9 @@ fn code_mode_overrides_preserve_enabled_state_and_cell_overhead() {
                 assert_eq!(crate::build_cli_overrides_layer(&overrides), expected);
             }
 
-            let boolean_layer = parse_toml(&format!("[{feature_path}]\ncode_mode = {enabled}\n"));
+            let boolean_layer = parse_toml(&format!(
+                "[{feature_path}]\ncode_mode.enabled = {enabled}\n"
+            ));
             let table_layer = parse_toml(&format!(
                 "[{feature_path}.code_mode]\nexperimental_show_cell_overhead = true\n",
             ));
@@ -302,7 +152,7 @@ fn structured_mode_overrides_preserve_disabled_state_and_mode() {
     ] {
         for feature_path in ["features", "profiles.work.features"] {
             let disabled = (
-                format!("{feature_path}.{feature}"),
+                format!("{feature_path}.{feature}.enabled"),
                 TomlValue::Boolean(false),
             );
             let mode = (
@@ -316,7 +166,8 @@ fn structured_mode_overrides_preserve_disabled_state_and_mode() {
                 assert_eq!(crate::build_cli_overrides_layer(&overrides), expected);
             }
 
-            let boolean_layer = parse_toml(&format!("[{feature_path}]\n{feature} = false\n"));
+            let boolean_layer =
+                parse_toml(&format!("[{feature_path}]\n{feature}.enabled = false\n"));
             let table_layer = parse_toml(&format!(
                 "[{feature_path}.{feature}]\nmode = \"{selected_mode}\"\n",
             ));
@@ -334,7 +185,7 @@ fn structured_mode_overrides_preserve_disabled_state_and_mode() {
 #[test]
 fn network_proxy_feature_overrides_preserve_credential_broker_configuration() {
     let enabled = (
-        "features.network_proxy".to_string(),
+        "features.network_proxy.enabled".to_string(),
         TomlValue::Boolean(true),
     );
     let broker = (
@@ -348,7 +199,7 @@ fn network_proxy_feature_overrides_preserve_credential_broker_configuration() {
         assert_eq!(crate::build_cli_overrides_layer(&overrides), expected);
     }
 
-    let mut base = parse_toml("[features]\nnetwork_proxy = true\n");
+    let mut base = parse_toml("[features]\nnetwork_proxy.enabled = true\n");
     merge_toml_values(
         &mut base,
         &parse_toml("[features.network_proxy]\ncredential_broker = true\n"),
@@ -484,26 +335,6 @@ fn merge_toml_values_normalizes_permission_network_domains_before_overlaying() {
 }
 
 #[test]
-fn shell_environment_policy_legacy_array_overlay_replaces_legacy_array() {
-    let mut base = parse_toml(
-        r#"
-[shell_environment_policy]
-exclude = ["LOW_*", "SHARED_*"]
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[shell_environment_policy]
-exclude = ["HIGH_*"]
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    assert_eq!(base, overlay);
-}
-
-#[test]
 fn shell_environment_policy_set_overlay_preserves_case_distinct_keys() {
     let mut base = parse_toml(
         r#"
@@ -631,123 +462,4 @@ fn shell_environment_policy_filters_overlay_merges_unicode_keys_case_insensitive
     merge_toml_values(&mut base, &overlay);
 
     assert_eq!(base, overlay);
-}
-
-#[test]
-fn shell_environment_policy_filters_replace_lower_legacy_filter_fields() {
-    let mut base = parse_toml(
-        r#"
-[shell_environment_policy]
-inherit = "core"
-exclude = ["FLIP_TO_INCLUDE", "KEEP_EXCLUDED"]
-include_only = ["FLIP_TO_EXCLUDE", "KEEP_INCLUDED"]
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[shell_environment_policy.filters]
-"ADD_INCLUDED" = "include"
-"FLIP_TO_EXCLUDE" = "exclude"
-"FLIP_TO_INCLUDE" = "include"
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    assert_eq!(
-        base,
-        parse_toml(
-            r#"
-[shell_environment_policy]
-inherit = "core"
-
-[shell_environment_policy.filters]
-"ADD_INCLUDED" = "include"
-"FLIP_TO_EXCLUDE" = "exclude"
-"FLIP_TO_INCLUDE" = "include"
-"#,
-        )
-    );
-}
-
-#[test]
-fn shell_environment_policy_legacy_arrays_replace_lower_filters() {
-    let mut base = parse_toml(
-        r#"
-[shell_environment_policy]
-inherit = "core"
-
-[shell_environment_policy.filters]
-"FLIP_TO_EXCLUDE" = "include"
-"LOW_EXCLUDED" = "exclude"
-"KEEP_INCLUDED" = "include"
-"#,
-    );
-    let overlay = parse_toml(
-        r#"
-[shell_environment_policy]
-exclude = ["FLIP_TO_EXCLUDE", "HIGH_EXCLUDED"]
-"#,
-    );
-
-    merge_toml_values(&mut base, &overlay);
-
-    assert_eq!(
-        base,
-        parse_toml(
-            r#"
-[shell_environment_policy]
-inherit = "core"
-exclude = ["FLIP_TO_EXCLUDE", "HIGH_EXCLUDED"]
-"#,
-        )
-    );
-}
-
-#[test]
-fn empty_shell_environment_filter_representations_replace_the_other_form() {
-    let cases = [
-        (
-            r#"[shell_environment_policy]
-exclude = ["AWS_*"]
-include_only = ["PATH"]
-"#,
-            r#"[shell_environment_policy.filters]
-"#,
-        ),
-        (
-            r#"[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-            r#"[shell_environment_policy]
-exclude = []
-"#,
-        ),
-    ];
-
-    for (base, overlay) in cases {
-        let mut base = parse_toml(base);
-        let overlay = parse_toml(overlay);
-
-        merge_toml_values(&mut base, &overlay);
-
-        assert_eq!(base, overlay);
-    }
-}
-
-#[test]
-fn sparse_overlay_preserves_unvisited_base_aliases() {
-    let mut base = parse_toml(
-        "[memories]\nno_memories_if_mcp_or_web_search = false\n[agents]\nmax_threads = 2",
-    );
-    let overlay = parse_toml("[agents]\nmax_depth = 3");
-
-    merge_toml_values(&mut base, &overlay);
-
-    assert_eq!(
-        base,
-        parse_toml(
-            "[memories]\nno_memories_if_mcp_or_web_search = false\n[agents]\nmax_concurrent_threads_per_session = 2\nmax_depth = 3",
-        ),
-    );
 }

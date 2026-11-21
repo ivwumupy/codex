@@ -362,9 +362,7 @@ async fn spawned_child_has_independent_timing_and_parent_wait_is_tools(
             model.multi_agent_version = Some(MultiAgentVersion::V2);
         })
         .with_config(move |config| {
-            for feature in [Feature::Collab, Feature::MultiAgentV2] {
-                config.features.enable(feature).expect("enable multi-agent");
-            }
+            config.features.enable(Feature::MultiAgentV2).expect("enable multi-agent");
             if critical_path_timing {
                 config
                     .features

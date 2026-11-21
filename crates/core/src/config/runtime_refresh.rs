@@ -9,8 +9,6 @@ use crate::config::resolve_tool_suggest_config_from_layer_stack;
 use codex_config::McpServerAuth;
 use codex_config::McpServerConfig;
 use codex_features::Feature;
-use codex_features::FeatureConfigSource;
-use codex_features::FeatureOverrides;
 use codex_features::Features;
 use codex_features::FeaturesToml;
 use serde::Deserialize;
@@ -78,12 +76,8 @@ impl Config {
             .try_into()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
         let mut configured_features = Features::from_sources(
-            FeatureConfigSource {
-                features: cfg.features.as_ref(),
-                ..Default::default()
-            },
-            FeatureConfigSource::default(),
-            FeatureOverrides::default(),
+            cfg.features.as_ref(),
+            None,
         );
         // These operational controls accept host defaults beneath explicit layer values.
         // Enterprise opt-in always comes from trusted layers instead.

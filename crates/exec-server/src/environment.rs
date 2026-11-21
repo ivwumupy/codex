@@ -1044,7 +1044,7 @@ impl Environment {
         match &self.remote_client {
             Some(client) => client.get().await?.read_environment_config(params).await,
             None => {
-                read_environment_config(self.filesystem.as_ref(), params, /*prefer_mxc*/ None)
+                read_environment_config(self.filesystem.as_ref(), params)
                     .await
                     .map_err(|error| ExecServerError::Protocol(error.to_string()))
             }

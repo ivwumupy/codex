@@ -370,7 +370,6 @@ use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::DeprecationNoticeEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
@@ -556,10 +555,9 @@ pub(crate) fn resolve_multi_agent_version(
     conversation_history
         .get_multi_agent_version()
         .or(inherited_multi_agent_version)
-        .or(match conversation_history {
-            InitialHistory::New | InitialHistory::Cleared => None,
-            // Threads created before runtime metadata existed keep the legacy V1 tool surface.
-            InitialHistory::Resumed(_) | InitialHistory::Forked(_) => Some(MultiAgentVersion::V1),
+        .map(|version| match version {
+            MultiAgentVersion::V1 => MultiAgentVersion::Disabled,
+            version => version,
         })
 }
 
@@ -962,7 +960,7 @@ impl Session {
             shell_environment_policy: config.permissions.shell_environment_policy.clone(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
             windows_sandbox_type: config.effective_local_windows_sandbox_type(),
-            use_legacy_landlock: config.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             legacy_fallback_cwd: config.cwd.clone(),
             runtime_workspace_roots: config.workspace_roots.clone(),
             codex_home: config.codex_home.clone(),
@@ -1332,11 +1330,10 @@ impl Session {
             FEATURES
                 .iter()
                 .filter(|spec| {
-                    spec.id == Feature::RemoteCompactionV2
-                        || (spec.stage.experimental_menu_description().is_some()
-                            && config.features.enabled(spec.id))
+                    spec.stage.experimental_menu_description().is_some() && config.features.enabled(spec.id)
                 })
                 .map(|spec| spec.key)
+                .chain(["remote_compaction_v2"])
                 .collect::<Vec<_>>()
                 .join(","),
         )

@@ -19,9 +19,7 @@ use codex_config::ConfigLayerMetadata;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
 use codex_config::ConfigRequirementsToml;
-use codex_config::ShellEnvironmentPolicyFilterRepresentation;
 use codex_config::config_toml::ConfigToml;
-use codex_config::is_structured_feature_path;
 use codex_config::merge_toml_values;
 use codex_config::shell_environment_filter_entry;
 use codex_config::validate_shell_environment_policy_filter_config;
@@ -359,6 +357,12 @@ impl ConfigManager {
 
         for (key_path, value, strategy) in edits.into_iter() {
             let mut segments = writable_key_path(&layers, &key_path)?;
+            if value.is_boolean() && codex_config::is_structured_feature_path(&segments) {
+                return Err(ConfigManagerError::write(
+                    ConfigWriteErrorCode::ConfigValidationError,
+                    format!("set `{key_path}.enabled` to toggle this feature"),
+                ));
+            }
             if (value.is_null() || matches!(strategy, MergeStrategy::Upsert))
                 && let Some(pattern) = shell_environment_filter_entry(&user_config, &segments)
                     .map(|(pattern, _)| pattern.clone())
@@ -382,29 +386,7 @@ impl ConfigManager {
                     _ => {}
                 }
             }
-            let preserves_network_proxy_settings = value.is_null()
-                && is_structured_feature_path(&segments)
-                && segments
-                    .last()
-                    .is_some_and(|feature| feature == "network_proxy")
-                && {
-                    let has_broker_settings = |config: &TomlValue| {
-                        value_at_path(config, &segments)
-                            .and_then(TomlValue::as_table)
-                            .is_some_and(|feature| {
-                                feature.contains_key("credential_broker")
-                                    || feature.contains_key("credentials")
-                            })
-                    };
-                    has_broker_settings(&user_config)
-                        || !has_broker_settings(&user_layer.config)
-                            && has_broker_settings(&layers.effective_config())
-                };
-            let parsed_value = if preserves_network_proxy_settings {
-                Some(TomlValue::Boolean(false))
-            } else {
-                parse_value(value)?
-            };
+            let parsed_value = parse_value(value)?;
             if matches!(strategy, MergeStrategy::Upsert)
                 && let Some(value) = parsed_value.as_ref()
                 && matches!(segments.as_slice(), [policy, ..] if policy == "shell_environment_policy")
@@ -418,16 +400,6 @@ impl ConfigManager {
                     })?;
             }
 
-            let structured_feature_toggle = preserves_network_proxy_settings
-                || is_structured_feature_path(&segments)
-                    && parsed_value.as_ref().is_some_and(|value| {
-                        value.is_bool()
-                            || matches!(strategy, MergeStrategy::Upsert)
-                                && value.as_table().is_some_and(|table| {
-                                    table.len() == 1 && table.contains_key("enabled")
-                                })
-                    });
-
             if let Some(edit) = credential_provider_edits.apply(
                 &mut user_config,
                 &segments,
@@ -437,9 +409,6 @@ impl ConfigManager {
                 config_edits.push(edit);
             }
 
-            if structured_feature_toggle {
-                segments.push("enabled".to_string());
-            }
             parsed_segments.push(segments);
         }
         config_edits.extend(credential_provider_edits.remapping_edits(&user_config)?);
@@ -695,16 +664,6 @@ enum MergeError {
     Validation(String),
 }
 
-fn structured_feature_depth(segments: &[String]) -> Option<usize> {
-    let depth = match segments {
-        [profiles, _, _, _, ..] if profiles == "profiles" => 4,
-        [_, _, ..] => 2,
-        _ => return None,
-    };
-
-    is_structured_feature_path(&segments[..depth]).then_some(depth)
-}
-
 fn credential_providers_path(segments: &[String]) -> Option<&[String]> {
     match segments {
         [features, proxy, credentials, ..]
@@ -734,23 +693,9 @@ fn apply_merge(
         ));
     };
 
-    let preserves_structured_feature_config =
-        structured_feature_depth(segments).is_some_and(|feature_depth| {
-            match value_at_path(root, &segments[..feature_depth]) {
-                Some(TomlValue::Boolean(_)) => {
-                    segments.len() > feature_depth || matches!(value, TomlValue::Table(_))
-                }
-                Some(TomlValue::Table(_)) => {
-                    segments.len() == feature_depth && matches!(value, TomlValue::Boolean(_))
-                }
-                _ => false,
-            }
-        });
-
-    if preserves_structured_feature_config
-        || matches!(strategy, MergeStrategy::Upsert)
+    if matches!(strategy, MergeStrategy::Upsert)
             && (credential_providers_path(segments).is_some()
-                || shell_environment_policy_representation_switch(root, segments, value)
+
                 || (matches!(value_at_path(root, segments), Some(TomlValue::Table(_)))
                     && matches!(value, TomlValue::Table(_))))
     {
@@ -795,20 +740,6 @@ fn sparse_overlay(path: &[String], value: &TomlValue) -> TomlValue {
     path.iter().rev().fold(value.clone(), |value, segment| {
         TomlValue::Table(toml::map::Map::from_iter([(segment.clone(), value)]))
     })
-}
-
-fn shell_environment_policy_representation_switch(
-    root: &TomlValue,
-    segments: &[String],
-    value: &TomlValue,
-) -> bool {
-    let current = root
-        .get("shell_environment_policy")
-        .and_then(ShellEnvironmentPolicyFilterRepresentation::from_policy);
-    let edited = ShellEnvironmentPolicyFilterRepresentation::from_edit(segments, value);
-    current
-        .zip(edited)
-        .is_some_and(|(current, edited)| current != edited)
 }
 
 fn clear_path(root: &mut TomlValue, segments: &[String]) -> Result<bool, MergeError> {
@@ -912,17 +843,6 @@ fn value_at_semantic_path<'a>(root: &'a TomlValue, segments: &[String]) -> Optio
     shell_environment_filter_entry(root, segments)
         .map(|(_, value)| value)
         .or_else(|| value_at_path(root, segments))
-        .or_else(|| {
-            let (field, parents) = segments.split_last()?;
-            if field != "enabled" {
-                return None;
-            }
-            if structured_feature_depth(parents) != Some(parents.len()) {
-                return None;
-            }
-            let feature = value_at_path(root, parents)?;
-            matches!(feature, TomlValue::Boolean(_)).then_some(feature)
-        })
 }
 
 fn override_message(layer: &ConfigLayerSource) -> String {
@@ -1046,18 +966,6 @@ fn find_effective_layer(
             return Some(layer.metadata());
         }
 
-        let Some(layer_representation) = layer
-            .config
-            .get("shell_environment_policy")
-            .and_then(ShellEnvironmentPolicyFilterRepresentation::from_policy)
-        else {
-            continue;
-        };
-        if ShellEnvironmentPolicyFilterRepresentation::from_path(segments)
-            .is_some_and(|edit_representation| edit_representation != layer_representation)
-        {
-            return Some(layer.metadata());
-        }
     }
 
     None

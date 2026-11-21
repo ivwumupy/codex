@@ -1531,12 +1531,6 @@ async fn fork_preserves_thread_instructions(
         InstructionForkSource::OfflinePrepared => ThreadHistoryMode::Paginated,
     };
     let mut builder = test_codex()
-        .with_config(|config| {
-            config
-                .features
-                .enable(Feature::Sqlite)
-                .expect("enable local persistence");
-        })
         .with_history_mode(history_mode);
     let test = builder.build_with_auto_env(&server).await?;
     let parent_provider = RecordingThreadInstructionsProvider::with_text(TASK_USER_INSTRUCTIONS);
@@ -2436,7 +2430,8 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
     .await;
     let spawn_args = serde_json::to_string(&json!({
         "message": SPAWN_CHILD_PROMPT,
-        "fork_context": fork_context,
+        "task_name": "worker",
+        "fork_turns": if fork_context { "all" } else { "none" },
     }))?;
     let spawn_mock = responses::mount_sse_once_match(
         &server,
@@ -2445,7 +2440,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
             responses::ev_response_created("spawn-response"),
             responses::ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -2487,7 +2482,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
     let mut builder = test_codex()
         .with_home(Arc::clone(&home))
         .with_config(|config| {
-            let _ = config.features.enable(Feature::Collab);
+            let _ = config.features.enable(Feature::MultiAgentV2);
             let _ = config.features.disable(Feature::EnableRequestCompression);
         });
     let test = builder.build(&server).await?;

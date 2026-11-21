@@ -34,7 +34,6 @@ use codex_app_server_protocol::ThreadSectionUpdateParams;
 use codex_app_server_protocol::ThreadSectionUpdateResponse;
 use codex_app_server_protocol::ThreadUnarchiveParams;
 use codex_app_server_protocol::ThreadUnarchiveResponse;
-use codex_features::Feature;
 use codex_state::PINNED_THREAD_SECTION_ID;
 use codex_state::PINNED_THREAD_SECTION_NAME;
 use pretty_assertions::assert_eq;
@@ -51,7 +50,6 @@ async fn thread_section_moves_notify_other_clients() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let (mut server, address) = spawn_websocket_server(codex_home.path()).await?;
     let mut writer = connect_websocket(address).await?;
@@ -116,7 +114,6 @@ async fn custom_sections_remain_discoverable_across_ordered_updates_and_restart(
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -248,7 +245,6 @@ async fn deleting_custom_sections_unassigns_active_and_archived_members() -> Res
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let first_thread = create_fake_rollout(
         codex_home.path(),
@@ -398,7 +394,6 @@ async fn custom_section_management_rejects_empty_names_missing_ids_and_pinned_mu
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())

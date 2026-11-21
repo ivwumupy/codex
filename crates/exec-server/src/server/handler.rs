@@ -224,7 +224,6 @@ impl ExecServerHandler {
         read_environment_config(
             crate::LOCAL_FS.as_ref(),
             params,
-            self.runtime_paths.prefer_mxc,
         )
         .await
         .map_err(|error| match error {

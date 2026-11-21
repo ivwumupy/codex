@@ -2,23 +2,7 @@ use super::*;
 use pretty_assertions::assert_eq;
 
 #[test]
-fn shell_environment_policy_accepts_legacy_lists_or_filters() {
-    let legacy: ShellEnvironmentPolicyToml = toml::from_str(
-        r#"
-exclude = ["LEGACY_*", "SHARED_*"]
-include_only = ["PATH", "HOME"]
-"#,
-    )
-    .expect("legacy arrays should remain valid in config.toml");
-    assert_eq!(
-        legacy,
-        ShellEnvironmentPolicyToml {
-            exclude: Some(vec!["LEGACY_*".to_string(), "SHARED_*".to_string()]),
-            include_only: Some(vec!["PATH".to_string(), "HOME".to_string()]),
-            ..Default::default()
-        }
-    );
-
+fn shell_environment_policy_accepts_keyed_filters() {
     let filtered: ShellEnvironmentPolicyToml = toml::from_str(
         r#"
 [filters]
@@ -43,33 +27,33 @@ include_only = ["PATH", "HOME"]
             ..Default::default()
         }
     );
+    let policy = ShellEnvironmentPolicy::from(filtered);
     assert_eq!(
-        ShellEnvironmentPolicy::from(filtered),
-        ShellEnvironmentPolicy::from(ShellEnvironmentPolicyToml {
-            exclude: Some(vec!["FLIP_TO_EXCLUDE".to_string()]),
-            include_only: Some(vec!["FLIP_TO_INCLUDE".to_string()]),
-            ..Default::default()
-        })
+        policy.exclude,
+        vec![EnvironmentVariablePattern::new_case_insensitive(
+            "FLIP_TO_EXCLUDE"
+        )]
+    );
+    assert_eq!(
+        policy.include_only,
+        vec![EnvironmentVariablePattern::new_case_insensitive(
+            "FLIP_TO_INCLUDE"
+        )]
     );
 }
 
 #[test]
-fn shell_environment_policy_rejects_mixed_legacy_lists_and_filters() {
-    let error = toml::from_str::<ShellEnvironmentPolicyToml>(
-        r#"
-exclude = ["LEGACY_*"]
-
-[filters]
-"CANONICAL_*" = "include"
-"#,
-    )
-    .expect_err("one config layer must not mix legacy lists and filters");
-
-    assert!(
-        error
-            .to_string()
-            .contains("cannot mix `filters` with legacy `exclude` or `include_only`")
-    );
+fn shell_environment_policy_rejects_retired_arrays() {
+    for field in ["exclude", "include_only"] {
+        let error =
+            toml::from_str::<ShellEnvironmentPolicyToml>(&format!("{field} = ['SECRET_*']"))
+                .expect_err("retired shell restrictions must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("shell_environment_policy.filters")
+        );
+    }
 }
 
 #[test]

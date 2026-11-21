@@ -227,7 +227,7 @@ async fn run_remote_review_cleanup(
         builder = builder
             .with_cloud_config_bundle(
                 CloudConfigBundleFixture::loader_with_enterprise_requirement(format!(
-                    "[experimental_network]\nenabled = true\n{local_binding}"
+                    "[permissions.network]\nenabled = true\n{local_binding}"
                 )),
             )
             .with_pre_build_hook(move |home| {

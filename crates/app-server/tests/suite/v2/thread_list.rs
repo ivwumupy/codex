@@ -827,7 +827,6 @@ async fn thread_list_respects_search_term_filter() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
 
     let older_match = create_fake_rollout(
@@ -1704,7 +1703,7 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .disable_feature(Feature::MultiAgentV2)
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .write(codex_home.path())?;
     let cli_id = create_fake_rollout(
         codex_home.path(),

@@ -48,7 +48,7 @@ default_permissions = "startup"
 model_instructions_file = {}
 [features]
 memories = {supports_read_restrictions}
-network_proxy = true
+network_proxy.enabled = true
 [memories]
 generate_memories = false
 use_memories = {supports_read_restrictions}
@@ -93,16 +93,8 @@ extends = "startup"
         config.model = Some("gpt-5.6-sol".to_string());
         config
             .features
-            .enable(Feature::Collab)
-            .expect("enable collaboration");
-        config
-            .features
             .enable(Feature::MultiAgentV2)
             .expect("enable multi-agent v2");
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("enable SQLite");
         config.multi_agent_v2.max_concurrent_threads_per_session = 3;
     };
     let mut builder = test_codex()

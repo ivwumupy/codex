@@ -106,11 +106,15 @@ pub(crate) async fn write(
                     format!("The server did not advertise experimental feature `{name}`")
                 })?;
             // Quote the server's key as a single TOML path segment.
-            let key = format!("features.{}", serde_json::json!(name));
+            let key = if codex_features::is_structured_feature(name) {
+                codex_features::feature_enabled_key(name)
+            } else {
+                format!("features.{}", serde_json::json!(name))
+            };
             Ok(crate::config_update::replace_config_value(
                 key,
                 // Keep the daemon opt-out explicit even before rollout defaults enable it.
-                if *enabled || feature.default_enabled || name == "daemon_auto_start" {
+                if *enabled || feature.default_enabled || name == "daemon_auto_start" || codex_features::is_structured_feature(name) {
                     serde_json::json!(enabled)
                 } else {
                     serde_json::Value::Null

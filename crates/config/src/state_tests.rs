@@ -7,38 +7,6 @@ fn test_user_config_path(temp_dir: &TempDir, file_name: &str) -> AbsolutePathBuf
         .expect("test user config path should be absolute")
 }
 
-#[test]
-fn origins_use_canonical_key_aliases() {
-    let layer = ConfigLayerEntry::new(
-        ConfigLayerSource::SessionFlags,
-        toml::from_str(
-            r#"
-[memories]
-no_memories_if_mcp_or_web_search = true
-"#,
-        )
-        .expect("config TOML should parse"),
-    );
-    let metadata = layer.metadata();
-    let stack = ConfigLayerStack::new(
-        vec![layer],
-        ConfigRequirements::default(),
-        ConfigRequirementsToml::default(),
-    )
-    .expect("single layer stack should be valid");
-
-    let origins = stack.origins();
-
-    assert_eq!(
-        origins.get("memories.disable_on_external_context"),
-        Some(&metadata)
-    );
-    assert!(
-        !origins.contains_key("memories.no_memories_if_mcp_or_web_search"),
-        "legacy key should be canonicalized before origin recording"
-    );
-}
-
 /// Legacy feature toggles own the semantic enabled leaf after layered merging.
 #[test]
 fn origins_attribute_multi_agent_v2_enabled_to_overriding_boolean_layer() {
@@ -56,7 +24,7 @@ fn origins_attribute_multi_agent_v2_enabled_to_overriding_boolean_layer() {
     let user_metadata = user_layer.metadata();
     let session_layer = ConfigLayerEntry::new(
         ConfigLayerSource::SessionFlags,
-        toml::from_str("[features]\nmulti_agent_v2 = false\n").expect("session config"),
+        toml::from_str("[features]\nmulti_agent_v2.enabled = false\n").expect("session config"),
     );
     let session_metadata = session_layer.metadata();
     let stack = ConfigLayerStack::new(
@@ -143,7 +111,7 @@ exclude = ["LEGACY_*"]
     assert!(
         error
             .to_string()
-            .contains("cannot mix `filters` with legacy `exclude` or `include_only`")
+            .contains("use `shell_environment_policy.filters` instead of `exclude` or `include_only`")
     );
 }
 

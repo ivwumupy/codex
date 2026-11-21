@@ -167,7 +167,7 @@ pub fn environment_config_for_selection(
         shell_environment_policy: permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(config),
         windows_sandbox_type: permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         exec_policy: None,
         mcp_policy: None,
         network_policy: None,

@@ -115,10 +115,6 @@ async fn root_turn_suspension_preserves_unfinished_turn_history(fail_child_write
         .with_config(|config| {
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("enable collaboration for the suspension test");
-            config
-                .features
                 .enable(Feature::MultiAgentV2)
                 .expect("enable multi-agent v2 for the suspension test");
         })

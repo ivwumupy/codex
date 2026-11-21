@@ -1046,7 +1046,7 @@ impl ChatWidget {
 
     pub(crate) fn open_feature_enable_prompt(&mut self, feature: Feature) {
         let (label, name) = match feature {
-            Feature::Collab => ("Subagents", "subagents"),
+            Feature::MultiAgentV2 => ("Subagents", "subagents"),
             Feature::MemoryTool => ("Memories", "memories"),
             _ => return,
         };

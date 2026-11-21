@@ -3484,10 +3484,10 @@ allow_local_binding = true
         .with_cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
-[experimental_network]
+[permissions.network]
 enabled = true
 allow_local_binding = true
-allowed_domains = ["**.invalid"]
+domains = { "**.invalid" = "allow" }
 review_domains = ["codex-network-test.invalid"]
 "#,
             ),
