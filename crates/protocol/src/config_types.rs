@@ -180,8 +180,7 @@ impl fmt::Display for ProfileV2Name {
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully
 /// prompted subagent to gather relevant context and apply a risk-based
 /// decision framework before approving or denying the request.
-pub enum ApprovalsReviewer {
-    #[default]
+pub enum ApprovalsReviewer {    #[default]
     #[serde(rename = "user")]
     User,
     #[serde(rename = "auto_review")]
@@ -671,8 +670,7 @@ pub enum AltScreenMode {
     Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema, TS, Default,
 )]
 #[serde(rename_all = "snake_case")]
-pub enum ModeKind {
-    Plan,
+pub enum ModeKind {    Plan,
     #[default]
     Default,
 }

@@ -272,17 +272,13 @@ impl From<CoreAskForApproval> for AskForApproval {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(
-    type = r#""user" | "auto_review""#,
-    export_to = "v2/"
-)]
+#[ts(type = r#""user" | "auto_review""#, export_to = "v2/")]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully
 /// prompted subagent to gather relevant context and apply a risk-based
 /// decision framework before approving or denying the request.
-pub enum ApprovalsReviewer {
-    #[serde(rename = "user")]
+pub enum ApprovalsReviewer {    #[serde(rename = "user")]
     User,
     #[serde(rename = "auto_review")]
     AutoReview,

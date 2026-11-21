@@ -46,8 +46,7 @@ pub use runtime_auth::RuntimeAuthMode;
 
 /// High-level lifecycle stage for a feature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stage {
-    /// Features that are still under development, not ready for external use
+pub enum Stage {    /// Features that are still under development, not ready for external use
     UnderDevelopment,
     /// Experimental features made available to users through the `/experimental` menu
     Experimental {
@@ -89,8 +88,7 @@ impl Stage {
 
 /// Unique features toggled via configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Feature {
-    /// Preview consumer five-hour and weekly allowance history.
+pub enum Feature {    /// Preview consumer five-hour and weekly allowance history.
     AnalyticsPlanHistory,
     /// Discover model catalogs for OpenAI API-key authentication.
     ApiKeyModelDiscovery,

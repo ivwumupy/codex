@@ -798,13 +798,20 @@ fn retired_tables_identify_the_policy_layer_to_update() {
         ("network_proxy", "permissions.network"),
         ("feature_requirements", "features"),
     ] {
-        let low = layer("retired", "Retired policy", &format!("[{old}]\nenabled = false"));
+        let low = layer(
+            "retired",
+            "Retired policy",
+            &format!("[{old}]\nenabled = false"),
+        );
         let source = low.source.to_string();
         let high = layer("current", "Current policy", "[features]\napps = false");
         let err = compose_requirements_for_hostname(vec![low, high], None)
             .expect_err("retired policy must fail before merging")
             .to_string();
-        assert!(err.contains(&source) && err.contains(old) && err.contains(new), "{err}");
+        assert!(
+            err.contains(&source) && err.contains(old) && err.contains(new),
+            "{err}"
+        );
     }
 }
 

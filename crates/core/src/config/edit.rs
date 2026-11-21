@@ -830,7 +830,9 @@ impl ConfigEditsBuilder {
     /// an exception: its explicit `enabled = false` preserves nested options.
     pub fn set_feature_enabled(mut self, key: &str, enabled: bool) -> Self {
         let segments = codex_features::feature_enabled_key(key)
-            .split('.').map(str::to_string).collect();
+            .split('.')
+            .map(str::to_string)
+            .collect();
         let is_default_false_feature = FEATURES
             .iter()
             .find(|spec| spec.key == key)

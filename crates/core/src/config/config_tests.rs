@@ -375,7 +375,6 @@ consolidation_service_tier = "priority"
             consolidation_service_tier: "priority".to_string(),
         }
     );
-
 }
 
 #[tokio::test]
@@ -11977,9 +11976,7 @@ non_code_mode_only = true
     assert_eq!(config.multi_agent_v2.min_wait_timeout_ms, 2500);
     assert_eq!(config.multi_agent_v2.max_wait_timeout_ms, 120000);
     assert_eq!(config.multi_agent_v2.default_wait_timeout_ms, 30000);
-    assert_eq!(
-        config.max_spawned_agent_threads(), 4
-    );
+    assert_eq!(config.max_spawned_agent_threads(), 4);
     assert_eq!(
         config.multi_agent_v2.usage_hint_text.as_deref(),
         Some("Custom delegation guidance.")
@@ -12039,9 +12036,7 @@ enabled = true
         config.multi_agent_v2,
         resolve_multi_agent_v2_config(&ConfigToml::default())
     );
-    assert_eq!(
-        config.max_spawned_agent_threads(), 3
-    );
+    assert_eq!(config.max_spawned_agent_threads(), 3);
 
     Ok(())
 }
@@ -12609,9 +12604,7 @@ max_concurrent_threads_per_session = 1
         .await?;
 
     assert_eq!(config.multi_agent_v2.max_concurrent_threads_per_session, 1);
-    assert_eq!(
-        config.max_spawned_agent_threads(), 0
-    );
+    assert_eq!(config.max_spawned_agent_threads(), 0);
 
     Ok(())
 }

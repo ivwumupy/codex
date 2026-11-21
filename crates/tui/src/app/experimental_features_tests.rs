@@ -102,7 +102,10 @@ async fn experimental_features_use_selected_server_profile_and_preserve_task_set
         .await;
     insta::assert_snapshot!("memories_enable_notice", notice_text(&app));
     let saved: toml::Value = toml::from_str(&std::fs::read_to_string(&selected)?)?;
-    assert_eq!(saved["features"]["multi_agent_v2"]["enabled"].as_bool(), Some(true));
+    assert_eq!(
+        saved["features"]["multi_agent_v2"]["enabled"].as_bool(),
+        Some(true)
+    );
     assert_eq!(saved["features"]["memories"].as_bool(), Some(true));
     assert!(saved["features"].get("memory_tool").is_none());
     assert_eq!(

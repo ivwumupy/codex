@@ -843,7 +843,6 @@ fn value_at_semantic_path<'a>(root: &'a TomlValue, segments: &[String]) -> Optio
     shell_environment_filter_entry(root, segments)
         .map(|(_, value)| value)
         .or_else(|| value_at_path(root, segments))
-
 }
 
 fn override_message(layer: &ConfigLayerSource) -> String {

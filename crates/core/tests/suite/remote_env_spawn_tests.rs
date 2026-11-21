@@ -12,7 +12,8 @@ const NEXT_TURN: &str = "child-next-turn-after-owner-change";
 const FAILURE: &str = "owner could not prepare the subagent environment";
 
 #[derive(Clone, Copy)]
-pub(crate) enum PendingSpawnCase {    TurnSettings,
+pub(crate) enum PendingSpawnCase {
+    TurnSettings,
     FullHistory,
     Failure,
     FirstResultOnly,

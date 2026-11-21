@@ -2547,14 +2547,20 @@ async fn write_rejects_bare_structured_feature_before_modifying_the_file() -> Re
     let initial = "[features.code_mode]\nenabled = true\n";
     std::fs::write(&path, initial)?;
     let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
-    let error = service.write_value(ConfigValueWriteParams {
-        file_path: Some(path.display().to_string()),
-        key_path: "features.code_mode".to_string(),
-        value: serde_json::json!(false),
-        merge_strategy: MergeStrategy::Replace,
-        expected_version: None,
-    }).await.expect_err("table feature must use enabled");
-    assert_eq!(error.write_error_code(), Some(ConfigWriteErrorCode::ConfigValidationError));
+    let error = service
+        .write_value(ConfigValueWriteParams {
+            file_path: Some(path.display().to_string()),
+            key_path: "features.code_mode".to_string(),
+            value: serde_json::json!(false),
+            merge_strategy: MergeStrategy::Replace,
+            expected_version: None,
+        })
+        .await
+        .expect_err("table feature must use enabled");
+    assert_eq!(
+        error.write_error_code(),
+        Some(ConfigWriteErrorCode::ConfigValidationError)
+    );
     assert!(error.to_string().contains("features.code_mode.enabled"));
     assert_eq!(std::fs::read_to_string(path)?, initial);
     Ok(())

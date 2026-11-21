@@ -863,9 +863,12 @@ impl TryFrom<toml::Table> for FeatureRequirementsToml {
             if let Some(fields) = value.as_table() {
                 for field in fields.keys() {
                     if !codex_features::is_structured_feature(name)
-                        || !(field == "enabled" || (name == "runtime_agent_instances" && field == "mode"))
+                        || !(field == "enabled"
+                            || (name == "runtime_agent_instances" && field == "mode"))
                     {
-                        return Err(format!("unsupported feature requirement `features.{name}.{field}`"));
+                        return Err(format!(
+                            "unsupported feature requirement `features.{name}.{field}`"
+                        ));
                     }
                 }
             }
@@ -875,7 +878,9 @@ impl TryFrom<toml::Table> for FeatureRequirementsToml {
             .map_err(|err: toml::de::Error| err.to_string())?;
         Ok(Self {
             entries: features.entries(),
-            runtime_auth_mode: features.runtime_agent_instances.and_then(|config| config.mode),
+            runtime_auth_mode: features
+                .runtime_agent_instances
+                .and_then(|config| config.mode),
         })
     }
 }
@@ -4282,7 +4287,10 @@ allowed_approvals_reviewers = ["user"]
             "[features.code_mode]\nexperimental_show_cell_overhead = true",
             "[features.sleep_tool]\nmode = 'always_on'",
         ] {
-            assert!(toml::from_str::<ConfigRequirementsToml>(invalid).is_err(), "{invalid}");
+            assert!(
+                toml::from_str::<ConfigRequirementsToml>(invalid).is_err(),
+                "{invalid}"
+            );
         }
     }
 

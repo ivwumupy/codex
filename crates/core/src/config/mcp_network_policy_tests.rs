@@ -287,7 +287,13 @@ allow_local_binding = {allow_local_binding}
         .context("loaded profile proxy")?;
     let profile = config.permissions.permission_profile();
     let requirements = config.config_layer_stack.requirements_toml();
-    assert!(requirements.permissions.as_ref().and_then(|p| p.network.as_ref()).is_none());
+    assert!(
+        requirements
+            .permissions
+            .as_ref()
+            .and_then(|p| p.network.as_ref())
+            .is_none()
+    );
     let result = primary_controller_policy(spec, profile, &Policy::empty())?;
     assert!(result.enabled && result.hard_deny_allowlist_misses);
     assert_eq!(result.allowed_domains, expected_grants);

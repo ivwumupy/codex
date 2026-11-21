@@ -1015,8 +1015,6 @@ pub struct Config {
     /// When this program is invoked, arg0 will be set to `codex-linux-sandbox`.
     pub codex_linux_sandbox_exe: Option<PathBuf>,
 
-
-
     /// Value to use for `reasoning.effort` when making a request using the
     /// Responses API.
     pub model_reasoning_effort: Option<ReasoningEffort>,
@@ -1086,7 +1084,6 @@ pub struct Config {
 
     /// Idle timeout for unsubscribed app-server threads.
     pub thread_unload_delay: Duration,
-
 
     /// Settings specific to the task-path-based multi-agent tool surface.
     pub multi_agent_v2: MultiAgentV2Config,
@@ -1670,7 +1667,9 @@ impl Config {
     }
 
     pub(crate) fn max_spawned_agent_threads(&self) -> usize {
-        self.multi_agent_v2.max_concurrent_threads_per_session.saturating_sub(1)
+        self.multi_agent_v2
+            .max_concurrent_threads_per_session
+            .saturating_sub(1)
     }
 
     pub fn legacy_sandbox_policy(&self) -> SandboxPolicy {
