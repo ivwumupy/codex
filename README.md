@@ -1,13 +1,6 @@
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+# Codex CLI
 
----
+Codex CLI is a coding agent that runs locally on Linux and macOS. This repository was forked from `openai/codex` at commit [`e58bf8f5233b51e7cd1679d947e3028c1ed91b06`](https://github.com/openai/codex/commit/e58bf8f5233b51e7cd1679d947e3028c1ed91b06) (2026-11-11).
 
 ## Quickstart
 
@@ -32,7 +25,6 @@ printenv OPENAI_API_KEY | codex login --with-api-key
 
 ## Docs
 
-- [**Codex Documentation**](https://developers.openai.com/codex)
 - [**Rust protocol overview**](./docs/protocol_v1.md)
 
 This repository is licensed under the [Apache-2.0 License](LICENSE).
