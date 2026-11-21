@@ -6,6 +6,7 @@ use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
+use core_test_support::test_codex::run_test_with_large_stack;
 use core_test_support::test_codex::test_codex;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -42,8 +43,17 @@ enum Rejection {
 #[test_case::test_case(Rejection::AfterRateLimits, 2, 0; "size_close_after_rate_limits")]
 #[test_case::test_case(Rejection::AfterResponseCreated, 2, 0; "size_close_after_response_created")]
 #[test_case::test_case(Rejection::GoingAway, 2, 0; "ordinary_close")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn retry_transport(
+fn retry_transport(
+    rejection: Rejection,
+    expected_ws_generations: usize,
+    expected_posts: usize,
+) -> Result<()> {
+    run_test_with_large_stack("retry_transport", move || {
+        check_retry_transport(rejection, expected_ws_generations, expected_posts)
+    })
+}
+
+async fn check_retry_transport(
     rejection: Rejection,
     expected_ws_generations: usize,
     expected_posts: usize,
