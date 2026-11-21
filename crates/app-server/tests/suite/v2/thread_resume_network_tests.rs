@@ -54,14 +54,14 @@ async fn cold_resume_restores_live_proxy_grants_and_persists_new_approvals() -> 
     // isolates direct host access, which the reused probe checks below.
     std::fs::write(
         codex_home.path().join("requirements.toml"),
-        r#"[experimental_network]
+        r#"[permissions.network]
 enabled = true
 http_port = 0
 socks_port = 0
 allow_upstream_proxy = false
 allow_local_binding = true
 
-[experimental_network.domains]
+[permissions.network.domains]
 "managed.example" = "allow"
 "#,
     )?;

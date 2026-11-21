@@ -70,7 +70,7 @@ async fn external_sleep_polls_current_time_and_emits_items(
 nonfatal_clock_read_errors = {read_fails}
 [features.current_time_reminder]
 enabled = true
-sleep_tool = true
+sleep_tool.enabled = true
 clock_source = "external"
 "#,
         ))

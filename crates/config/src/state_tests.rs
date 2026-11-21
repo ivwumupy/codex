@@ -24,7 +24,7 @@ fn origins_attribute_multi_agent_v2_enabled_to_overriding_boolean_layer() {
     let user_metadata = user_layer.metadata();
     let session_layer = ConfigLayerEntry::new(
         ConfigLayerSource::SessionFlags,
-        toml::from_str("[features]\nmulti_agent_v2 = false\n").expect("session config"),
+        toml::from_str("[features]\nmulti_agent_v2.enabled = false\n").expect("session config"),
     );
     let session_metadata = session_layer.metadata();
     let stack = ConfigLayerStack::new(
@@ -111,7 +111,7 @@ exclude = ["LEGACY_*"]
     assert!(
         error
             .to_string()
-            .contains("cannot mix `filters` with legacy `exclude` or `include_only`")
+            .contains("use `shell_environment_policy.filters` instead of `exclude` or `include_only`")
     );
 }
 

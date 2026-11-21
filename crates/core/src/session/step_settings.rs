@@ -13,7 +13,6 @@ use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::ServiceTier;
 use codex_protocol::openai_models::CatalogModel;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AskForApproval;
@@ -267,15 +266,7 @@ impl StepSettings {
             next.reasoning_summary = Some(summary);
         }
         if let Some(service_tier) = update.service_tier.clone() {
-            // TODO(aibrahim): Remove once v2 clients no longer send the legacy
-            // "fast" service tier value.
-            next.service_tier = Some(match service_tier {
-                Some(service_tier) => ServiceTier::from_request_value(&service_tier)
-                    .map_or(service_tier, |service_tier| {
-                        service_tier.request_value().to_string()
-                    }),
-                None => SERVICE_TIER_DEFAULT_REQUEST_VALUE.to_string(),
-            });
+            next.service_tier = Some(service_tier.unwrap_or_else(|| SERVICE_TIER_DEFAULT_REQUEST_VALUE.to_string()));
         }
         if let Some(personality) = update.personality {
             next.personality = Some(personality);

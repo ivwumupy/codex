@@ -793,7 +793,6 @@ async fn plugin_wait_wakes_on_turn_input(
     let server = responses::start_mock_server().await;
     let test = test_codex()
         .with_config(|config| {
-            config.agents_enabled = false;
             config
                 .features
                 .disable(Feature::MultiAgentV2)
@@ -987,7 +986,6 @@ async fn host_input_wait_observes_activity_after_original_turn_ends(
     .await;
     let test = test_codex()
         .with_config(|config| {
-            config.agents_enabled = false;
             config
                 .features
                 .disable(Feature::MultiAgentV2)

@@ -17,7 +17,7 @@ async fn builtin_permission_selection_adopts_server_settings() -> Result<()> {
         home.path().join("config.toml"),
         r#"default_permissions = "proxied"
 [features]
-network_proxy = true
+network_proxy.enabled = true
 [permissions.proxied]
 extends = ":workspace"
 [permissions.proxied.network]

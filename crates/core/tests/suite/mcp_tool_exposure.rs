@@ -244,7 +244,7 @@ fn format_labeled_requests_snapshot(
 
 fn configure_deferred_tool_world_state_without_agents(config: &mut Config) {
     config.update_plan_enabled = true;
-    config.agents_enabled = false;
+    config.features.disable(Feature::MultiAgentV2).unwrap();
 }
 
 fn tools_state_sections(request: &ResponsesRequest) -> Vec<String> {

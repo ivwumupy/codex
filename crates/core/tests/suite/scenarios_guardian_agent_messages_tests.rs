@@ -44,12 +44,10 @@ async fn native_agent_review_requires_openai_on_start_and_resume(
                 config
                     .model_providers
                     .insert(provider_id.to_owned(), config.model_provider.clone());
-                for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
-                    config
-                        .features
-                        .enable(feature)
-                        .expect("enable multi-agent feature");
-                }
+                config
+                    .features
+                    .enable(Feature::MultiAgentV2)
+                    .expect("enable multi-agent feature");
                 config
                     .features
                     .set_enabled(Feature::GuardianNativeMultiAgentHistory, requested)

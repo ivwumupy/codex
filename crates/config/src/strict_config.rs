@@ -325,7 +325,7 @@ pub(crate) fn ignored_config_warning(
                 " Remove windows.sandbox_private_desktop; legacy Windows sandboxes always use a private desktop."
             }
             ["network_proxy"] => {
-                " Use [features.network_proxy] or [permissions.<name>.network] for settings in config.toml, or [network_proxy], [permissions.network], or [experimental_network] for enforced policy in requirements.toml."
+                " Use [features.network_proxy] or [permissions.<name>.network] for settings in config.toml, or [permissions.network] for enforced policy in requirements.toml."
             }
             ["allowed_permissions"] => {
                 " Use [allowed_permission_profiles] and default_permissions; the old allowlist is ignored even when both forms are present."

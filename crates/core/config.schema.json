@@ -57,19 +57,9 @@
           ],
           "description": "Default reasoning effort for spawned subagents when the spawn call does not select one."
         },
-        "enabled": {
-          "description": "Whether multi-agent tools are enabled. Defaults to true. An enabled `features.multi_agent_v2` setting takes precedence.",
-          "type": "boolean"
-        },
         "interrupt_message": {
           "description": "Whether to record a model-visible message when an agent turn is interrupted. Defaults to true.",
           "type": "boolean"
-        },
-        "max_concurrent_threads_per_session": {
-          "description": "Maximum number of spawned agent threads that can be open concurrently per session. When unset, the selected multi-agent backend uses its default.",
-          "format": "uint",
-          "minimum": 1.0,
-          "type": "integer"
         }
       },
       "type": "object"
@@ -247,11 +237,10 @@
       "type": "object"
     },
     "ApprovalsReviewer": {
-      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request.",
       "enum": [
         "user",
-        "auto_review",
-        "guardian_subagent"
+        "auto_review"
       ],
       "type": "string"
     },
@@ -656,7 +645,7 @@
     "ContextManagementConfigToml": {
       "additionalProperties": false,
       "properties": {
-        "experimental_mode": {
+        "enabled": {
           "description": "Enables experimental context management.",
           "type": "boolean"
         }
@@ -876,146 +865,6 @@
         }
       },
       "type": "object"
-    },
-    "FeatureToml_for_AsyncCompactionConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/AsyncCompactionConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_CodeModeConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/CodeModeConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_CodeModeHostConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/CodeModeHostConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_ContextManagementConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/ContextManagementConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_CurrentTimeReminderConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/CurrentTimeReminderConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_GuardianV2ConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/GuardianV2ConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_GuardianV3ConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/GuardianV3ConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_MultiAgentV2ConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/MultiAgentV2ConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_NetworkProxyConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/NetworkProxyConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_NonPrefixedMcpToolNamesConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/NonPrefixedMcpToolNamesConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_RolloutBudgetConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/RolloutBudgetConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_RuntimeAgentInstancesConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/RuntimeAgentInstancesConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_SleepToolConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/SleepToolConfigToml"
-        }
-      ]
-    },
-    "FeatureToml_for_TokenBudgetConfigToml": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "#/definitions/TokenBudgetConfigToml"
-        }
-      ]
     },
     "FeedbackConfigToml": {
       "additionalProperties": false,
@@ -2284,6 +2133,7 @@
           "type": "boolean"
         },
         "max_concurrent_threads_per_session": {
+          "description": "Maximum concurrent threads per session, including the root thread. Defaults to four.",
           "format": "uint",
           "minimum": 1.0,
           "type": "integer"
@@ -3579,33 +3429,8 @@
     },
     "ShellEnvironmentPolicyToml": {
       "additionalProperties": false,
-      "allOf": [
-        {
-          "not": {
-            "required": [
-              "exclude",
-              "filters"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "filters",
-              "include_only"
-            ]
-          }
-        }
-      ],
       "description": "Policy for building the `env` when spawning a process via shell-like tools.",
       "properties": {
-        "exclude": {
-          "description": "Legacy list of regular expressions to exclude.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "experimental_use_profile": {
           "type": "boolean"
         },
@@ -3613,18 +3438,11 @@
           "additionalProperties": {
             "$ref": "#/definitions/ShellEnvironmentPolicyFilter"
           },
-          "description": "Pattern actions used by the canonical table representation.\n\nOrdinary config keeps accepting the legacy arrays above during the migration. Requirements will accept only this keyed form, keeping array compatibility isolated so the legacy fields can be deprecated later. Pattern keys merge case-insensitively across config layers, matching how the resulting patterns match environment variable names.",
+          "description": "Pattern keys merge case-insensitively across config layers.",
           "type": "object"
         },
         "ignore_default_excludes": {
           "type": "boolean"
-        },
-        "include_only": {
-          "description": "Legacy list of regular expressions to include.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
         },
         "inherit": {
           "$ref": "#/definitions/ShellEnvironmentPolicyInherit"
@@ -6525,7 +6343,7 @@
           "type": "boolean"
         },
         "async_compaction": {
-          "$ref": "#/definitions/FeatureToml_for_AsyncCompactionConfigToml"
+          "$ref": "#/definitions/AsyncCompactionConfigToml"
         },
         "async_compaction_root_only": {
           "type": "boolean"
@@ -6558,10 +6376,10 @@
           "type": "boolean"
         },
         "code_mode": {
-          "$ref": "#/definitions/FeatureToml_for_CodeModeConfigToml"
+          "$ref": "#/definitions/CodeModeConfigToml"
         },
         "code_mode_host": {
-          "$ref": "#/definitions/FeatureToml_for_CodeModeHostConfigToml"
+          "$ref": "#/definitions/CodeModeHostConfigToml"
         },
         "code_mode_host_output_truncation": {
           "type": "boolean"
@@ -6600,7 +6418,7 @@
           "type": "boolean"
         },
         "context_management": {
-          "$ref": "#/definitions/FeatureToml_for_ContextManagementConfigToml"
+          "$ref": "#/definitions/ContextManagementConfigToml"
         },
         "credential_masking": {
           "type": "boolean"
@@ -6609,7 +6427,7 @@
           "type": "boolean"
         },
         "current_time_reminder": {
-          "$ref": "#/definitions/FeatureToml_for_CurrentTimeReminderConfigToml"
+          "$ref": "#/definitions/CurrentTimeReminderConfigToml"
         },
         "cwd_relative_turn_diffs": {
           "type": "boolean"
@@ -6696,13 +6514,13 @@
           "type": "boolean"
         },
         "guardianv2": {
-          "$ref": "#/definitions/FeatureToml_for_GuardianV2ConfigToml"
+          "$ref": "#/definitions/GuardianV2ConfigToml"
         },
         "guardianv2_decisions_comparison": {
           "type": "boolean"
         },
         "guardianv3": {
-          "$ref": "#/definitions/FeatureToml_for_GuardianV3ConfigToml"
+          "$ref": "#/definitions/GuardianV3ConfigToml"
         },
         "hooks": {
           "type": "boolean"
@@ -6774,7 +6592,7 @@
           "type": "boolean"
         },
         "multi_agent_v2": {
-          "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
+          "$ref": "#/definitions/MultiAgentV2ConfigToml"
         },
         "multi_agent_v2_dynamic_tools": {
           "type": "boolean"
@@ -6783,10 +6601,10 @@
           "type": "boolean"
         },
         "network_proxy": {
-          "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
+          "$ref": "#/definitions/NetworkProxyConfigToml"
         },
         "non_prefixed_mcp_tool_names": {
-          "$ref": "#/definitions/FeatureToml_for_NonPrefixedMcpToolNamesConfigToml"
+          "$ref": "#/definitions/NonPrefixedMcpToolNamesConfigToml"
         },
         "nonfatal_clock_read_errors": {
           "type": "boolean"
@@ -6834,10 +6652,10 @@
           "type": "boolean"
         },
         "rollout_budget": {
-          "$ref": "#/definitions/FeatureToml_for_RolloutBudgetConfigToml"
+          "$ref": "#/definitions/RolloutBudgetConfigToml"
         },
         "runtime_agent_instances": {
-          "$ref": "#/definitions/FeatureToml_for_RuntimeAgentInstancesConfigToml"
+          "$ref": "#/definitions/RuntimeAgentInstancesConfigToml"
         },
         "runtime_metrics": {
           "type": "boolean"
@@ -6873,7 +6691,7 @@
           "type": "boolean"
         },
         "sleep_tool": {
-          "$ref": "#/definitions/FeatureToml_for_SleepToolConfigToml"
+          "$ref": "#/definitions/SleepToolConfigToml"
         },
         "standalone_web_search": {
           "type": "boolean"
@@ -6897,7 +6715,7 @@
           "type": "boolean"
         },
         "token_budget": {
-          "$ref": "#/definitions/FeatureToml_for_TokenBudgetConfigToml"
+          "$ref": "#/definitions/TokenBudgetConfigToml"
         },
         "tool_call_mcp_elicitation": {
           "type": "boolean"
@@ -7290,7 +7108,7 @@
       "type": "string"
     },
     "service_tier": {
-      "description": "Optional explicit service tier request id for new turns (for example `default`, `priority`, or `flex`; legacy `fast` also works).",
+      "description": "Optional explicit service tier request id for new turns (for example `default`, `priority`, or `flex`).",
       "type": "string"
     },
     "shell_environment_policy": {
@@ -7300,11 +7118,9 @@
         }
       ],
       "default": {
-        "exclude": null,
         "experimental_use_profile": null,
         "filters": null,
         "ignore_default_excludes": null,
-        "include_only": null,
         "inherit": null,
         "set": null
       }

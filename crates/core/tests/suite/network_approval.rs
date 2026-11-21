@@ -115,8 +115,6 @@ use tokio::io::AsyncWriteExt;
 const NETWORK_TEST_HOST: &str = "codex-network-test.invalid";
 const NETWORK_TEST_TARGET: &str = "http://codex-network-test.invalid:80";
 
-#[test_case("experimental_network"; "legacy_requirements")]
-#[test_case("network_proxy"; "proxy_requirements")]
 #[test_case("permissions.network"; "canonical_requirements")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg_attr(
@@ -1139,8 +1137,6 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
     Ok(())
 }
 
-#[test_case("experimental_network"; "legacy_requirements")]
-#[test_case("network_proxy"; "proxy_requirements")]
 #[test_case("permissions.network"; "canonical_requirements")]
 #[tokio::test]
 #[cfg_attr(

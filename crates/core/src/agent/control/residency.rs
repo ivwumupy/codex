@@ -159,9 +159,7 @@ impl LocalAgentControl {
         membership: &AgentTreeMembership,
         protected_thread_id: Option<ThreadId>,
     ) -> CodexResult<V2ResidencySlot> {
-        let capacity = config
-            .effective_agent_max_threads(MultiAgentVersion::V2)
-            .unwrap_or(usize::MAX);
+        let capacity = config.max_spawned_agent_threads();
         Arc::clone(&self.runtime.residency)
             .reserve_slot(state, capacity, membership, protected_thread_id)
             .await

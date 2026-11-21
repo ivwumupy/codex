@@ -684,7 +684,7 @@ impl ElicitationRoundTripFixture {
         };
         let requirements = match strict {
             Some(Review::ManagedReviewerForbidden) => "allowed_approvals_reviewers = [\"user\"]\n",
-            Some(Review::ManagedGuardianDisabled) => "[features]\nauto_review = false\n",
+            Some(Review::ManagedGuardianDisabled) => "[features]\nguardian_approval = false\n",
             _ => "",
         };
         if !requirements.is_empty() {

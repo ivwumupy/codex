@@ -243,7 +243,6 @@ async fn child_turn_start_preserves_root_attribution() -> Result<()> {
                 tls: None,
             };
             config.features.enable(Feature::MultiAgentV2).unwrap();
-            config.features.enable(Feature::MultiAgentV2).unwrap();
         })
         .build_with_auto_env(&server)
         .await?;
@@ -779,7 +778,6 @@ async fn tree_shutdown_waits_for_children_without_affecting_other_roots() -> Res
     let test = test_codex()
         .with_model("gpt-5.6-sol")
         .with_config(|config| {
-            config.features.enable(Feature::MultiAgentV2).unwrap();
             config.features.enable(Feature::MultiAgentV2).unwrap();
         })
         .build_with_auto_env(&server)

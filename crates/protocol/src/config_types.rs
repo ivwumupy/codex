@@ -174,7 +174,7 @@ impl fmt::Display for ProfileV2Name {
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Display, TS)]
 #[strum(serialize_all = "snake_case")]
-#[ts(type = r#""user" | "auto_review" | "guardian_subagent""#)]
+#[ts(type = r#""user" | "auto_review""#)]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully
@@ -184,7 +184,7 @@ pub enum ApprovalsReviewer {
     #[default]
     #[serde(rename = "user")]
     User,
-    #[serde(rename = "auto_review", alias = "guardian_subagent")]
+    #[serde(rename = "auto_review")]
     #[strum(serialize = "auto_review")]
     AutoReview,
 }
@@ -196,8 +196,8 @@ impl JsonSchema for ApprovalsReviewer {
 
     fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
         string_enum_schema_with_description(
-            &["user", "auto_review", "guardian_subagent"],
-            "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+            &["user", "auto_review"],
+            "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request.",
         )
     }
 }
@@ -546,7 +546,7 @@ impl ServiceTier {
 
     pub fn from_request_value(value: &str) -> Option<Self> {
         match value {
-            "fast" | "priority" => Some(Self::Fast),
+            "priority" => Some(Self::Fast),
             "flex" => Some(Self::Flex),
             _ => None,
         }
@@ -674,12 +674,6 @@ pub enum AltScreenMode {
 pub enum ModeKind {
     Plan,
     #[default]
-    #[serde(
-        alias = "code",
-        alias = "pair_programming",
-        alias = "execute",
-        alias = "custom"
-    )]
     Default,
 }
 
@@ -855,16 +849,16 @@ mod tests {
     }
 
     #[test]
-    fn mode_kind_deserializes_alias_values_to_default() {
+    fn mode_kind_rejects_retired_aliases() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = serde_json::from_str(&json).expect("deserialize mode");
-            assert_eq!(ModeKind::Default, mode);
+            assert!(serde_json::from_str::<ModeKind>(&json).is_err());
         }
     }
 
     #[test]
-    fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
+    fn approvals_reviewer_accepts_canonical_values() {
+        assert!(serde_json::from_str::<ApprovalsReviewer>(r#""guardian_subagent""#).is_err());
         assert_eq!(ApprovalsReviewer::User.to_string(), "user");
         assert_eq!(
             serde_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
@@ -875,7 +869,7 @@ mod tests {
             "\"auto_review\""
         );
 
-        for value in ["user", "auto_review", "guardian_subagent"] {
+        for value in ["user", "auto_review"] {
             let json = format!("\"{value}\"");
             let reviewer: ApprovalsReviewer =
                 serde_json::from_str(&json).expect("deserialize reviewer");

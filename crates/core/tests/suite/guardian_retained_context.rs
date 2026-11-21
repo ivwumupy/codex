@@ -1076,7 +1076,7 @@ async fn forked_parent_instructions_do_not_become_local_authorization(
             config.experimental_thread_store = ThreadStoreConfig::Local;
             config.update_plan_enabled = true;
             config.multi_agent_v2.preserve_fork_prefix = preserve_fork_prefix;
-            for feature in [Feature::TokenBudget, Feature::MultiAgentV2, Feature::MultiAgentV2] {
+            for feature in [Feature::TokenBudget, Feature::MultiAgentV2] {
                 config
                     .features
                     .enable(feature)

@@ -847,7 +847,7 @@ async fn model_lab_search_provider(
     ) {
         std::fs::write(
             home.path().join("requirements.toml"),
-            "[feature_requirements]\nstandalone_web_search = true\n",
+            "[features]\nstandalone_web_search = true\n",
         )?;
     }
     let client_provider = if policy == SearchPolicy::RequireNativeClientMcp {

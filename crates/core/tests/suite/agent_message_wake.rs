@@ -132,9 +132,7 @@ async fn pending_agent_message_wake_respects_control_changes(
     let test = test_codex()
         .with_extensions(Arc::new(extensions.build()))
         .with_config(move |config| {
-            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
-                config.features.enable(feature).expect("enable agent mail");
-            }
+            config.features.enable(Feature::MultiAgentV2).expect("enable agent mail");
             if wakes_on_agent_messages {
                 config.features.enable(Feature::WakeOnAgentMessages)
             } else {

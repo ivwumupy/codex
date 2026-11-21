@@ -12,28 +12,29 @@ fn explicit_catalog_policy_preserves_precedence_over_the_legacy_switch() {
         "computer_use": "adaptive", "shell": "disabled"
     }))
     .unwrap();
-    for legacy in [json!(false), json!({"enabled": false})] {
-        let legacy = serde_json::from_value(legacy).unwrap();
-        for managed in [None, Some(false), Some(true)] {
-            let requirements = ConfigRequirements {
-                feature_requirements: managed.map(|enabled| {
-                    Sourced::new(
-                        FeatureRequirementsToml {
-                            entries: [("guardianv2".to_owned(), enabled)].into(),
-                            ..Default::default()
-                        },
-                        RequirementSource::Unknown,
-                    )
-                }),
-                ..Default::default()
-            };
-            let mut model = test_model();
-            model.guardian = Some(catalog.clone());
-            assert_eq!(
-                GuardianPolicyLoader::new(Some(&legacy)).resolve(Some(&model), &requirements),
-                catalog
-            );
-        }
+    let legacy = codex_features::GuardianV2ConfigToml {
+        enabled: Some(false),
+        ..Default::default()
+    };
+    for managed in [None, Some(false), Some(true)] {
+        let requirements = ConfigRequirements {
+            feature_requirements: managed.map(|enabled| {
+                Sourced::new(
+                    FeatureRequirementsToml {
+                        entries: [("guardianv2".to_owned(), enabled)].into(),
+                        ..Default::default()
+                    },
+                    RequirementSource::Unknown,
+                )
+            }),
+            ..Default::default()
+        };
+        let mut model = test_model();
+        model.guardian = Some(catalog.clone());
+        assert_eq!(
+            GuardianPolicyLoader::new(Some(&legacy)).resolve(Some(&model), &requirements),
+            catalog
+        );
     }
 }
 
@@ -104,7 +105,10 @@ fn required_models_preserve_cua_allowance_and_disable_all_tools_scoring() {
         "enabled": true, "review_scope": {"computer_use_only": false}
     }))
     .unwrap();
-    let cua_only = FeatureToml::Enabled(true);
+    let cua_only = codex_features::GuardianV2ConfigToml {
+        enabled: Some(true),
+        ..Default::default()
+    };
     for legacy in [Some(&cua_only), Some(&legacy)] {
         let loader = GuardianPolicyLoader::new(legacy);
         let ordinary = loader.resolve(/*model*/ None, &requirements);
@@ -122,11 +126,11 @@ fn required_models_preserve_cua_allowance_and_disable_all_tools_scoring() {
 #[test]
 fn legacy_cua_opt_in_and_disabled_feature_preserve_scoring_behavior() {
     for legacy in [
-        json!(false),
+        json!({"enabled": false}),
         json!({"review_scope": {"computer_use_only": true}}),
-        json!(true),
+        json!({"enabled": true}),
     ] {
-        let enabled = legacy == json!(true);
+        let enabled = legacy["enabled"] == true;
         let legacy = serde_json::from_value(legacy).unwrap();
         let loader = GuardianPolicyLoader::new(Some(&legacy));
         for required in [false, true] {

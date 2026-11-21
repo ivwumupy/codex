@@ -673,7 +673,6 @@ async fn disabling_hosted_multi_agent_after_cold_resume_resets_proactive_mode() 
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::Ultra);
             config.multi_agent_v2.disable_native_tools = true;
-            config.agents_enabled = false;
             config
                 .features
                 .disable(Feature::MultiAgentV2)

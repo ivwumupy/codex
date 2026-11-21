@@ -90,7 +90,7 @@ use codex_core::config::find_codex_home;
 use codex_core::config::resolve_profile_v2_config_path;
 use codex_features::FEATURES;
 use codex_features::Stage;
-use codex_features::is_known_feature_key;
+use codex_features::feature_enabled_key;
 use codex_home::CodexHomeUserInstructionsProvider;
 use codex_login::AuthManager;
 use codex_memories_write::clear_memory_roots_contents;
@@ -827,11 +827,11 @@ async fn run_debug_app_server_command(cmd: DebugAppServerCommand) -> anyhow::Res
 
 #[derive(Debug, Default, Parser, Clone)]
 struct FeatureToggles {
-    /// Enable a feature (repeatable). Equivalent to `-c features.<name>=true`.
+    /// Enable a feature (repeatable).
     #[arg(long = "enable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     enable: Vec<String>,
 
-    /// Disable a feature (repeatable). Equivalent to `-c features.<name>=false`.
+    /// Disable a feature (repeatable).
     #[arg(long = "disable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     disable: Vec<String>,
 }
@@ -855,17 +855,17 @@ impl FeatureToggles {
         let mut v = Vec::new();
         for feature in &self.enable {
             Self::validate_feature(feature)?;
-            v.push(format!("features.{feature}=true"));
+            v.push(format!("{}=true", feature_enabled_key(feature)));
         }
         for feature in &self.disable {
             Self::validate_feature(feature)?;
-            v.push(format!("features.{feature}=false"));
+            v.push(format!("{}=false", feature_enabled_key(feature)));
         }
         Ok(v)
     }
 
     fn validate_feature(feature: &str) -> anyhow::Result<()> {
-        if is_known_feature_key(feature) {
+        if codex_features::feature_for_key(feature).is_some() {
             Ok(())
         } else {
             anyhow::bail!("Unknown feature flag: {feature}")
@@ -4107,7 +4107,7 @@ mod tests {
         assert_eq!(
             overrides,
             vec![
-                "features.code_mode=true".to_string(),
+                "features.code_mode.enabled=true".to_string(),
                 "features.unified_exec=false".to_string(),
             ]
         );

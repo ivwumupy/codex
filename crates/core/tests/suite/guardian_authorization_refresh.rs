@@ -146,12 +146,10 @@ async fn guardian_refreshes_subagent_authorization(change: Change) -> Result<()>
         .with_config(move |config| {
             config.model_provider.base_url = Some(base_url);
             config.feedback_enabled = true;
-            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
-                config
-                    .features
-                    .enable(feature)
-                    .expect("enable test feature");
-            }
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("enable test feature");
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
             config

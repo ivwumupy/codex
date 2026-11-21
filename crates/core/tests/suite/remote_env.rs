@@ -1965,7 +1965,7 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
             path: selection.cwd.clone(),
         },
     };
-    let owner_config = |id: &str, allow_login_shell: bool| {        EnvironmentConfig {
+    let owner_config = |id: &str, allow_login_shell: bool| EnvironmentConfig {
         environment_hooks: Default::default(),
         allow_login_shell,
         workspace_roots: vec![selection.cwd.clone(), owner_workspace_root.clone()],
@@ -2408,7 +2408,7 @@ async fn future_pending_environment_can_finish_without_retargeting_the_active_tu
         workspace_roots: vec![future_cwd],
         ..active.clone()
     };
-    let owner_config = |selection: &TurnEnvironmentSelection, id: &str| {        EnvironmentConfig {
+    let owner_config = |selection: &TurnEnvironmentSelection, id: &str| EnvironmentConfig {
         environment_hooks: Default::default(),
         allow_login_shell: test.config.permissions.allow_login_shell,
         workspace_roots: selection.workspace_roots.clone(),

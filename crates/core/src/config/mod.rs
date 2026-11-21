@@ -61,7 +61,6 @@ use codex_features::CurrentTimeReminderConfigToml;
 use codex_features::CurrentTimeReminderDeliveryMode;
 use codex_features::CurrentTimeSource;
 use codex_features::Feature;
-use codex_features::FeatureToml;
 use codex_features::Features;
 use codex_features::FeaturesToml;
 use codex_features::MultiAgentV2ConfigToml;
@@ -225,7 +224,6 @@ pub struct UnsupportedUntrustedApprovalPolicyError;
 /// files are *silently truncated* to this size so we do not take up too much of
 /// the context window.
 pub(crate) const AGENTS_MD_MAX_BYTES: usize = DEFAULT_PROJECT_DOC_MAX_BYTES; // 32 KiB
-pub(crate) const DEFAULT_AGENT_MAX_THREADS: Option<usize> = Some(6);
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usize = 4;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS: i64 = 10_000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS: i64 = 3600 * 1000;
@@ -953,12 +951,6 @@ pub struct Config {
     /// Token budget applied when storing tool/function outputs in the context manager.
     pub tool_output_token_limit: Option<usize>,
 
-    /// Whether multi-agent tools are enabled through `[agents]`.
-    pub agents_enabled: bool,
-
-    /// User-configured maximum number of spawned agent threads per session.
-    pub agent_max_threads: Option<usize>,
-
     /// Default model for spawned subagents when the spawn call does not select one.
     pub agent_default_subagent_model: Option<String>,
 
@@ -1656,7 +1648,7 @@ impl Config {
     pub(crate) fn multi_agent_version_override(&self) -> Option<MultiAgentVersion> {
         if self.features.enabled(Feature::MultiAgentV2) {
             Some(MultiAgentVersion::V2)
-        } else if !self.agents_enabled {
+        } else if self.features.multi_agent_v2_disabled() {
             Some(MultiAgentVersion::Disabled)
         } else {
             None
@@ -1677,20 +1669,8 @@ impl Config {
             .unwrap_or_else(|| self.multi_agent_version_from_features())
     }
 
-    pub(crate) fn effective_agent_max_threads(
-        &self,
-        multi_agent_version: MultiAgentVersion,
-    ) -> Option<usize> {
-        match multi_agent_version {
-            MultiAgentVersion::V2 => Some(
-                self.multi_agent_v2
-                    .max_concurrent_threads_per_session
-                    .saturating_sub(1),
-            ),
-            MultiAgentVersion::Disabled | MultiAgentVersion::V1 => {
-                self.agent_max_threads.or(DEFAULT_AGENT_MAX_THREADS)
-            }
-        }
+    pub(crate) fn max_spawned_agent_threads(&self) -> usize {
+        self.multi_agent_v2.max_concurrent_threads_per_session.saturating_sub(1)
     }
 
     pub fn legacy_sandbox_policy(&self) -> SandboxPolicy {
@@ -2676,10 +2656,7 @@ fn resolve_code_mode_config(config_toml: &ConfigToml) -> CodeModeConfig {
         .features
         .as_ref()
         .and_then(|features| features.code_mode_host.as_ref())
-        .and_then(|feature| match feature {
-            FeatureToml::Enabled(_) => None,
-            FeatureToml::Config(config) => Some(config),
-        });
+        ;
 
     CodeModeConfig {
         default_exec_yield_time_ms: base
@@ -2709,13 +2686,6 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
     let base = multi_agent_v2_toml_config(config_toml.features.as_ref());
     let max_concurrent_threads_per_session = base
         .and_then(|config| config.max_concurrent_threads_per_session)
-        .or_else(|| {
-            config_toml
-                .agents
-                .as_ref()
-                .and_then(|agents| agents.max_concurrent_threads_per_session)
-                .map(|max_threads| max_threads.saturating_add(1))
-        })
         .unwrap_or(DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION);
     let default =
         MultiAgentV2Config::defaults_for_max_concurrency(max_concurrent_threads_per_session);
@@ -2854,7 +2824,7 @@ fn resolve_rollout_budget_config(
             "features.rollout_budget.limit_tokens is required when rollout_budget is enabled",
         )
     };
-    let Some(FeatureToml::Config(config)) = config_toml
+    let Some(config) = config_toml
         .features
         .as_ref()
         .and_then(|features| features.rollout_budget.as_ref())
@@ -2954,40 +2924,25 @@ fn resolve_terminal_resize_reflow_config(config_toml: &ConfigToml) -> TerminalRe
 }
 
 fn code_mode_toml_config(features: Option<&FeaturesToml>) -> Option<&CodeModeConfigToml> {
-    match features?.code_mode.as_ref()? {
-        FeatureToml::Enabled(_) => None,
-        FeatureToml::Config(config) => Some(config),
-    }
+    features?.code_mode.as_ref()
 }
 
 fn multi_agent_v2_toml_config(features: Option<&FeaturesToml>) -> Option<&MultiAgentV2ConfigToml> {
-    match features?.multi_agent_v2.as_ref()? {
-        FeatureToml::Enabled(_) => None,
-        FeatureToml::Config(config) => Some(config),
-    }
+    features?.multi_agent_v2.as_ref()
 }
 
 fn token_budget_toml_config(features: Option<&FeaturesToml>) -> Option<&TokenBudgetConfigToml> {
-    match features?.token_budget.as_ref()? {
-        FeatureToml::Enabled(_) => None,
-        FeatureToml::Config(config) => Some(config),
-    }
+    features?.token_budget.as_ref()
 }
 
 fn current_time_reminder_toml_config(
     features: Option<&FeaturesToml>,
 ) -> Option<&CurrentTimeReminderConfigToml> {
-    match features?.current_time_reminder.as_ref()? {
-        FeatureToml::Enabled(_) => None,
-        FeatureToml::Config(config) => Some(config),
-    }
+    features?.current_time_reminder.as_ref()
 }
 
 fn network_proxy_toml_config(features: Option<&FeaturesToml>) -> Option<&NetworkProxyConfigToml> {
-    match features?.network_proxy.as_ref()? {
-        FeatureToml::Enabled(_) => None,
-        FeatureToml::Config(config) => Some(config),
-    }
+    features?.network_proxy.as_ref()
 }
 
 /// Bootstrap-only resolver for the cloud-config fetch.
@@ -3222,10 +3177,7 @@ impl Config {
         }
         let async_compaction_threshold_percent = cfg.features.as_ref()
             .and_then(|features| features.async_compaction.as_ref())
-            .and_then(|feature| match feature {
-                FeatureToml::Enabled(_) => None,
-                FeatureToml::Config(config) => config.model_async_compact_threshold_percent,
-            })
+            .and_then(|config| config.model_async_compact_threshold_percent)
             .unwrap_or(DEFAULT_ASYNC_COMPACTION_THRESHOLD_PERCENT);
         if !(1..=100).contains(&async_compaction_threshold_percent) {
             return Err(std::io::Error::new(
@@ -3412,10 +3364,7 @@ impl Config {
             cfg.features
                 .as_ref()
                 .and_then(|features| features.non_prefixed_mcp_tool_names.as_ref())
-                .and_then(|feature| match feature {
-                    FeatureToml::Enabled(_) => None,
-                    FeatureToml::Config(config) => config.server_names.clone(),
-                })
+                .and_then(|config| config.server_names.clone())
         } else {
             None
         };
@@ -3522,10 +3471,7 @@ impl Config {
             .features
             .as_ref()
             .and_then(|features| features.sleep_tool.as_ref())
-            .and_then(|feature| match feature {
-                FeatureToml::Enabled(_) => None,
-                FeatureToml::Config(config) => config.mode,
-            })
+            .and_then(|config| config.mode)
             .unwrap_or_default();
         let terminal_resize_reflow = resolve_terminal_resize_reflow_config(&cfg);
 
@@ -3595,21 +3541,6 @@ impl Config {
             ));
         }
         validate_multi_agent_v2_tool_namespace(multi_agent_v2.tool_namespace.as_deref())?;
-        let agents_enabled = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.enabled)
-            .unwrap_or(true);
-        let agent_max_threads = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.max_concurrent_threads_per_session);
-        if agent_max_threads == Some(0) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "agents.max_concurrent_threads_per_session must be at least 1",
-            ));
-        }
         let agent_default_subagent_model = cfg
             .agents
             .as_ref()
@@ -3722,17 +3653,11 @@ impl Config {
             .features
             .as_ref()
             .and_then(|features| features.guardianv2.as_ref())
-            .and_then(|feature| match feature {
-                FeatureToml::Config(config) => config.transcript_mode,
-                FeatureToml::Enabled(_) => None,
-            })
+            .and_then(|config| config.transcript_mode)
             .unwrap_or_default();
         let guardian_sync_elastic_budget = cfg.features.as_ref()
             .and_then(|features| features.guardianv2.as_ref())
-            .and_then(|feature| match feature {
-                FeatureToml::Config(guardian) if guardian.sync_elastic_budgeting == Some(true) => Some(guardian),
-                FeatureToml::Config(_) | FeatureToml::Enabled(_) => None,
-            })
+            .filter(|guardian| guardian.sync_elastic_budgeting == Some(true))
             .map(|guardian| {
                 let sections = guardian.sync_elastic_sections.as_ref().filter(|sections| !sections.is_empty())
                     .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData,
@@ -3936,8 +3861,6 @@ impl Config {
                 })
                 .collect(),
             tool_output_token_limit: cfg.tool_output_token_limit,
-            agents_enabled,
-            agent_max_threads,
             agent_default_subagent_model,
             agent_default_subagent_reasoning_effort,
             agent_roles,

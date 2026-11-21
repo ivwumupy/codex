@@ -97,8 +97,8 @@ async fn daemon_feature_compatibility_respects_required_and_optional_attachment(
                     "explicit enable" => vec!["features.api_key_model_discovery=true"],
                     "mixed flags" => vec![
                         "features.zz_overridden=true",
-                        "features={api_key_model_discovery=false,code_mode_host=false,instant_interrupt=true}",
-                        "features.code_mode_host=true",
+                        "features={api_key_model_discovery=false,code_mode_host.enabled=false,instant_interrupt=true}",
+                        "features.code_mode_host.enabled=true",
                     ],
                     "missing enabled" => vec!["features.zz_missing=true"],
                     _ => vec!["features.api_key_model_discovery=false"],

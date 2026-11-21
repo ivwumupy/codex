@@ -274,19 +274,14 @@ async fn managed_guardian_v1_requirements_disable_guardian_v2() -> Result<()> {
     for (requirements, guardian_v2_enabled) in [
         (r#"allowed_approvals_reviewers = ["auto_review"]"#, false),
         (
-            r#"allowed_approvals_reviewers = ["guardian_subagent"]"#,
-            false,
-        ),
-        (
             r#"allowed_approvals_reviewers = ["auto_review", "user"]"#,
             true,
         ),
         ("[features]\nguardian_approval = true\n", true),
-        ("[features]\nauto_review = true\n", true),
     ] {
         let mut builder = test_codex()
             .with_pre_build_hook(|home| {
-                std::fs::write(home.join("config.toml"), "[features]\nguardianv2 = true\n")
+                std::fs::write(home.join("config.toml"), "[features]\nguardianv2.enabled = true\n")
                     .expect("Guardian v2 configuration should be written");
             })
             .with_cloud_config_bundle(

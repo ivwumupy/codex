@@ -397,9 +397,9 @@ async fn system_time_source_adds_current_time_reminder(clock_setup: ClockSetup) 
         })
         .with_pre_build_hook(move |home| {
             let config = match clock_setup {
-                ClockSetup::Configured => Some("[features]\ncurrent_time_reminder = true\n"),
+                ClockSetup::Configured => Some("[features]\ncurrent_time_reminder.enabled = true\n"),
                 ClockSetup::ModelTools | ClockSetup::ExplicitlyDisabled => {
-                    Some("[features]\ncurrent_time_reminder = false\n")
+                    Some("[features]\ncurrent_time_reminder.enabled = false\n")
                 }
                 ClockSetup::Persistent | ClockSetup::OrdinaryEffort | ClockSetup::RequiredOff => {
                     None
@@ -423,7 +423,7 @@ async fn system_time_source_adds_current_time_reminder(clock_setup: ClockSetup) 
     if matches!(clock_setup, ClockSetup::RequiredOff) {
         builder = builder.with_cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                "[features]\ncurrent_time_reminder = false\n",
+                "[features]\ncurrent_time_reminder.enabled = false\n",
             ),
         );
     }
@@ -516,8 +516,8 @@ async fn client_feature_map_can_disable_sleep_tool(
     Ok(())
 }
 
-#[test_case("[features]\nsleep_tool = true", Some(true), [true, true]; "boolean_enabled")]
-#[test_case("[features]\nsleep_tool = false", Some(true), [true, false]; "boolean_disabled")]
+#[test_case("[features]\nsleep_tool.enabled = true", Some(true), [true, true]; "boolean_enabled")]
+#[test_case("[features]\nsleep_tool.enabled = false", Some(true), [true, false]; "boolean_disabled")]
 #[test_case("[features.sleep_tool]\nmode = 'always_on'", None, [false, true]; "always_on_without_model_clock")]
 #[test_case("[features.sleep_tool]\nenabled = false\nmode = 'always_on'", Some(true), [true, false]; "disabled_overrides_always_on")]
 #[test_case("[features.sleep_tool]\nmode = 'model_driven'", None, [false, false]; "model_driven_without_model_clock")]

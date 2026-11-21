@@ -30,7 +30,6 @@ async fn idle_eviction_preserves_worker_context_for_followup() -> Result<()> {
                 .enable(Feature::SubagentThreadEnvironments)
                 .expect("enable configured environment inheritance");
             config.features.enable(Feature::MultiAgentV2).unwrap();
-            config.features.enable(Feature::MultiAgentV2).unwrap();
             config
                 .features
                 .enable(Feature::MultiAgentV2DynamicTools)

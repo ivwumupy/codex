@@ -230,7 +230,7 @@ pub async fn load_default_config_for_test_with_cloud_config_bundle(
 pub fn managed_network_requirements_loader() -> CloudConfigBundleLoader {
     CloudConfigBundleFixture::loader_with_enterprise_requirement(
         r#"
-[experimental_network]
+[permissions.network]
 enabled = true
 allow_local_binding = true
 "#,

@@ -400,7 +400,7 @@ async fn model_default_saves_report_server_outcomes_and_target_server_profile() 
                     model = "gpt-5.5"
                     model_reasoning_effort = "medium"
                     plan_mode_reasoning_effort = "high"
-                    service_tier = "fast"
+                    service_tier = "priority"
                 })
             );
         }

@@ -47,7 +47,7 @@ fn sandbox_with_network_proxy_blocks_direct_loopback_access() -> Result<()> {
 default_permissions = "network-test"
 
 [features]
-network_proxy = true
+network_proxy.enabled = true
 use_legacy_landlock = true
 
 [permissions.network-test]
@@ -115,7 +115,7 @@ async fn sandbox_with_network_proxy_allows_explicit_loopback_access() -> Result<
 default_permissions = "network-test"
 
 [features]
-network_proxy = true
+network_proxy.enabled = true
 use_legacy_landlock = true
 
 [permissions.network-test]

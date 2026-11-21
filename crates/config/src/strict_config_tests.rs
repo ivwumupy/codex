@@ -314,11 +314,8 @@ fn managed_network_unknown_fields_are_reported_for_each_spelling() {
         ConfigRequirementsToml::default(),
     )
     .unwrap();
-    for table in [
-        "network_proxy",
-        "experimental_network",
-        "permissions.network",
-    ] {
+    {
+        let table = "permissions.network";
         let requirements = RequirementsLayerEntry::from_toml(
             crate::RequirementSource::Unknown,
             format!(

@@ -436,10 +436,6 @@ impl From<MemoriesToml> for MemoriesConfig {
             consolidation_model: toml.consolidation_model,
             consolidation_service_tier: toml
                 .consolidation_service_tier
-                .map(|tier| {
-                    ServiceTier::from_request_value(&tier)
-                        .map_or(tier, |tier| tier.request_value().to_string())
-                })
                 .unwrap_or(defaults.consolidation_service_tier),
         }
     }

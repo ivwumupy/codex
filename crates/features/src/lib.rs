@@ -319,7 +319,6 @@ pub enum Feature {
     /// Requirements-only gate: this should be set from requirements, not user config.
     ComputerUse,
 
-
     /// Enable extension-backed image generation.
     ImageGeneration,
     /// Allow the image-generation tool to request a backend-assembled GIF.
@@ -423,8 +422,6 @@ pub enum Feature {
     RuntimeAgentInstances,
     /// Enable workspace dependency support.
     WorkspaceDependencies,
-
-
 }
 
 impl Feature {
@@ -452,6 +449,8 @@ impl Feature {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Features {
     enabled: BTreeSet<Feature>,
+    /// An explicit opt-out takes precedence over the model catalog's agent selection.
+    multi_agent_v2_disabled: bool,
 }
 
 impl Features {
@@ -465,6 +464,7 @@ impl Features {
         }
         Self {
             enabled: set,
+            ..Default::default()
         }
     }
 
@@ -502,11 +502,17 @@ impl Features {
     }
 
     pub fn enable(&mut self, f: Feature) -> &mut Self {
+        if f == Feature::MultiAgentV2 {
+            self.multi_agent_v2_disabled = false;
+        }
         self.enabled.insert(f);
         self
     }
 
     pub fn disable(&mut self, f: Feature) -> &mut Self {
+        if f == Feature::MultiAgentV2 {
+            self.multi_agent_v2_disabled = true;
+        }
         self.enabled.remove(&f);
         self
     }
@@ -517,6 +523,10 @@ impl Features {
         } else {
             self.disable(f)
         }
+    }
+
+    pub fn multi_agent_v2_disabled(&self) -> bool {
+        self.multi_agent_v2_disabled
     }
 
     pub fn apply_map(&mut self, entries: &BTreeMap<String, bool>) {
@@ -561,154 +571,84 @@ pub fn is_known_feature_key(key: &str) -> bool {
     key == "tool_registry" || feature_for_key(key).is_some()
 }
 
-/// Deserializable features table for TOML.
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
-pub struct FeaturesToml {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_registry: Option<ToolRegistryConfigToml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_mode: Option<FeatureToml<CodeModeConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_mode_host: Option<FeatureToml<CodeModeHostConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub non_prefixed_mcp_tool_names: Option<FeatureToml<NonPrefixedMcpToolNamesConfigToml>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "feature_configs::deserialize_guardian_v2_feature"
-    )]
-    pub guardianv2: Option<FeatureToml<GuardianV2ConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub guardianv3: Option<FeatureToml<GuardianV3ConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub multi_agent_v2: Option<FeatureToml<MultiAgentV2ConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token_budget: Option<FeatureToml<TokenBudgetConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub async_compaction: Option<FeatureToml<AsyncCompactionConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_management: Option<FeatureToml<ContextManagementConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rollout_budget: Option<FeatureToml<RolloutBudgetConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_time_reminder: Option<FeatureToml<CurrentTimeReminderConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sleep_tool: Option<FeatureToml<SleepToolConfigToml>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_agent_instances: Option<FeatureToml<RuntimeAgentInstancesConfigToml>>,
-    pub network_proxy: Option<FeatureToml<NetworkProxyConfigToml>>,
-    /// Boolean feature toggles keyed by feature name.
-    #[serde(flatten)]
-    entries: BTreeMap<String, bool>,
+// The field name is the TOML key for deserialization, schema generation and writes.
+macro_rules! structured_features {
+    ($( $(#[$attr:meta])* $field:ident: $ty:ty ),+ $(,)?) => {
+        #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
+        pub struct FeaturesToml {
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub tool_registry: Option<ToolRegistryConfigToml>,
+            $(
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                $(#[$attr])*
+                pub $field: Option<$ty>,
+            )+
+            #[serde(flatten)]
+            entries: BTreeMap<String, bool>,
+        }
+
+        pub fn is_structured_feature(key: &str) -> bool {
+            matches!(key, $(stringify!($field))|+)
+        }
+
+        impl FeaturesToml {
+            pub fn entries(&self) -> BTreeMap<String, bool> {
+                let mut entries = self.entries.clone();
+                $(
+                    if let Some(enabled) = self.$field.as_ref().and_then(|config| config.enabled) {
+                        entries.insert(stringify!($field).to_string(), enabled);
+                    }
+                )+
+                entries
+            }
+        }
+
+        impl From<BTreeMap<String, bool>> for FeaturesToml {
+            fn from(mut entries: BTreeMap<String, bool>) -> Self {
+                Self {
+                    $($field: entries.remove(stringify!($field)).map(|enabled| {
+                        let mut config = <$ty>::default();
+                        config.enabled = Some(enabled);
+                        config
+                    }),)+
+                    entries,
+                    ..Default::default()
+                }
+            }
+        }
+    };
+}
+
+structured_features! {
+    code_mode: CodeModeConfigToml,
+    code_mode_host: CodeModeHostConfigToml,
+    non_prefixed_mcp_tool_names: NonPrefixedMcpToolNamesConfigToml,
+    #[serde(deserialize_with = "feature_configs::deserialize_guardian_v2_feature")]
+    guardianv2: GuardianV2ConfigToml,
+    guardianv3: GuardianV3ConfigToml,
+    multi_agent_v2: MultiAgentV2ConfigToml,
+    token_budget: TokenBudgetConfigToml,
+    async_compaction: AsyncCompactionConfigToml,
+    context_management: ContextManagementConfigToml,
+    rollout_budget: RolloutBudgetConfigToml,
+    current_time_reminder: CurrentTimeReminderConfigToml,
+    sleep_tool: SleepToolConfigToml,
+    runtime_agent_instances: RuntimeAgentInstancesConfigToml,
+    network_proxy: NetworkProxyConfigToml,
+}
+
+pub fn feature_enabled_key(key: &str) -> String {
+    if is_structured_feature(key) {
+        format!("features.{key}.enabled")
+    } else {
+        format!("features.{key}")
+    }
 }
 
 impl Features {
     fn apply_toml(&mut self, features: &FeaturesToml) {
-        let entries = features.entries();
-        self.apply_map(&entries);
+        self.apply_map(&features.entries());
     }
-}
-
-impl FeaturesToml {
-    pub fn entries(&self) -> BTreeMap<String, bool> {
-        let mut entries = self.entries.clone();
-        if let Some(enabled) = self
-            .async_compaction
-            .as_ref()
-            .and_then(FeatureToml::enabled)
-        {
-            entries.insert(Feature::AsyncCompaction.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.code_mode.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::CodeMode.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.code_mode_host.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::CodeModeHost.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self
-            .non_prefixed_mcp_tool_names
-            .as_ref()
-            .and_then(FeatureToml::enabled)
-        {
-            entries.insert(Feature::NonPrefixedMcpToolNames.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.guardianv2.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::GuardianV2.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.guardianv3.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::GuardianV3.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.multi_agent_v2.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::MultiAgentV2.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.token_budget.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::TokenBudget.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self
-            .context_management
-            .as_ref()
-            .and_then(FeatureToml::enabled)
-        {
-            entries.insert(Feature::ContextManagement.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.rollout_budget.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::RolloutBudget.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self
-            .current_time_reminder
-            .as_ref()
-            .and_then(FeatureToml::enabled)
-        {
-            entries.insert(Feature::CurrentTimeReminder.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.network_proxy.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::NetworkProxy.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self.sleep_tool.as_ref().and_then(FeatureToml::enabled) {
-            entries.insert(Feature::SleepTool.key().to_string(), enabled);
-        }
-        if let Some(enabled) = self
-            .runtime_agent_instances
-            .as_ref()
-            .and_then(FeatureToml::enabled)
-        {
-            entries.insert(Feature::RuntimeAgentInstances.key().to_string(), enabled);
-        }
-        entries
-    }
-}
-
-impl From<BTreeMap<String, bool>> for FeaturesToml {
-    fn from(entries: BTreeMap<String, bool>) -> Self {
-        Self {
-            entries,
-            ..Default::default()
-        }
-    }
-}
-
-// To be used for features that need more configuration than just enabled/disabled and
-// require a custom config struct under `[features]`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(untagged)]
-pub enum FeatureToml<T> {
-    Enabled(bool),
-    Config(T),
-}
-
-impl<T: FeatureConfig> FeatureToml<T> {
-    pub fn enabled(&self) -> Option<bool> {
-        match self {
-            Self::Enabled(enabled) => Some(*enabled),
-            Self::Config(config) => config.enabled(),
-        }
-    }
-}
-
-// A trait to be implemented by custom feature config structs when defining a feature that needs more configuration than
-// just enabled/disabled.
-pub trait FeatureConfig {
-    fn enabled(&self) -> Option<bool>;
 }
 
 /// Single, easy-to-read registry of all feature definitions.

@@ -6272,7 +6272,7 @@ async fn update_feature_flags_disabling_guardian_clears_review_policy_and_restor
     let codex_home = tempdir()?;
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     let config_toml_path = codex_home.path().join("config.toml").abs();
-    let config_toml = "approvals_reviewer = \"guardian_subagent\"\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n\n[features]\nguardian_approval = true\n";
+    let config_toml = "approvals_reviewer = \"auto_review\"\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n\n[features]\nguardian_approval = true\n";
     std::fs::write(config_toml_path.as_path(), config_toml)?;
     let user_config = toml::from_str::<TomlValue>(config_toml)?;
     app.config.config_layer_stack = app

@@ -109,9 +109,7 @@ async fn spawned_agent_prewarm_handshake_inherits_effective_root_service_tier(
             });
         })
         .with_config(move |config| {
-            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
-                config.features.enable(feature).expect("spawn feature");
-            }
+            config.features.enable(Feature::MultiAgentV2).expect("spawn feature");
             if fast_mode_enabled {
                 config
                     .features

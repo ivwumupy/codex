@@ -48,7 +48,7 @@ default_permissions = "startup"
 model_instructions_file = {}
 [features]
 memories = {supports_read_restrictions}
-network_proxy = true
+network_proxy.enabled = true
 [memories]
 generate_memories = false
 use_memories = {supports_read_restrictions}

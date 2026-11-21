@@ -362,7 +362,6 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
     let mut v2_model = remote_model("test-multi-agent-v2");
     v2_model.multi_agent_version = Some(MultiAgentVersion::V2);
     let disabled_body = response_body_for_remote_model(v2_model, |config| {
-        config.agents_enabled = false;
         config
             .features
             .disable(Feature::MultiAgentV2)
@@ -393,7 +392,6 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
     let mut disabled_model = remote_model("test-multi-agent-disabled");
     disabled_model.multi_agent_version = Some(MultiAgentVersion::Disabled);
     let v2_body = response_body_for_remote_model(disabled_model, |config| {
-        config.agents_enabled = false;
         config
             .features
             .enable(Feature::MultiAgentV2)
@@ -431,17 +429,17 @@ async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
     for (project_settings, model_version, expected_namespace) in [
         ("", None, None),
         (
-            "[agents]\nenabled = true",
+            "",
             Some(MultiAgentVersion::V1),
             None,
         ),
         (
-            "[agents]\nenabled = true",
+            "",
             Some(MultiAgentVersion::V2),
             Some(MULTI_AGENT_V2_NAMESPACE),
         ),
         (
-            "[agents]\nenabled = false",
+            "[features]\nmulti_agent_v2.enabled = false",
             Some(MultiAgentVersion::V2),
             None,
         ),

@@ -1873,7 +1873,7 @@ async fn system_requirements_define_managed_permission_profiles() -> anyhow::Res
 default_permissions = "managed-standard"
 
 [features]
-network_proxy = true
+network_proxy.enabled = true
 "#,
     )
     .await?;
@@ -1962,11 +1962,8 @@ async fn network_requirements_start_proxy_for_legacy_and_permission_configs() ->
         "default_permissions = 'dev'\n[permissions.dev]\nextends = ':workspace'\n[permissions.dev.network]\nenabled = true\n",
         "default_permissions = 'network'\n[permissions.network]\nextends = ':workspace'\n[permissions.network.network]\nenabled = true\n",
     ] {
-        for table in [
-            "network_proxy",
-            "experimental_network",
-            "permissions.network",
-        ] {
+        {
+            let table = "permissions.network";
             let requirements_toml = format!(
                 "[{table}]\nenabled = true\n[{table}.domains]\n'api.example.com' = 'allow'\n"
             );
@@ -2033,25 +2030,25 @@ env = ["VENDOR_TOKEN"]
 patterns = ["vendor_[a-z]{8}"]
 url_prefixes = ["https://api.vendor.example"]
 auth = ["bearer"]"#,
-            "[features]\ncredential_masking = true\n[experimental_network]\nenabled = true",
+            "[features]\ncredential_masking = true\n[permissions.network]\nenabled = true",
             true,
             true,
         ),
         (
-            "credential_masking = true\nnetwork_proxy = true",
+            "credential_masking = true\nnetwork_proxy.enabled = true",
             "[features]\ncredential_masking = false",
             true,
             false,
         ),
         (
-            "credential_masking = true\nnetwork_proxy = true",
-            "[experimental_network]\nenabled = false",
+            "credential_masking = true\nnetwork_proxy.enabled = true",
+            "[permissions.network]\nenabled = false",
             false,
             false,
         ),
         (
             "credential_masking = true",
-            "[experimental_network]\nallow_local_binding = true",
+            "[permissions.network]\nallow_local_binding = true",
             false,
             false,
         ),
@@ -4790,8 +4787,8 @@ async fn async_compaction_config() {
     use std::io::ErrorKind::InvalidInput;
 
     for (settings, expected) in [
-        ("[features]\nasync_compaction = true", Ok((true, 65))),
-        ("[features]\nasync_compaction = false", Ok((false, 65))),
+        ("[features]\nasync_compaction.enabled = true", Ok((true, 65))),
+        ("[features]\nasync_compaction.enabled = false", Ok((false, 65))),
         ("[features.async_compaction]", Ok((false, 65))),
         (
             "[features.async_compaction]\nenabled = true",

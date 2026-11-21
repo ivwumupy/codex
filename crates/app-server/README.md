@@ -369,10 +369,7 @@ alongside `[permissions.filesystem]`:
 enabled = true
 ```
 
-`[network_proxy]` and its compatibility alias `[experimental_network]` still work.
-Do not mix either with `[permissions.network]`, even across requirements layers. A single
-layer cannot use both top-level names; across layers the top-level names merge with normal
-precedence. `configRequirements/read` returns the result in `requirements.network`.
+`configRequirements/read` returns the effective policy in `requirements.network`.
 
 In `config.toml`, `[features.network_proxy]` configures the proxy, while
 `[permissions.<profile>.network]` configures a profile's network settings. Managed requirements
@@ -383,12 +380,6 @@ In `requirements.toml`, `network` is reserved, like `filesystem`. Rename any man
 named `network` and update its references before upgrading. An empty `[permissions.network]`
 is rejected because it is indistinguishable from an old empty profile. Omit the table when
 there are no shared network settings. A profile named `network` is still allowed in `config.toml`.
-
-Policy publishers must continue using `[experimental_network]` until every client and policy
-validation layer supports the chosen new spelling. Older clients or intermediaries may ignore or
-strip constraints in `[network_proxy]` or `[permissions.network]`; intermediaries may also skip
-host-local validation. This reader change does not migrate or
-version-gate published policy bundles.
 
 ## Stored thread attachments
 

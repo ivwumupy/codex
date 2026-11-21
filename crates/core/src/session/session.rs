@@ -1108,9 +1108,7 @@ impl Session {
             AgentControlInit::Local(control) => {
                 let control = control.with_session_id(
                     session_id,
-                    config
-                        .effective_agent_max_threads(MultiAgentVersion::V2)
-                        .unwrap_or(usize::MAX),
+                    config.max_spawned_agent_threads(),
                 );
                 if parent_thread_id.is_none() {
                     control.propagate_config_update(AgentConfigUpdate::ServiceTier(

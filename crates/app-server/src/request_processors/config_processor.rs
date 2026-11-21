@@ -437,8 +437,7 @@ pub(crate) fn map_requirements_to_api(
         .permissions
         .as_ref()
         .and_then(|permissions| permissions.network.as_deref())
-        .cloned()
-        .or_else(|| requirements.network.clone());
+        .cloned();
 
     Some(ConfigRequirements {
         model_provider: requirements.model_provider,
@@ -1089,7 +1088,7 @@ client_id = "mcp-client"
                 new_thread: Some(NewThreadModelDefaultsToml {
                     model: Some("gpt-managed".to_string()),
                     model_reasoning_effort: Some(ReasoningEffort::Medium),
-                    service_tier: Some("fast".to_string()),
+                    service_tier: Some("priority".to_string()),
                 }),
             }),
             ..ConfigRequirementsToml::default()
@@ -1109,7 +1108,7 @@ client_id = "mcp-client"
             defaults.model_reasoning_effort,
             Some(ReasoningEffort::Medium)
         );
-        assert_eq!(defaults.service_tier.as_deref(), Some("fast"));
+        assert_eq!(defaults.service_tier.as_deref(), Some("priority"));
     }
 
     #[test]

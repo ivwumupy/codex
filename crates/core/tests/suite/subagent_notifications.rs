@@ -2982,12 +2982,10 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
     let mut builder = test_codex()
         .with_model("gpt-5.6-sol")
         .with_config(|config| {
-            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
-                config
-                    .features
-                    .enable(feature)
-                    .expect("test config should allow feature update");
-            }
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("test config should allow feature update");
             config.model_provider.request_max_retries = Some(0);
             config.model_provider.stream_max_retries = Some(0);
             config.model_provider.supports_websockets = false;

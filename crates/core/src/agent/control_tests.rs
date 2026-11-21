@@ -4311,8 +4311,8 @@ async fn spawn_agent_respects_legacy_max_threads_alias() {
 async fn spawn_agent_releases_slot_after_shutdown() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4354,8 +4354,8 @@ async fn spawn_agent_releases_slot_after_shutdown() {
 async fn spawn_agent_limit_shared_across_clones() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4399,8 +4399,8 @@ async fn spawn_agent_limit_shared_across_clones() {
 async fn resume_agent_respects_max_threads_limit() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4455,8 +4455,8 @@ async fn resume_agent_respects_max_threads_limit() {
 async fn resume_agent_releases_slot_after_resume_failure() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(

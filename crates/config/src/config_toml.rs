@@ -403,7 +403,7 @@ pub struct ConfigToml {
     pub personality: Option<Personality>,
 
     /// Optional explicit service tier request id for new turns (for example
-    /// `default`, `priority`, or `flex`; legacy `fast` also works).
+    /// `default`, `priority`, or `flex`).
     pub service_tier: Option<String>,
 
     /// Base URL for requests to ChatGPT (as opposed to the OpenAI API).
@@ -635,13 +635,6 @@ pub struct GoalsToml {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct AgentsToml {
-    /// Whether multi-agent tools are enabled. Defaults to true.
-    /// An enabled `features.multi_agent_v2` setting takes precedence.
-    pub enabled: Option<bool>,
-    /// Maximum number of spawned agent threads that can be open concurrently per session.
-    /// When unset, the selected multi-agent backend uses its default.
-    #[schemars(range(min = 1))]
-    pub max_concurrent_threads_per_session: Option<usize>,
     /// Default model for spawned subagents when the spawn call does not select one.
     pub default_subagent_model: Option<String>,
     /// Default reasoning effort for spawned subagents when the spawn call does not select one.

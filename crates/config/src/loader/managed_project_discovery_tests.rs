@@ -161,11 +161,8 @@ async fn managed_network_requirements_control_broker_project_discovery() -> anyh
     let requirements_path = fixture._temp.path().join("requirements.toml");
     fixture.overrides.system_requirements_path = Some(requirements_path.clone());
 
-    for table in [
-        "network_proxy",
-        "experimental_network",
-        "permissions.network",
-    ] {
+    {
+        let table = "permissions.network";
         for enabled in [false, true] {
             std::fs::write(
                 &requirements_path,
@@ -202,16 +199,7 @@ async fn project_discovery_rejects_invalid_network_requirements() -> anyhow::Res
     let path = fixture._temp.path().join("requirements.toml");
     fixture.overrides.system_requirements_path = Some(path.clone());
     for table in ["network_proxy", "experimental_network"] {
-        for (nested, message) in [
-            ("http_port = 8090", "exactly one surface"),
-            ("enabled = false", "exactly one surface"),
-            ("", "rename the managed profile"),
-            (
-                "extends = ':workspace'\nenabled = true",
-                "rename the managed profile",
-            ),
-        ] {
-            std::fs::write(&path, format!("[{table}]\n[permissions.network]\n{nested}"))?;
+            std::fs::write(&path, format!("[{table}]\nenabled = false"))?;
             let local = load_local_config_layers_with_overrides(
                 &TestFileSystem,
                 &fixture.home,
@@ -231,8 +219,7 @@ async fn project_discovery_rejects_invalid_network_requirements() -> anyhow::Res
             .await
             .expect_err("startup must reject mixed network requirements");
             assert_eq!(local.to_string(), canonical.to_string());
-            assert!(local.to_string().contains(message), "{local}");
-        }
+            assert!(local.to_string().contains(&format!("removed requirements table [{table}]")), "{local}");
     }
     Ok(())
 }

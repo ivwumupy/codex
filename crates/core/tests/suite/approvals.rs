@@ -3200,7 +3200,7 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
         | "flat_yolo"
         | "flat_yolo_profile_transition"
         | "flat_yolo_unnamed_transition"
-        | "flat_yolo_legacy_transition" => "credential_masking = true, network_proxy = true",
+        | "flat_yolo_legacy_transition" => "credential_masking = true, network_proxy.enabled = true",
         "flat_managed" => concat!(
             "credential_masking = true, network_proxy = { enabled = false, ",
             "credentials = { custom = { env = [\"CUSTOM_API_KEY\"], ",
@@ -3222,19 +3222,19 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
                 String::new()
             };
             CloudConfigBundleFixture::loader_with_enterprise_requirement(format!(
-                "{feature_requirements}\n[experimental_network]\nenabled = true\nallow_local_binding = true\n\
-                 [experimental_network.domains]\n\"credential-masking-denied.invalid\" = \"deny\"\n"
+                "{feature_requirements}\n[permissions.network]\nenabled = true\nallow_local_binding = true\n\
+                 [permissions.network.domains]\n\"credential-masking-denied.invalid\" = \"deny\"\n"
             ))
         }
         "flat_no_proxy" | "flat_profile_transition" => {
             CloudConfigBundleFixture::loader_with_enterprise_requirement("")
         }
         "flat_disabled_proxy" => CloudConfigBundleFixture::loader_with_enterprise_requirement(
-            "[experimental_network]\nenabled = false",
+            "[permissions.network]\nenabled = false",
         ),
         "flat_policy_without_proxy" => {
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                "[experimental_network]\nallow_local_binding = true",
+                "[permissions.network]\nallow_local_binding = true",
             )
         }
         _ => managed_network_requirements_loader(),

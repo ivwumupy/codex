@@ -637,7 +637,7 @@ impl LocalAgentControl {
         if let Some(session_source) = session_source.as_ref() {
             self.ensure_execution_capacity(multi_agent_version, session_source)?;
         }
-        let agent_max_threads = config.effective_agent_max_threads(multi_agent_version);
+        let agent_max_threads = Some(config.max_spawned_agent_threads());
         let spawn_uses_v2_residency = multi_agent_version == MultiAgentVersion::V2
             && session_source
                 .as_ref()
@@ -1113,7 +1113,7 @@ impl LocalAgentControl {
                 &config,
             )
             .await;
-        let agent_max_threads = config.effective_agent_max_threads(multi_agent_version);
+        let agent_max_threads = Some(config.max_spawned_agent_threads());
         let mut reservation = self
             .runtime
             .registry

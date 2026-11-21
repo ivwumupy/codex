@@ -10,7 +10,6 @@ use codex_config::Sourced;
 
 use codex_config::config_toml::ConfigToml;
 use codex_features::Feature;
-use codex_features::FeatureToml;
 use codex_features::Features;
 use codex_features::RuntimeAuthMode;
 use codex_features::feature_for_key;
@@ -241,16 +240,10 @@ fn parse_feature_requirements(
 ) -> BTreeMap<Feature, bool> {
     let mut pinned_features = BTreeMap::new();
     for (key, enabled) in feature_requirements.entries {
-        if key == "auto_review" {
-            pinned_features.insert(Feature::GuardianApproval, enabled);
-            continue;
-        }
-
         if let Some(feature) = feature_for_key(&key) {
             pinned_features.insert(feature, enabled);
             continue;
         }
-
 
         push_feature_requirement_warning(
             &mut startup_warnings,
@@ -277,7 +270,11 @@ fn explicit_feature_settings_in_config(cfg: &ConfigToml) -> Vec<(String, Feature
     if let Some(features) = cfg.features.as_ref() {
         for (key, enabled) in features.entries() {
             if let Some(feature) = feature_for_key(&key) {
-                explicit_settings.push((format!("features.{key}"), feature, enabled));
+                explicit_settings.push((
+                    codex_features::feature_enabled_key(&key),
+                    feature,
+                    enabled,
+                ));
             }
         }
     }
@@ -292,10 +289,7 @@ pub(crate) fn resolve_runtime_auth_mode(
         .features
         .as_ref()
         .and_then(|features| features.runtime_agent_instances.as_ref())
-        .and_then(|feature| match feature {
-            FeatureToml::Enabled(_) => None,
-            FeatureToml::Config(config) => config.mode,
-        });
+        .and_then(|config| config.mode);
     if let Some(requirements) = requirements
         && let Some(required) = requirements.value.runtime_auth_mode
     {
@@ -362,9 +356,6 @@ pub(crate) fn validate_feature_requirements_in_config_toml(
     cfg: &ConfigToml,
     feature_requirements: Option<&Sourced<FeatureRequirementsToml>>,
 ) -> std::io::Result<()> {
-    let configured_features = Features::from_sources(
-        cfg.features.as_ref(),
-        None,
-    );
+    let configured_features = Features::from_sources(cfg.features.as_ref(), None);
     ManagedFeatures::from_configured(configured_features, feature_requirements.cloned()).map(|_| ())
 }

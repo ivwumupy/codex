@@ -57,13 +57,14 @@ pub(crate) fn new_debug_config_output(
 fn render_agents_config_lines(config: &Config) -> Vec<Line<'static>> {
     vec![
         "".into(),
-        "[agents]:".bold().into(),
-        format!("  - enabled = {}", config.agents_enabled).into(),
+        "[features.multi_agent_v2]:".bold().into(),
+        format!("  - enabled = {}", config.features.enabled(codex_features::Feature::MultiAgentV2)).into(),
         format!(
             "  - max_concurrent_threads_per_session = {}",
-            format_optional(config.agent_max_threads)
+            config.multi_agent_v2.max_concurrent_threads_per_session
         )
         .into(),
+        "[agents]:".bold().into(),
         format!(
             "  - default_subagent_model = {}",
             format_optional(config.agent_default_subagent_model.as_deref())
@@ -330,18 +331,8 @@ fn render_debug_config_lines(
     }
 
     if let Some(network) = requirements.network.as_ref() {
-        let key = if requirements_toml
-            .permissions
-            .as_ref()
-            .and_then(|permissions| permissions.network.as_ref())
-            .is_some()
-        {
-            "permissions.network"
-        } else {
-            "network_proxy"
-        };
         requirement_lines.push(requirement_line(
-            key,
+            "permissions.network",
             format_network_constraints(&network.value),
             Some(&network.source),
         ));
@@ -690,9 +681,10 @@ mod tests {
         let codex_home = tempfile::tempdir().expect("create temp dir");
         std::fs::write(
             codex_home.path().join(codex_config::CONFIG_TOML_FILE),
-            r#"[agents]
+            r#"[features.multi_agent_v2]
 enabled = false
 max_concurrent_threads_per_session = 7
+[agents]
 default_subagent_model = "gpt-5.6-terra"
 default_subagent_reasoning_effort = "high"
 interrupt_message = false
@@ -927,18 +919,15 @@ interrupt_message = false
         let rendered = render_stack_to_text(&stack);
         let requirements_source = (RequirementSource::LegacyManagedConfigTomlFromMdm).to_string();
         assert!(rendered.contains(&format!(
-            "network_proxy: unix_sockets={{/tmp/blocked.sock=deny, /tmp/codex.sock=allow}} (source: {requirements_source})"
+            "permissions.network: unix_sockets={{/tmp/blocked.sock=deny, /tmp/codex.sock=allow}} (source: {requirements_source})"
         )));
     }
 
     #[test]
     fn debug_config_network_requirement_surfaces() {
         let mut outputs = Vec::new();
-        for table in [
-            "network_proxy",
-            "experimental_network",
-            "permissions.network",
-        ] {
+        {
+            let table = "permissions.network";
             let toml: ConfigRequirementsToml =
                 toml::from_str(&format!("[{table}]\nenabled = true")).expect("requirements");
             let mut sourced = ConfigRequirementsWithSources::default();
@@ -1305,7 +1294,6 @@ approval_policy = "never"
             apps: None,
             rules: None,
             enforce_residency: Some(ResidencyRequirement::Us),
-            network: None,
             permissions: None,
             auto_review: None,
             models: None,
@@ -1369,7 +1357,7 @@ approval_policy = "never"
             "enforce_residency: us (source: {requirements_source})"
         )));
         assert!(rendered.contains(&format!(
-            "network_proxy: enabled=true, domains={{example.com=allow}}, review_domains={{api.example.com}}, header_injections=1 hosts={{api.example.com}} (source: {requirements_source})"
+            "permissions.network: enabled=true, domains={{example.com=allow}}, review_domains={{api.example.com}}, header_injections=1 hosts={{api.example.com}} (source: {requirements_source})"
         )));
         assert!(!rendered.contains("secret-looking-value"));
         assert!(
@@ -1417,7 +1405,6 @@ approval_policy = "never"
             apps: None,
             rules: None,
             enforce_residency: None,
-            network: None,
             permissions: None,
             models: None,
             ..ConfigRequirementsToml::default()

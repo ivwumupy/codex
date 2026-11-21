@@ -1498,10 +1498,10 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
             RequirementSource::LegacyManagedConfigTomlFromMdm,
         ));
         let mut requirements_toml = config.config_layer_stack.requirements_toml().clone();
-        requirements_toml.network = Some(codex_config::NetworkRequirementsToml {
+        requirements_toml.permissions.get_or_insert_default().network = Some(Box::new(codex_config::NetworkRequirementsToml {
             enabled: Some(true),
             ..Default::default()
-        });
+        }));
         config.config_layer_stack = ConfigLayerStack::new(layers, requirements, requirements_toml)
             .expect("rebuild config layer stack with network requirements");
     })
@@ -5122,7 +5122,7 @@ async fn session_settings_null_service_tier_update_uses_default_service_tier() {
 }
 
 #[tokio::test]
-async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_value() {
+async fn session_settings_custom_service_tier_update_preserves_literal_value() {
     let session_configuration = make_session_configuration_for_tests().await;
 
     let updated = session_configuration
@@ -5136,11 +5136,11 @@ async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_
             },
             &[],
         )
-        .expect("legacy fast service tier update should apply");
+        .expect("custom service tier update should apply");
 
     assert_eq!(
         updated.step_settings.service_tier,
-        Some(ServiceTier::Fast.request_value().to_string())
+        Some("fast".to_string())
     );
 }
 
@@ -5500,7 +5500,7 @@ async fn active_profile_update_rebuilds_network_proxy_config(
             toml::from_str(if credential_broker {
                 "network_proxy = { enabled = true, credential_broker = true }"
             } else {
-                "network_proxy = true"
+                "network_proxy.enabled = true"
             })
             .expect("valid features"),
         ),

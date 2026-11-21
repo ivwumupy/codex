@@ -5065,7 +5065,6 @@ async fn paginated_compaction_cold_resume_from_bounded_suffix() -> Result<()> {
                 .features
                 .disable(Feature::MultiAgentV2)
                 .expect("disable override");
-            config.agents_enabled = true;
             config.model_provider = provider;
             config.include_environment_context = false;
             set_test_compact_prompt(config);
