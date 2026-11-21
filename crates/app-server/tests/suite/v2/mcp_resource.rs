@@ -411,7 +411,6 @@ async fn local_executor_does_not_expose_cloud_skills() -> Result<()> {
 
 #[test_case(""; "default_off")]
 #[test_case("[cloud.skills]\nenabled = false"; "explicitly_disabled")]
-#[test_case("[orchestrator.skills]\nenabled = true"; "legacy_setting_ignored")]
 #[test_case("[cloud.skills]\nenabled = true"; "enabled_without_provider")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn missing_cloud_provider_does_not_expose_skills_namespace(extra_config: &str) -> Result<()> {

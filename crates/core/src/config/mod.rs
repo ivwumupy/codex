@@ -61,8 +61,6 @@ use codex_features::CurrentTimeReminderConfigToml;
 use codex_features::CurrentTimeReminderDeliveryMode;
 use codex_features::CurrentTimeSource;
 use codex_features::Feature;
-use codex_features::FeatureConfigSource;
-use codex_features::FeatureOverrides;
 use codex_features::FeatureToml;
 use codex_features::Features;
 use codex_features::FeaturesToml;
@@ -189,7 +187,6 @@ use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
 pub use codex_sandboxing::system_bwrap_warning;
 pub use managed_features::ManagedFeatures;
 pub(crate) use metrics::emit_session_start_metrics;
-pub(crate) use metrics::legacy_multi_agent_disabled_sources;
 pub use network_config::EnvironmentNetworkConfigError;
 pub use network_config::NetworkConfigInputs;
 pub use network_config::PreparedNetworkConfig;
@@ -217,33 +214,12 @@ use windows_sandbox_config::config_allows_mxc;
 pub use windows_sandbox_config::prepare_windows_sandbox_config;
 pub use windows_sandbox_config::windows_mxc_allowed_by_config;
 
-const DEFAULT_IGNORE_LARGE_UNTRACKED_DIRS: i64 = 200;
-const DEFAULT_IGNORE_LARGE_UNTRACKED_FILES: i64 = 10 * 1024 * 1024;
 const DEFAULT_ASYNC_COMPACTION_THRESHOLD_PERCENT: u8 = 65;
 
 /// Signals that a public config selected the retired `untrusted` approval policy.
 #[derive(Debug, thiserror::Error)]
 #[error("approval_policy = \"untrusted\" is no longer supported; remove this setting")]
 pub struct UnsupportedUntrustedApprovalPolicyError;
-
-/// Compatibility-only config retained so legacy `ghost_snapshot` settings
-/// continue to load even though snapshots are no longer produced.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GhostSnapshotConfig {
-    pub ignore_large_untracked_files: Option<i64>,
-    pub ignore_large_untracked_dirs: Option<i64>,
-    pub disable_warnings: bool,
-}
-
-impl Default for GhostSnapshotConfig {
-    fn default() -> Self {
-        Self {
-            ignore_large_untracked_files: Some(DEFAULT_IGNORE_LARGE_UNTRACKED_FILES),
-            ignore_large_untracked_dirs: Some(DEFAULT_IGNORE_LARGE_UNTRACKED_DIRS),
-            disable_warnings: false,
-        }
-    }
-}
 
 /// Maximum number of bytes of the documentation that will be embedded. Larger
 /// files are *silently truncated* to this size so we do not take up too much of
@@ -259,7 +235,6 @@ const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
 pub(crate) const HARD_MIN_MULTI_AGENT_V2_TIMEOUT_MS: i64 = 0;
 pub(crate) const HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS: i64 =
     DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS;
-pub(crate) const DEFAULT_AGENT_MAX_DEPTH: i32 = 1;
 const LOCAL_DEV_BUILD_VERSION: &str = "0.0.0";
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
@@ -993,9 +968,6 @@ pub struct Config {
     /// Whether to record a model-visible message when an agent turn is interrupted.
     pub agent_interrupt_message_enabled: bool,
 
-    /// Maximum nesting depth for V1 agent threads. Ignored by V2.
-    pub agent_max_depth: i32,
-
     /// User-defined role declarations keyed by role name.
     pub agent_roles: BTreeMap<String, AgentRoleConfig>,
 
@@ -1051,11 +1023,7 @@ pub struct Config {
     /// When this program is invoked, arg0 will be set to `codex-linux-sandbox`.
     pub codex_linux_sandbox_exe: Option<PathBuf>,
 
-    /// Ignored compatibility field for clients that still pass the retired wrapper path.
-    pub main_execve_wrapper_exe: Option<PathBuf>,
 
-    /// Ignored compatibility field for clients that still pass a patched zsh path.
-    pub zsh_path: Option<PathBuf>,
 
     /// Value to use for `reasoning.effort` when making a request using the
     /// Responses API.
@@ -1127,9 +1095,6 @@ pub struct Config {
     /// Idle timeout for unsubscribed app-server threads.
     pub thread_unload_delay: Duration,
 
-    /// Compatibility-only settings retained for legacy `ghost_snapshot`
-    /// config loading.
-    pub ghost_snapshot: GhostSnapshotConfig,
 
     /// Settings specific to the task-path-based multi-agent tool surface.
     pub multi_agent_v2: MultiAgentV2Config,
@@ -1699,13 +1664,8 @@ impl Config {
     }
 
     pub(crate) fn multi_agent_version_from_features(&self) -> MultiAgentVersion {
-        self.multi_agent_version_override().unwrap_or_else(|| {
-            if self.features.enabled(Feature::Collab) {
-                MultiAgentVersion::V1
-            } else {
-                MultiAgentVersion::Disabled
-            }
-        })
+        self.multi_agent_version_override()
+            .unwrap_or(MultiAgentVersion::Disabled)
     }
 
     pub(crate) fn multi_agent_version_for_model(
@@ -1713,7 +1673,7 @@ impl Config {
         model_multi_agent_version: Option<MultiAgentVersion>,
     ) -> MultiAgentVersion {
         self.multi_agent_version_override()
-            .or(model_multi_agent_version)
+            .or(model_multi_agent_version.filter(|version| *version == MultiAgentVersion::V2))
             .unwrap_or_else(|| self.multi_agent_version_from_features())
     }
 
@@ -1969,7 +1929,7 @@ impl Config {
             server_permissions: HashMap::new(),
             codex_self_exe: self.codex_self_exe.clone(),
             codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.clone(),
-            use_legacy_landlock: self.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             apps_enabled: self.features.enabled(Feature::Apps),
             apps_early_resource_discovery: self
                 .features
@@ -2661,15 +2621,12 @@ pub struct ConfigOverrides {
     pub service_tier: Option<Option<String>>,
     pub codex_self_exe: Option<PathBuf>,
     pub codex_linux_sandbox_exe: Option<PathBuf>,
-    /// Ignored compatibility field for clients that still pass the retired wrapper path.
-    pub main_execve_wrapper_exe: Option<PathBuf>,
     pub base_instructions: Option<String>,
     pub developer_instructions: Option<String>,
     /// Deprecated: `friendly` and `pragmatic` no longer select a style.
     pub personality: Option<Personality>,
     pub compact_prompt: Option<String>,
     pub show_raw_agent_reasoning: Option<bool>,
-    pub tools_web_search_request: Option<bool>,
     pub ephemeral: Option<bool>,
     pub bypass_hook_trust: Option<bool>,
     /// Additional directories that should be treated as writable roots for this session.
@@ -2682,20 +2639,6 @@ pub struct ConfigOverrides {
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
     let mut seen = HashSet::new();
     paths.retain(|path| seen.insert(path.clone()));
-}
-
-/// Resolve the web search mode from explicit config and feature flags.
-fn resolve_web_search_mode(config_toml: &ConfigToml, features: &Features) -> Option<WebSearchMode> {
-    if let Some(mode) = config_toml.web_search {
-        return Some(mode);
-    }
-    if features.enabled(Feature::WebSearchCached) {
-        return Some(WebSearchMode::Cached);
-    }
-    if features.enabled(Feature::WebSearchRequest) {
-        return Some(WebSearchMode::Live);
-    }
-    None
 }
 
 fn resolve_web_search_config(config_toml: &ConfigToml) -> Option<WebSearchConfig> {
@@ -3074,12 +3017,8 @@ pub fn resolve_bootstrap_http_client_factory(
     feature_requirements: Option<&Sourced<FeatureRequirementsToml>>,
 ) -> std::io::Result<HttpClientFactory> {
     let configured_features = Features::from_sources(
-        FeatureConfigSource {
-            features: cfg.features.as_ref(),
-            experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
-        },
-        FeatureConfigSource::default(),
-        FeatureOverrides::default(),
+        cfg.features.as_ref(),
+        None,
     );
     let features =
         ManagedFeatures::from_configured(configured_features, feature_requirements.cloned())?;
@@ -3390,13 +3329,11 @@ impl Config {
             service_tier: service_tier_override,
             codex_self_exe,
             codex_linux_sandbox_exe,
-            main_execve_wrapper_exe: _,
             base_instructions,
             developer_instructions,
             personality,
             compact_prompt,
             show_raw_agent_reasoning,
-            tools_web_search_request: override_tools_web_search_request,
             ephemeral,
             bypass_hook_trust,
             additional_writable_roots,
@@ -3412,12 +3349,17 @@ impl Config {
         }
 
         let full_access = permissions::BUILT_IN_DANGER_FULL_ACCESS_PROFILE;
-        if cfg.windows.as_ref().and_then(|windows| windows.sandbox).is_some()
-            || cfg.approvals_reviewer == Some(ApprovalsReviewer::AutoReview)
+        if cfg.windows.is_some() || cfg.sandbox_workspace_write.is_some() {
+            return Err(std::io::Error::new(
+                ErrorKind::Unsupported,
+                "sandbox configuration is unsupported in this full-access build",
+            ));
+        }
+        if cfg.approvals_reviewer == Some(ApprovalsReviewer::AutoReview)
             || approvals_reviewer_override == Some(ApprovalsReviewer::AutoReview)
         {
             return Err(std::io::Error::new(ErrorKind::Unsupported,
-                "Windows sandbox and automatic approval review are unsupported in this YOLO-only build"));
+                "automatic approval review is unsupported in this full-access build"));
         }
         required_windows_sandbox_mode.value.can_set(&None).map_err(|err| std::io::Error::new(ErrorKind::Unsupported, err))?;
         if [sandbox_mode, cfg.sandbox_mode].into_iter().flatten().any(|mode| mode != SandboxMode::DangerFullAccess)
@@ -3447,26 +3389,11 @@ impl Config {
         }
 
         let tool_suggest = resolve_tool_suggest_config(&cfg, &config_layer_stack);
-        let feature_overrides = FeatureOverrides {
-            web_search_request: override_tools_web_search_request,
-        };
 
-        let mut configured_features = Features::from_sources(
-            FeatureConfigSource {
-                features: cfg.features.as_ref(),
-                experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
-            },
-            FeatureConfigSource {
-                ..Default::default()
-            },
-            feature_overrides,
+        let configured_features = Features::from_sources(
+            cfg.features.as_ref(),
+            None,
         );
-        if cfg.agents.as_ref().and_then(|agents| agents.enabled) == Some(true)
-            && !configured_features.enabled(Feature::Collab)
-            && managed_features::project_overrides_legacy_subagent_opt_out(&config_layer_stack)
-        {
-            configured_features.enable(Feature::Collab);
-        }
         let runtime_auth_mode = managed_features::resolve_runtime_auth_mode(
             &cfg, feature_requirements.as_ref(),
         )?;
@@ -3475,16 +3402,6 @@ impl Config {
             feature_requirements,
             &mut startup_warnings,
         )?;
-        if let Some(FeatureToml::Config(guardian)) = cfg
-            .features
-            .as_ref()
-            .and_then(|features| features.guardianv2.as_ref())
-            && guardian.async_classifier_mode.is_some()
-        {
-            startup_warnings.push(
-                "`[features.guardianv2].async_classifier_mode` is deprecated and ignored. Async classification always uses conversations; remove this setting from config.toml or profile configuration files.".to_owned(),
-            );
-        }
         let mcp_enterprise_managed_auth = McpEnterpriseManagedAuthConfig::resolve(
             &config_layer_stack,
             cfg.mcp_enterprise_managed_auth.as_ref(),
@@ -3577,7 +3494,7 @@ impl Config {
             approvals_reviewer = constrained_approvals_reviewer.value();
         }
         let web_search_mode =
-            resolve_web_search_mode(&cfg, &features).unwrap_or(WebSearchMode::Cached);
+            cfg.web_search.unwrap_or(WebSearchMode::Cached);
         let web_search_config = resolve_web_search_config(&cfg);
         let experimental_request_user_input_enabled =
             resolve_experimental_request_user_input_enabled(&cfg);
@@ -3693,11 +3610,6 @@ impl Config {
                 "agents.max_concurrent_threads_per_session must be at least 1",
             ));
         }
-        let agent_max_depth = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.max_depth)
-            .unwrap_or(DEFAULT_AGENT_MAX_DEPTH);
         let agent_default_subagent_model = cfg
             .agents
             .as_ref()
@@ -3726,31 +3638,6 @@ impl Config {
                 "thread_unload_delay_secs is too large",
             ));
         }
-
-        let ghost_snapshot = {
-            let mut config = GhostSnapshotConfig::default();
-            if let Some(ghost_snapshot) = cfg.ghost_snapshot.as_ref()
-                && let Some(ignore_over_bytes) = ghost_snapshot.ignore_large_untracked_files
-            {
-                config.ignore_large_untracked_files = if ignore_over_bytes > 0 {
-                    Some(ignore_over_bytes)
-                } else {
-                    None
-                };
-            }
-            if let Some(ghost_snapshot) = cfg.ghost_snapshot.as_ref()
-                && let Some(threshold) = ghost_snapshot.ignore_large_untracked_dirs
-            {
-                config.ignore_large_untracked_dirs =
-                    if threshold > 0 { Some(threshold) } else { None };
-            }
-            if let Some(ghost_snapshot) = cfg.ghost_snapshot.as_ref()
-                && let Some(disable_warnings) = ghost_snapshot.disable_warnings
-            {
-                config.disable_warnings = disable_warnings;
-            }
-            config
-        };
 
         let forced_chatgpt_workspace_id = cfg
             .forced_chatgpt_workspace_id
@@ -4053,7 +3940,6 @@ impl Config {
             agent_max_threads,
             agent_default_subagent_model,
             agent_default_subagent_reasoning_effort,
-            agent_max_depth,
             agent_roles,
             max_goal_token_budget: cfg
                 .goals
@@ -4084,8 +3970,6 @@ impl Config {
             file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
             codex_self_exe,
             codex_linux_sandbox_exe,
-            main_execve_wrapper_exe: None,
-            zsh_path: None,
 
             hide_agent_reasoning: cfg.hide_agent_reasoning.unwrap_or(false),
             show_raw_agent_reasoning: cfg
@@ -4135,7 +4019,6 @@ impl Config {
             code_mode,
             background_terminal_max_timeout,
             thread_unload_delay,
-            ghost_snapshot,
             multi_agent_v2,
             token_budget,
             token_budget_startup_config: None,
@@ -4155,7 +4038,6 @@ impl Config {
                 .tui
                 .as_ref()
                 .and_then(|tui| tui.disable_paste_burst)
-                .or(cfg.disable_paste_burst)
                 .unwrap_or(false),
             analytics_enabled: cfg.analytics.as_ref().and_then(|a| a.enabled),
             feedback_enabled: cfg

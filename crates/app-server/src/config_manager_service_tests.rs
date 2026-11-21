@@ -2853,7 +2853,7 @@ exclude = []
         ),
         (
             r#"[memories]
-no_memories_if_mcp_or_web_search = false
+disable_on_external_context = false
 "#,
             "memories",
             serde_json::json!({"disable_on_external_context": true}),

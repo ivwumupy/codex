@@ -30,7 +30,7 @@ async fn guardian_review_session_config_allows_pinned_disabled_feature() {
     let guardian_config = build_reviewer_config(&parent_config)
         .expect("guardian config should continue when a disabled feature is pinned on");
 
-    assert!(guardian_config.features.enabled(Feature::Collab));
+    assert!(guardian_config.features.enabled(Feature::MultiAgentV2));
     assert!(guardian_config.mcp_servers.get().is_empty());
     assert!(!guardian_config.include_apps_instructions);
 }

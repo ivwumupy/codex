@@ -144,7 +144,6 @@ pub(super) async fn compatibility_warning(
         .flatten()
         .filter_map(|(name, value)| {
             let name = match codex_features::feature_for_key(name) {
-                Some(feature) if feature.stage() == codex_features::Stage::Removed => return None,
                 Some(feature) => feature.key(),
                 None => name,
             };

@@ -12,9 +12,8 @@ const NEXT_TURN: &str = "child-next-turn-after-owner-change";
 const FAILURE: &str = "owner could not prepare the subagent environment";
 
 #[derive(Clone, Copy)]
-pub(crate) enum PendingSpawnCase {
-    TurnSettings,
-    V1Fork,
+pub(crate) enum PendingSpawnCase {    TurnSettings,
+    FullHistory,
     Failure,
     FirstResultOnly,
     ChildConfiguredFirst,
@@ -59,7 +58,7 @@ pub(crate) async fn pending_subagent_scenario(
     case: PendingSpawnCase,
     configure_scenario: impl FnOnce(&mut Config) + Send + 'static,
 ) -> Result<Vec<Value>> {
-    let v1 = matches!(case, PendingSpawnCase::V1Fork);
+    let full_history = matches!(case, PendingSpawnCase::FullHistory);
     let failed = matches!(case, PendingSpawnCase::Failure);
     let server = start_mock_server().await;
     let test = test_codex_with_wait_for_environment()
@@ -67,10 +66,9 @@ pub(crate) async fn pending_subagent_scenario(
             config.project_doc_max_bytes = 0;
             for (feature, enabled) in [
                 (Feature::DeferredExecutor, true),
-                (Feature::Collab, true),
+                (Feature::MultiAgentV2, true),
                 (Feature::DeferMailboxPreemption, true),
                 (Feature::EnableRequestCompression, false),
-                (Feature::MultiAgentV2, !v1),
             ] {
                 config
                     .features
@@ -104,11 +102,7 @@ pub(crate) async fn pending_subagent_scenario(
         .and(path("/v1/responses"))
         .respond_with(move |request: &wiremock::Request| {
             let body: Value = request.body_json().expect("model request body");
-            let namespace = if v1 {
-                "multi_agent_v1"
-            } else {
-                "collaboration"
-            };
+            let namespace = "collaboration";
             let tool = |id, namespace, name, args: Value| {
                 ev_function_call_with_namespace(id, namespace, name, &args.to_string())
             };
@@ -116,22 +110,12 @@ pub(crate) async fn pending_subagent_scenario(
             let item = match stage {
                 0 => {
                     let message = "Wait for the shared workspace to become ready.";
-                    let args = if v1 {
-                        json!({"message": message, "fork_context": true})
-                    } else {
-                        json!({"task_name": "worker", "message": message, "fork_turns": "none"})
-                    };
+                    let args = json!({"task_name": "worker", "message": message, "fork_turns": if full_history { "all" } else { "none" }});
                     tool(SPAWN, namespace, "spawn_agent", args)
                 }
                 1 => {
                     notify_parent_request.notify_one();
-                    let mut args = json!({"timeout_ms": 10000});
-                    if v1 {
-                        let output = call_output(&body, SPAWN).expect("spawn result");
-                        let output: Value =
-                            serde_json::from_str(output).expect("spawn result JSON");
-                        args["targets"] = json!([output["agent_id"]]);
-                    }
+                    let args = json!({"timeout_ms": 10000});
                     tool(WAIT_CHILD, namespace, "wait_agent", args)
                 }
                 2 => {
@@ -215,7 +199,7 @@ pub(crate) async fn pending_subagent_scenario(
                 .environment_failed(&pending, FAILURE.to_string())
                 .await?
         }
-        PendingSpawnCase::V1Fork | PendingSpawnCase::FirstResultOnly => {
+        PendingSpawnCase::FullHistory | PendingSpawnCase::FirstResultOnly => {
             root.thread
                 .environment_ready(&pending, first.clone())
                 .await?;
@@ -284,7 +268,7 @@ pub(crate) async fn pending_subagent_scenario(
     Ok(requests)
 }
 
-#[test_case(PendingSpawnCase::V1Fork; "v1_fork")]
+#[test_case(PendingSpawnCase::FullHistory; "full_history")]
 #[test_case(PendingSpawnCase::FirstResultOnly; "v2_fresh_ignores_later_owner_update_across_turns")]
 #[test_case(PendingSpawnCase::Failure; "v2_owner_failure")]
 #[test_case(PendingSpawnCase::ChildConfiguredFirst; "v2_child_configuration_wins_over_late_owner_failure")]

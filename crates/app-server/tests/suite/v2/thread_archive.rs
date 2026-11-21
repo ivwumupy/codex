@@ -130,7 +130,7 @@ async fn thread_archive_shuts_down_resumed_archived_descendant() -> Result<()> {
     let server = responses::start_mock_server().await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .write(codex_home.path())?;
     let parent_id = create_fake_paginated_rollout(
         codex_home.path(),

@@ -111,58 +111,6 @@ fn spawn_agent_catalog_description_preserves_generated_context() {
     assert_eq!(configured_tool, default_tool);
 }
 
-#[test]
-fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
-    let tool = create_spawn_agent_tool_v1(SpawnAgentToolOptions {
-        agent_type_description: "role help".to_string(),
-        expose_agent_type: true,
-        hide_agent_type_model_reasoning: false,
-        expose_spawn_agent_model_overrides: true,
-        usage_hint_text: None,
-        ..Default::default()
-    });
-
-    let ToolSpec::Namespace(namespace) = tool else {
-        panic!("spawn_agent v1 should be a namespace tool");
-    };
-    assert_eq!(namespace.name, MULTI_AGENT_V1_NAMESPACE);
-    let Some(ResponsesApiNamespaceTool::Function(ResponsesApiTool { parameters, .. })) =
-        namespace.tools.first()
-    else {
-        panic!("spawn_agent should be a namespace function tool");
-    };
-    assert_eq!(
-        parameters.schema_type.clone(),
-        Some(JsonSchemaType::Single(JsonSchemaPrimitiveType::Object))
-    );
-    let properties = parameters
-        .properties
-        .as_ref()
-        .expect("spawn_agent should use object params");
-
-    assert!(properties.contains_key("fork_context"));
-    assert!(!properties.contains_key("fork_turns"));
-    assert_eq!(
-        properties.get("agent_type"),
-        Some(&JsonSchema::string(Some(format!(
-            "{SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1}\nrole help"
-        ))))
-    );
-    assert_eq!(
-        properties
-            .get("message")
-            .and_then(|schema| schema.encrypted),
-        None
-    );
-    assert_eq!(
-        properties
-            .get("model")
-            .and_then(|schema| schema.description.as_deref()),
-        Some(SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION)
-    );
-    assert!(!properties.contains_key("service_tier"));
-}
-
 #[test_case::test_case(false; "inline_catalog")]
 #[test_case::test_case(true; "context_catalog")]
 fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden(

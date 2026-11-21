@@ -1,9 +1,6 @@
 use crate::config_toml::ConfigToml;
 use crate::types::RawMcpServerConfig;
 use codex_features::FEATURES;
-use codex_features::legacy_feature_keys;
-use codex_protocol::protocol::GranularApprovalConfig;
-use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::r#gen::SchemaSettings;
 use schemars::schema::InstanceType;
@@ -16,29 +13,7 @@ use serde_json::Map;
 use serde_json::Value;
 use std::path::Path;
 
-/// Determines the conditions under which the user is consulted to approve
-/// running the command proposed by Codex.
-#[allow(dead_code)]
-#[derive(JsonSchema)]
-#[schemars(rename = "AskForApproval")]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum ConfigAskForApproval {
-    /// The model decides when to ask the user for approval.
-    OnRequest,
-
-    /// Fine-grained controls for individual approval flows.
-    ///
-    /// When a field is `true`, commands in that category are allowed. When it
-    /// is `false`, those requests are automatically rejected instead of shown
-    /// to the user.
-    Granular(GranularApprovalConfig),
-
-    /// Never ask the user to approve commands. Failures are immediately returned
-    /// to the model, and never escalated to the user for approval.
-    Never,
-}
-
-/// Schema for the `[features]` map with known + legacy keys only.
+/// Schema for the `[features]` map with known keys only.
 pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
     let mut object = SchemaObject {
         instance_type: Some(InstanceType::Object.into()),
@@ -75,10 +50,6 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
                     codex_features::NonPrefixedMcpToolNamesConfigToml,
                 >>(),
             );
-            continue;
-        }
-        if feature.id == codex_features::Feature::GuardianThreadContext {
-            // This setting is already part of the guardianv2 feature table.
             continue;
         }
         if feature.id == codex_features::Feature::GuardianV2 {
@@ -171,13 +142,6 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             );
             continue;
         }
-        if feature.id == codex_features::Feature::AppsMcpPathOverride {
-            validation.properties.insert(
-                feature.key.to_string(),
-                removed_apps_mcp_path_override_schema(schema_gen),
-            );
-            continue;
-        }
         if feature.id == codex_features::Feature::NetworkProxy {
             validation.properties.insert(
                 feature.key.to_string(),
@@ -191,11 +155,6 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             .properties
             .insert(feature.key.to_string(), schema_gen.subschema_for::<bool>());
     }
-    for legacy_key in legacy_feature_keys() {
-        validation
-            .properties
-            .insert(legacy_key.to_string(), schema_gen.subschema_for::<bool>());
-    }
     validation.properties.insert(
         "tool_registry".to_string(),
         schema_gen.subschema_for::<codex_features::ToolRegistryConfigToml>(),
@@ -204,30 +163,6 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
     object.object = Some(Box::new(validation));
 
     Schema::Object(object)
-}
-
-fn removed_apps_mcp_path_override_schema(schema_gen: &mut SchemaGenerator) -> Schema {
-    let mut config_validation = ObjectValidation::default();
-    config_validation
-        .properties
-        .insert("enabled".to_string(), schema_gen.subschema_for::<bool>());
-    config_validation
-        .properties
-        .insert("path".to_string(), schema_gen.subschema_for::<String>());
-    config_validation.additional_properties = Some(Box::new(Schema::Bool(false)));
-
-    let config = Schema::Object(SchemaObject {
-        instance_type: Some(InstanceType::Object.into()),
-        object: Some(Box::new(config_validation)),
-        ..Default::default()
-    });
-    Schema::Object(SchemaObject {
-        subschemas: Some(Box::new(SubschemaValidation {
-            any_of: Some(vec![schema_gen.subschema_for::<bool>(), config]),
-            ..Default::default()
-        })),
-        ..Default::default()
-    })
 }
 
 /// Schema for the `[mcp_servers]` map using the raw input shape.

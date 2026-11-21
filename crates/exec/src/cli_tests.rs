@@ -13,7 +13,6 @@ fn resume_parses_prompt_after_global_flags() {
         "gpt-5.2-codex",
         "--cyber-access-program",
         "daybreak_blue",
-        "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
         "--ephemeral",
         "--ignore-user-config",

@@ -204,7 +204,6 @@ fast_default_opt_out = true
             LocalSettings::from_bootstrap(&bootstrap, config.codex_home.clone())?,
             LocalSettings::from(&config),
         );
-        assert_eq!(config.features.legacy_feature_usages().count(), 1);
         assert_eq!(config.tui_theme.as_deref(), Some("project-theme"));
         assert!(
             LocalSettings::from(&config)

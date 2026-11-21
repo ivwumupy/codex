@@ -44,7 +44,7 @@ async fn native_agent_review_requires_openai_on_start_and_resume(
                 config
                     .model_providers
                     .insert(provider_id.to_owned(), config.model_provider.clone());
-                for feature in [Feature::Collab, Feature::MultiAgentV2] {
+                for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
                     config
                         .features
                         .enable(feature)
@@ -204,7 +204,6 @@ async fn encrypted_parent_reply_survives_incremental_guardian_reviews(
         .with_config(move |config| {
             super::configure_scenario_catalog(config);
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::GuardianNativeMultiAgentHistory,
             ] {

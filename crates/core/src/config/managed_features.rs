@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
 use codex_config::Constrained;
 use codex_config::ConstrainedWithSource;
 use codex_config::ConstraintError;
@@ -12,38 +10,10 @@ use codex_config::Sourced;
 
 use codex_config::config_toml::ConfigToml;
 use codex_features::Feature;
-use codex_features::FeatureConfigSource;
-use codex_features::FeatureOverrides;
 use codex_features::FeatureToml;
 use codex_features::Features;
 use codex_features::RuntimeAuthMode;
-use codex_features::canonical_feature_for_key;
 use codex_features::feature_for_key;
-
-/// A project's explicit opt-in replaces only a strictly lower-priority V1 opt-out.
-pub(super) fn project_overrides_legacy_subagent_opt_out(layers: &ConfigLayerStack) -> bool {
-    let mut project_enabled = false;
-    for layer in layers.layers_high_to_low() {
-        if let Some(features) = layer.config.get("features").and_then(toml::Value::as_table)
-            && features.iter().any(|(key, enabled)| {
-                enabled.as_bool() == Some(false) && feature_for_key(key) == Some(Feature::Collab)
-            })
-        {
-            return project_enabled;
-        }
-        if matches!(layer.name, ConfigLayerSource::Project { .. })
-            && layer
-                .config
-                .get("agents")
-                .and_then(|agents| agents.get("enabled"))
-                .and_then(toml::Value::as_bool)
-                == Some(true)
-        {
-            project_enabled = true;
-        }
-    }
-    false
-}
 
 /// Wrapper around [`Features`] which enforces constraints defined in
 /// `FeatureRequirementsToml` and provides normalization to ensure constraints
@@ -271,57 +241,16 @@ fn parse_feature_requirements(
 ) -> BTreeMap<Feature, bool> {
     let mut pinned_features = BTreeMap::new();
     for (key, enabled) in feature_requirements.entries {
-        if key == Feature::Personality.key() || key == Feature::PluginDiscoveryPrefetch.key() {
-            continue;
-        }
-        if key == Feature::Worktrees.key() {
-            push_feature_requirement_warning(
-                &mut startup_warnings,
-                format!(
-                    "Ignoring removed `features` requirement `{key}` from {source}; availability no longer depends on this feature flag."
-                ),
-            );
-            continue;
-        }
-        if matches!(key.as_str(), "shell_zsh_fork" | "unified_exec_zsh_fork") {
-            push_feature_requirement_warning(
-                &mut startup_warnings,
-                format!(
-                    "Ignoring removed `features` requirement `{key}` from {source}; the patched zsh backend has been removed."
-                ),
-            );
-            continue;
-        }
-        if key == Feature::GuardianThreadContext.key() {
-            push_feature_requirement_warning(
-                &mut startup_warnings,
-                format!(
-                    "Ignoring removed `features` requirement `{key}` from {source}; thread-owned Guardian context is always enabled."
-                ),
-            );
-            continue;
-        }
         if key == "auto_review" {
             pinned_features.insert(Feature::GuardianApproval, enabled);
             continue;
         }
 
-        if let Some(feature) = canonical_feature_for_key(&key) {
+        if let Some(feature) = feature_for_key(&key) {
             pinned_features.insert(feature, enabled);
             continue;
         }
 
-        if let Some(feature) = feature_for_key(&key) {
-            push_feature_requirement_warning(
-                &mut startup_warnings,
-                format!(
-                    "Using legacy `features` requirement `{key}` from {source}; prefer canonical feature key `{}`",
-                    feature.key()
-                ),
-            );
-            pinned_features.insert(feature, enabled);
-            continue;
-        }
 
         push_feature_requirement_warning(
             &mut startup_warnings,
@@ -351,13 +280,6 @@ fn explicit_feature_settings_in_config(cfg: &ConfigToml) -> Vec<(String, Feature
                 explicit_settings.push((format!("features.{key}"), feature, enabled));
             }
         }
-    }
-    if let Some(enabled) = cfg.experimental_use_unified_exec_tool {
-        explicit_settings.push((
-            "experimental_use_unified_exec_tool".to_string(),
-            Feature::UnifiedExec,
-            enabled,
-        ));
     }
     explicit_settings
 }
@@ -441,12 +363,8 @@ pub(crate) fn validate_feature_requirements_in_config_toml(
     feature_requirements: Option<&Sourced<FeatureRequirementsToml>>,
 ) -> std::io::Result<()> {
     let configured_features = Features::from_sources(
-        FeatureConfigSource {
-            features: cfg.features.as_ref(),
-            experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
-        },
-        FeatureConfigSource::default(),
-        FeatureOverrides::default(),
+        cfg.features.as_ref(),
+        None,
     );
     ManagedFeatures::from_configured(configured_features, feature_requirements.cloned()).map(|_| ())
 }

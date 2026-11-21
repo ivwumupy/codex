@@ -95,7 +95,7 @@ async fn experimental_features_use_selected_server_profile_and_preserve_task_set
             .collect::<Vec<_>>()
             .join("\n")
     };
-    app.enable_feature_for_new_threads(&mut tui, &server, Feature::Collab)
+    app.enable_feature_for_new_threads(&mut tui, &server, Feature::MultiAgentV2)
         .await;
     insta::assert_snapshot!("subagents_enable_notice", notice_text(&app));
     std::fs::write(
@@ -121,7 +121,7 @@ async fn experimental_features_use_selected_server_profile_and_preserve_task_set
         "# unselected\n"
     );
     std::fs::write(&managed, "[features]\nmulti_agent = false\n")?;
-    app.enable_feature_for_new_threads(&mut tui, &server, Feature::Collab)
+    app.enable_feature_for_new_threads(&mut tui, &server, Feature::MultiAgentV2)
         .await;
     insta::assert_snapshot!(
         "subagents_enable_overridden",

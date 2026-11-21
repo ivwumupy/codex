@@ -1,6 +1,5 @@
 use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
-use codex_features::Feature;
 use codex_otel::SessionTelemetry;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::ThreadId;
@@ -220,12 +219,7 @@ async fn process_sse_emits_failed_event_on_parse_error() {
     mount_sse_once(&server, "data: not-json\n\n".to_string()).await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -261,12 +255,7 @@ async fn process_sse_records_failed_event_when_stream_closes_without_completed()
     mount_sse_once(&server, sse(vec![ev_assistant_message("id", "hi")])).await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -322,12 +311,7 @@ async fn process_sse_failed_event_records_response_error_message() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -381,12 +365,7 @@ async fn process_sse_failed_event_logs_parse_error() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -427,12 +406,7 @@ async fn process_sse_failed_event_logs_missing_error() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -482,12 +456,7 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -636,10 +605,6 @@ async fn turn_and_completed_response_spans_record_token_usage() {
     let test = test_codex()
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
         })
         .build(&server)
         .await
@@ -721,12 +686,6 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(|config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
         .build(&server)
         .await
         .unwrap();
@@ -810,10 +769,6 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
         })
         .build(&server)
         .await
@@ -892,12 +847,7 @@ async fn handle_response_item_records_tool_result_for_custom_tool_call() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -962,12 +912,7 @@ async fn handle_response_item_records_tool_result_for_function_call() {
     .await;
 
     let TestCodex { codex, .. } = test_codex()
-        .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
-        })
+        .with_config(move |_| {})
         .build(&server)
         .await
         .unwrap();
@@ -1033,10 +978,6 @@ async fn handle_response_item_records_tool_result_for_exec_command_call() {
 
     let TestCodex { codex, .. } = test_codex()
         .with_config(move |config| {
-            config
-                .features
-                .disable(Feature::GhostCommit)
-                .expect("test config should allow feature update");
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
         })
         .build(&server)

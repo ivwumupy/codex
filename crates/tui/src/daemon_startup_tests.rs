@@ -90,7 +90,6 @@ async fn daemon_feature_compatibility_respects_required_and_optional_attachment(
                 raw_overrides: match scenario {
                     "matching" => vec![
                         "features.instant_interrupt=true",
-                        "features.remote_compaction_v2=true",
                         "features.shell_tool=true",
                         "features.zz_missing=false",
                     ],
@@ -120,7 +119,6 @@ async fn daemon_feature_compatibility_respects_required_and_optional_attachment(
                 (Feature::ApiKeyModelDiscovery, scenario != "explicit enable", "beta"),
                 (Feature::CodeModeHost, false, "beta"),
                 (Feature::InstantInterrupt, true, "beta"),
-                (Feature::RemoteCompactionV2, false, "stable"),
                 (Feature::ShellTool, false, "removed"),
             ].map(|(feature, enabled, stage)| {
                 json!({"name": feature.key(), "stage": stage, "enabled": enabled, "defaultEnabled": false})

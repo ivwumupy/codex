@@ -128,7 +128,6 @@ async fn installed_apps_threadless_refresh_updates_existing_thread_tools() -> Re
         .enable_feature(Feature::Apps)
         .disable_feature(Feature::CodeMode)
         .disable_feature(Feature::CodeModeOnly)
-        .disable_feature(Feature::ToolSearch)
         .write(codex_home.path())?;
     let mut app_server = start_app_server(codex_home.path()).await?;
     let ThreadStartResponse { thread, .. } = app_server

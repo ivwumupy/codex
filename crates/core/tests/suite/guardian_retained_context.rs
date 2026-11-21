@@ -871,7 +871,6 @@ async fn standalone_fork_retains_inherited_user_instructions(
             config.model_provider.name = "Local compaction test provider".to_owned();
             for feature in [
                 Feature::GuardianApproval,
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::DefaultModeRequestUserInput,
             ] {
@@ -1077,7 +1076,7 @@ async fn forked_parent_instructions_do_not_become_local_authorization(
             config.experimental_thread_store = ThreadStoreConfig::Local;
             config.update_plan_enabled = true;
             config.multi_agent_v2.preserve_fork_prefix = preserve_fork_prefix;
-            for feature in [Feature::TokenBudget, Feature::Collab, Feature::MultiAgentV2] {
+            for feature in [Feature::TokenBudget, Feature::MultiAgentV2, Feature::MultiAgentV2] {
                 config
                     .features
                     .enable(feature)
@@ -1306,7 +1305,6 @@ async fn retained_answers_cross_real_session_boundaries(
             for feature in [
                 Feature::TokenBudget,
                 Feature::DefaultModeRequestUserInput,
-                Feature::Collab,
                 Feature::MultiAgentV2,
             ] {
                 config

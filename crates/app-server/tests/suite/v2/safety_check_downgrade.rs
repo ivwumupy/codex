@@ -18,7 +18,6 @@ use codex_app_server_protocol::TurnModerationMetadataNotification;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
-use codex_features::Feature;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use pretty_assertions::assert_eq;
@@ -486,6 +485,5 @@ fn is_warning_user_message_item(item: &ThreadItemPayload) -> bool {
 fn create_config_toml(codex_home: &std::path::Path, server_uri: &str) -> std::io::Result<()> {
     MockResponsesConfig::new(server_uri)
         .with_model(REQUESTED_MODEL)
-        .disable_feature(Feature::RemoteModels)
         .write(codex_home)
 }

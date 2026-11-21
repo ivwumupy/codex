@@ -54,7 +54,6 @@ use codex_config::ResidencyRequirement as CoreResidencyRequirement;
 use codex_config::SandboxModeRequirement as CoreSandboxModeRequirement;
 use codex_core::ThreadManager;
 use codex_features::Feature;
-use codex_features::canonical_feature_for_key;
 use codex_features::feature_for_key;
 use codex_model_provider::create_model_provider;
 use codex_protocol::config_types::ForcedLoginMethod;
@@ -79,7 +78,6 @@ const SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT: &[&str] = &[
     "mentions_v2",
     "remote_plugin",
     "tool_suggest",
-    "windows_sandbox_service",
 ];
 
 #[derive(Clone)]
@@ -302,7 +300,7 @@ impl ConfigRequestProcessor {
         let ExperimentalFeatureEnablementSetParams { mut enablement } = params;
         let mut invalid_keys = Vec::new();
         enablement.retain(|key, _| {
-            let valid = canonical_feature_for_key(key).is_some()
+            let valid = feature_for_key(key).is_some()
                 && SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT.contains(&key.as_str());
             if !valid {
                 invalid_keys.push(key.clone());

@@ -29,9 +29,11 @@ pub struct ConfigProfile {
     /// The key in the `model_providers` map identifying the
     /// [`ModelProviderInfo`] to use.
     pub model_provider: Option<String>,
-    #[schemars(with = "Option<crate::schema::ConfigAskForApproval>")]
+    #[schemars(skip)]
     pub approval_policy: Option<AskForApproval>,
+    #[schemars(skip)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
+    #[schemars(skip)]
     pub sandbox_mode: Option<SandboxMode>,
     pub model_reasoning_effort: Option<ReasoningEffort>,
     pub plan_mode_reasoning_effort: Option<ReasoningEffort>,
@@ -44,19 +46,12 @@ pub struct ConfigProfile {
     pub chatgpt_base_url: Option<String>,
     /// Optional path to a file containing model instructions.
     pub model_instructions_file: Option<AbsolutePathBuf>,
-    /// Deprecated: ignored.
-    #[schemars(skip)]
-    pub js_repl_node_path: Option<AbsolutePathBuf>,
-    /// Deprecated: ignored.
-    #[schemars(skip)]
-    pub js_repl_node_module_dirs: Option<Vec<AbsolutePathBuf>>,
     pub experimental_compact_prompt_file: Option<AbsolutePathBuf>,
     pub include_permissions_instructions: Option<bool>,
     pub include_apps_instructions: Option<bool>,
     pub include_collaboration_mode_instructions: Option<bool>,
     pub include_environment_context: Option<bool>,
     pub include_environment_context_time: Option<bool>,
-    pub experimental_use_unified_exec_tool: Option<bool>,
     pub tools: Option<ToolsToml>,
     pub web_search: Option<WebSearchMode>,
     pub analytics: Option<AnalyticsConfigToml>,
@@ -64,6 +59,7 @@ pub struct ConfigProfile {
     #[serde(default)]
     pub tui: Option<ProfileTui>,
     #[serde(default)]
+    #[schemars(skip)]
     pub windows: Option<WindowsToml>,
     /// Optional feature toggles scoped to this profile.
     #[serde(default)]

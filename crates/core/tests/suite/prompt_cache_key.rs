@@ -153,10 +153,6 @@ async fn api_key_subagent_inherits_prompt_cache_key_policy(policy: PromptCacheKe
         .with_config(|config| {
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("test config should allow feature update");
-            config
-                .features
                 .enable(Feature::MultiAgentV2)
                 .expect("test config should allow feature update");
         });

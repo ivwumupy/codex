@@ -14,7 +14,7 @@ impl App {
         feature: Feature,
     ) {
         let label = match feature {
-            Feature::Collab => "Subagents",
+            Feature::MultiAgentV2 => "Subagents",
             Feature::MemoryTool => "Memories",
             _ => return,
         };

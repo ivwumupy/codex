@@ -74,7 +74,6 @@ use codex_login::default_client::RESIDENCY_HEADER_NAME;
 use codex_login::test_support::auth_manager_from_optional_auth;
 use codex_model_provider::ProviderCapabilities;
 
-use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
 use codex_prompts::ResolvedMessage;
@@ -378,17 +377,6 @@ consolidation_service_tier = "fast"
         }
     );
 
-    let legacy_memories_cfg =
-        toml::from_str::<ConfigToml>("[memories]\nno_memories_if_mcp_or_web_search = true\n")
-            .expect("legacy memories TOML should deserialize");
-    assert!(
-        MemoriesConfig::from(
-            legacy_memories_cfg
-                .memories
-                .expect("legacy memories config")
-        )
-        .disable_on_external_context
-    );
 }
 
 #[tokio::test]
@@ -4503,17 +4491,8 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
 async fn runtime_config_resolves_disable_paste_burst() -> anyhow::Result<()> {
     for (toml, expected) in [
         ("", false),
-        ("disable_paste_burst = true", true),
-        ("disable_paste_burst = true\n[tui]", true),
         ("[tui]\ndisable_paste_burst = true", true),
-        (
-            "disable_paste_burst = true\n[tui]\ndisable_paste_burst = false",
-            false,
-        ),
-        (
-            "disable_paste_burst = false\n[tui]\ndisable_paste_burst = true",
-            true,
-        ),
+        ("[tui]\ndisable_paste_burst = false", false),
     ] {
         let config = Config::load_from_base_config_with_overrides(
             toml::from_str(toml)?,
@@ -4528,37 +4507,19 @@ async fn runtime_config_resolves_disable_paste_burst() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn disable_paste_burst_preserves_layering_and_new_key_precedence() -> anyhow::Result<()> {
+async fn disable_paste_burst_respects_cli_overrides() -> anyhow::Result<()> {
     for (toml, key, value, expected) in [
         (
-            "disable_paste_burst = true",
-            "disable_paste_burst",
-            false,
-            false,
-        ),
-        (
-            "disable_paste_burst = true",
-            "tui.disable_paste_burst",
-            false,
-            false,
-        ),
-        (
             "[tui]\ndisable_paste_burst = true",
             "tui.disable_paste_burst",
             false,
             false,
-        ),
-        (
-            "[tui]\ndisable_paste_burst = true",
-            "disable_paste_burst",
-            false,
-            true,
         ),
         (
             "[tui]\ndisable_paste_burst = false",
-            "disable_paste_burst",
+            "tui.disable_paste_burst",
             true,
-            false,
+            true,
         ),
     ] {
         let codex_home = TempDir::new()?;
@@ -6613,44 +6574,6 @@ async fn feedback_enabled_defaults_to_true() -> std::io::Result<()> {
 }
 
 #[test]
-fn web_search_mode_defaults_to_none_if_unset() {
-    let cfg = ConfigToml::default();
-    let features = Features::with_defaults();
-
-    assert_eq!(resolve_web_search_mode(&cfg, &features), None);
-}
-
-#[test]
-fn web_search_mode_prefers_config_over_legacy_flags() {
-    let cfg = ConfigToml {
-        web_search: Some(WebSearchMode::Live),
-        ..Default::default()
-    };
-    let mut features = Features::with_defaults();
-    features.enable(Feature::WebSearchCached);
-
-    assert_eq!(
-        resolve_web_search_mode(&cfg, &features),
-        Some(WebSearchMode::Live)
-    );
-}
-
-#[test]
-fn web_search_mode_disabled_overrides_legacy_request() {
-    let cfg = ConfigToml {
-        web_search: Some(WebSearchMode::Disabled),
-        ..Default::default()
-    };
-    let mut features = Features::with_defaults();
-    features.enable(Feature::WebSearchRequest);
-
-    assert_eq!(
-        resolve_web_search_mode(&cfg, &features),
-        Some(WebSearchMode::Disabled)
-    );
-}
-
-#[test]
 fn web_search_mode_for_turn_preserves_indexed_for_disabled_permissions() {
     let web_search_mode = Constrained::allow_any(WebSearchMode::Indexed);
     let mode = resolve_web_search_mode_for_turn(
@@ -6857,48 +6780,6 @@ model = "gpt-project-local"
 }
 
 #[tokio::test]
-async fn feature_table_overrides_legacy_flags() -> std::io::Result<()> {
-    let codex_home = TempDir::new()?;
-    let mut entries = BTreeMap::new();
-    entries.insert("apply_patch_freeform".to_string(), false);
-    let cfg = ConfigToml {
-        features: Some(FeaturesToml::from(entries)),
-        ..Default::default()
-    };
-
-    let config = Config::load_from_base_config_with_overrides(
-        cfg,
-        ConfigOverrides::default(),
-        codex_home.abs(),
-    )
-    .await?;
-
-    assert!(!config.features.enabled(Feature::ApplyPatchFreeform));
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn legacy_toggles_map_to_features() -> std::io::Result<()> {
-    let codex_home = TempDir::new()?;
-    let cfg = ConfigToml {
-        experimental_use_unified_exec_tool: Some(true),
-        ..Default::default()
-    };
-
-    let config = Config::load_from_base_config_with_overrides(
-        cfg,
-        ConfigOverrides::default(),
-        codex_home.abs(),
-    )
-    .await?;
-
-    assert!(config.features.enabled(Feature::UnifiedExec));
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn legacy_unified_exec_disable_flags_do_not_disable_command_execution() -> std::io::Result<()>
 {
     for cfg in [
@@ -6907,10 +6788,6 @@ async fn legacy_unified_exec_disable_flags_do_not_disable_command_execution() ->
                 "unified_exec".to_string(),
                 false,
             )]))),
-            ..Default::default()
-        },
-        ConfigToml {
-            experimental_use_unified_exec_tool: Some(false),
             ..Default::default()
         },
     ] {
@@ -6937,30 +6814,6 @@ async fn legacy_unified_exec_disable_flags_do_not_disable_command_execution() ->
             .expect("shell tool should remain independently configurable");
         assert!(!config.features.enabled(Feature::ShellTool));
         assert!(config.features.enabled(Feature::UnifiedExec));
-    }
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Result<()> {
-    for feature_key in ["responses_websockets", "responses_websockets_v2"] {
-        let codex_home = TempDir::new()?;
-        let mut entries = BTreeMap::new();
-        entries.insert(feature_key.to_string(), true);
-        let cfg = ConfigToml {
-            features: Some(FeaturesToml::from(entries)),
-            ..Default::default()
-        };
-
-        let config = Config::load_from_base_config_with_overrides(
-            cfg,
-            ConfigOverrides::default(),
-            codex_home.abs(),
-        )
-        .await?;
-
-        assert_eq!(config.model_provider.wire_api, WireApi::Responses);
     }
 
     Ok(())
@@ -7165,7 +7018,7 @@ async fn managed_config_wins_over_cli_overrides() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn load_global_mcp_servers_accepts_legacy_ms_field() -> anyhow::Result<()> {
+async fn load_global_mcp_servers_accepts_fractional_timeout() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
 
@@ -7175,7 +7028,7 @@ async fn load_global_mcp_servers_accepts_legacy_ms_field() -> anyhow::Result<()>
 [mcp_servers]
 [mcp_servers.docs]
 command = "echo"
-startup_timeout_ms = 2500
+startup_timeout_sec = 2.5
 "#,
     )?;
 
@@ -8607,8 +8460,6 @@ policy = "Use the user-configured guardian policy."
 #[test_case::test_case("", codex_protocol::TranscriptFormat::Line; "default_line")]
 #[test_case::test_case("[guardianv2]\ntranscript_mode = 'line'", codex_protocol::TranscriptFormat::Line; "explicit_line")]
 #[test_case::test_case("[guardianv2]\ntranscript_mode = 'json'", codex_protocol::TranscriptFormat::Json; "explicit_json")]
-#[test_case::test_case("[guardianv2]\nasync_classifier_mode = 'snapshot'", codex_protocol::TranscriptFormat::Line; "legacy_snapshot")]
-#[test_case::test_case("[guardianv2]\nasync_classifier_mode = 'conversation'", codex_protocol::TranscriptFormat::Line; "legacy_conversation")]
 #[tokio::test]
 async fn load_config_uses_auto_review_guardian_policy_config(
     features: &str,
@@ -8645,11 +8496,6 @@ async fn load_config_uses_auto_review_guardian_policy_config(
         )
     );
 
-    assert_eq!(
-        config.startup_warnings.iter().any(|warning| warning
-            .contains("`[features.guardianv2].async_classifier_mode` is deprecated and ignored.")),
-        features.contains("async_classifier_mode"),
-    );
 
     Ok(())
 }
@@ -8830,10 +8676,8 @@ async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result
         agents: Some(AgentsToml {
             enabled: None,
             max_concurrent_threads_per_session: None,
-            max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
-            job_max_runtime_seconds: None,
             interrupt_message: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
@@ -9756,53 +9600,12 @@ model = "gpt-5-mini"
     Ok(())
 }
 
-#[test]
-fn legacy_agent_job_max_runtime_seconds_is_accepted_as_noop() {
-    let parsed = toml::from_str::<ConfigToml>(
-        r#"
-[agents]
-job_max_runtime_seconds = 900
-"#,
-    )
-    .expect("legacy agent job setting should deserialize");
-
-    assert_eq!(
-        parsed.agents,
-        Some(AgentsToml {
-            job_max_runtime_seconds: Some(900),
-            ..Default::default()
-        })
-    );
-}
-
-#[tokio::test]
-async fn legacy_multi_agent_opt_out_survives_a_session_override() -> std::io::Result<()> {
-    let home = TempDir::new()?;
-    std::fs::write(
-        home.path().join(CONFIG_TOML_FILE),
-        "[features]\nmulti_agent = false\n",
-    )?;
-    let config = ConfigBuilder::without_managed_config_for_tests()
-        .codex_home(home.path().to_path_buf())
-        .fallback_cwd(Some(home.path().to_path_buf()))
-        .cli_overrides(vec![("features.multi_agent".to_string(), true.into())])
-        .build()
-        .await?;
-    assert!(config.features.enabled(Feature::Collab));
-    assert_eq!(
-        legacy_multi_agent_disabled_sources(&config.config_layer_stack),
-        ["user"]
-    );
-    Ok(())
-}
-
 #[tokio::test]
 async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: Some(false),
-            max_depth: Some(2),
             default_subagent_model: Some("gpt-5.6-terra".to_string()),
             default_subagent_reasoning_effort: Some(ReasoningEffort::High),
             interrupt_message: Some(false),
@@ -9821,14 +9624,12 @@ async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
     assert_eq!(
         (
             config.agents_enabled,
-            config.agent_max_depth,
             config.agent_default_subagent_model.as_deref(),
             config.agent_default_subagent_reasoning_effort,
             config.agent_interrupt_message_enabled,
         ),
         (
             false,
-            2,
             Some("gpt-5.6-terra"),
             Some(ReasoningEffort::High),
             false,
@@ -9838,27 +9639,6 @@ async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
     Ok(())
 }
 
-#[test]
-fn agents_max_threads_alias_matches_canonical_config() {
-    let canonical: ConfigToml = toml::from_str(
-        r#"[agents]
-max_concurrent_threads_per_session = 7
-"#,
-    )
-    .expect("canonical agents thread limit should parse");
-    let legacy: ConfigToml = toml::from_str(
-        r#"[agents]
-max_threads = 7
-"#,
-    )
-    .expect("legacy agents thread limit should parse");
-
-    assert_eq!(legacy, canonical);
-    let serialized = toml::to_string(&legacy).expect("agents config should serialize");
-    assert!(serialized.contains("max_concurrent_threads_per_session = 7"));
-    assert!(!serialized.contains("max_threads"));
-}
-
 #[tokio::test]
 async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -9866,10 +9646,8 @@ async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Res
         agents: Some(AgentsToml {
             enabled: None,
             max_concurrent_threads_per_session: None,
-            max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
-            job_max_runtime_seconds: None,
             interrupt_message: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
@@ -9912,10 +9690,8 @@ async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::
         agents: Some(AgentsToml {
             enabled: None,
             max_concurrent_threads_per_session: None,
-            max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
-            job_max_runtime_seconds: None,
             interrupt_message: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
@@ -9952,10 +9728,8 @@ async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::
         agents: Some(AgentsToml {
             enabled: None,
             max_concurrent_threads_per_session: None,
-            max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
-            job_max_runtime_seconds: None,
             interrupt_message: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
@@ -9992,10 +9766,8 @@ async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io:
         agents: Some(AgentsToml {
             enabled: None,
             max_concurrent_threads_per_session: None,
-            max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
-            job_max_runtime_seconds: None,
             interrupt_message: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
@@ -10982,27 +10754,13 @@ apps_mcp_product_sku = "tpp"
 }
 
 #[tokio::test]
-async fn config_loads_cloud_skills_with_legacy_noop() -> std::io::Result<()> {
+async fn config_loads_cloud_skills() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     for (settings, expected) in [
         ("", true),
         ("[cloud.skills]", true),
         ("[cloud.skills]\nenabled = false", false),
         ("[cloud.skills]\nenabled = true", true),
-        ("[orchestrator.skills]\nenabled = false", true),
-        ("[orchestrator.skills]\nenabled = true", true),
-        (
-            "[orchestrator.skills]\nenabled = false\n[cloud.skills]",
-            true,
-        ),
-        (
-            "[orchestrator.skills]\nenabled = true\n[cloud.skills]\nenabled = false",
-            false,
-        ),
-        (
-            "[orchestrator.skills]\nenabled = false\n[cloud.skills]\nenabled = true",
-            true,
-        ),
     ] {
         let cfg: ConfigToml = toml::from_str(&format!(
             "model = \"gpt-5.4\"\n{settings}\n[orchestrator.mcp]\nenabled = false"
@@ -11030,9 +10788,6 @@ async fn config_loads_orchestrator_settings_from_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
 model = "gpt-5.4"
-
-[orchestrator.skills]
-enabled = false
 
 [orchestrator.mcp]
 enabled = false
@@ -11963,73 +11718,6 @@ shell_tool = false
         "{:?}",
         config.startup_warnings
     );
-
-    Ok(())
-}
-
-#[test_case::test_case(Feature::Personality; "personality")]
-#[test_case::test_case(Feature::GuardianThreadContext; "guardian thread context")]
-#[test_case::test_case(Feature::Worktrees; "worktrees")]
-#[test_case::test_case(Feature::ShellZshFork; "shell zsh fork")]
-#[test_case::test_case(Feature::UnifiedExecZshFork; "unified exec zsh fork")]
-fn retired_feature_requirements_do_not_pin_configured_values(
-    feature: Feature,
-) -> std::io::Result<()> {
-    let key = feature.key();
-    for (configured, required) in [(true, false), (false, true)] {
-        let cfg: ConfigToml = toml::from_str(&format!(
-            "[features]\n\"{key}\" = {configured}\nshell_tool = false\n"
-        ))
-        .expect("valid config");
-        let requirement = Sourced::new(
-            FeatureRequirementsToml {
-                entries: BTreeMap::from([
-                    (key.to_string(), required),
-                    ("shell_tool".to_string(), false),
-                ]),
-                ..Default::default()
-            },
-            RequirementSource::EnterpriseManaged {
-                id: "enterprise-id".to_string(),
-                name: "enterprise".to_string(),
-            },
-        );
-        validate_feature_requirements_for_config_toml(&cfg, Some(&requirement))?;
-
-        let configured_features = Features::from_sources(
-            FeatureConfigSource {
-                features: cfg.features.as_ref(),
-                ..Default::default()
-            },
-            FeatureConfigSource::default(),
-            FeatureOverrides::default(),
-        );
-        let mut warnings = Vec::new();
-        let features = ManagedFeatures::from_configured_with_warnings(
-            configured_features,
-            Some(requirement),
-            &mut warnings,
-        )?;
-        assert_eq!(
-            (
-                features.enabled(feature),
-                features.enabled(Feature::ShellTool),
-                warnings.len(),
-            ),
-            (
-                Features::with_defaults().enabled(feature),
-                false,
-                usize::from(feature != Feature::Personality),
-            ),
-        );
-        if matches!(feature, Feature::Worktrees) {
-            assert!(
-                warnings[0].contains(&format!("Ignoring removed `features` requirement `{key}`"))
-            );
-            assert!(warnings[0].contains("enterprise"));
-            assert!(warnings[0].contains("availability no longer depends on this feature flag"));
-        }
-    }
 
     Ok(())
 }
@@ -12989,36 +12677,6 @@ shell_tool = false
 
     assert!(config.features.enabled(Feature::ViewImage));
     assert!(!config.features.enabled(Feature::ShellTool));
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn feature_requirements_warn_on_collab_legacy_alias() -> std::io::Result<()> {
-    let codex_home = TempDir::new()?;
-
-    let config = ConfigBuilder::without_managed_config_for_tests()
-        .codex_home(codex_home.path().to_path_buf())
-        .cloud_config_bundle(
-            CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                r#"
-[features]
-collab = true
-"#,
-            ),
-        )
-        .build()
-        .await?;
-
-    assert!(config.features.enabled(Feature::Collab));
-    assert!(
-        config.startup_warnings.iter().any(|warning| {
-            warning.contains("Using legacy `features` requirement `collab`")
-                && warning.contains("prefer canonical feature key `multi_agent`")
-        }),
-        "{:?}",
-        config.startup_warnings
-    );
 
     Ok(())
 }

@@ -25,7 +25,6 @@ async fn list_spacing_streams_compact_then_reflows_on_completion_or_interruption
                 let width = if plan { 28 } else { 26 };
                 chat.note_rendered_width(width);
                 if plan {
-                    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
                     chat.set_collaboration_mask(CollaborationModeMask {
                         name: "Plan".into(),
                         mode: Some(ModeKind::Plan),

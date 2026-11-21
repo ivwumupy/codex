@@ -1010,7 +1010,6 @@ async fn sample_configured_conversation_history_with_delivery(
                     Feature::Apps,
                     Feature::CodeMode,
                     Feature::CodeModeInterrupt,
-                    Feature::Collab,
                     Feature::MultiAgentV2,
                 ] {
                     config.features.enable(feature).expect("enable Code Mode");

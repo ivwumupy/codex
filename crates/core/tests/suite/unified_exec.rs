@@ -573,7 +573,7 @@ async fn exec_command_uses_installed_environment_shell_policy_with_explicit_over
                 },
                 windows_sandbox_level: WindowsSandboxLevel::from_config(&harness.test().config),
                 windows_sandbox_type: harness.test().config.permissions.windows_sandbox_type,
-                use_legacy_landlock: harness.test().config.features.use_legacy_landlock(),
+                use_legacy_landlock: false,
                 exec_policy: None,
                 mcp_policy: None,
                 network_policy: None,

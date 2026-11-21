@@ -93,10 +93,6 @@ async fn unified_exec_empty_script_with_collaboration_mode_does_not_panic() -> R
             .features
             .enable(Feature::UnifiedExec)
             .expect("test config should allow feature update");
-        config
-            .features
-            .enable(Feature::CollaborationModes)
-            .expect("test config should allow feature update");
     });
     let test = builder.build(&server).await?;
     let call_id = "unified-exec-empty-script-collab";
@@ -151,10 +147,6 @@ async fn unified_exec_whitespace_script_with_collaboration_mode_does_not_panic()
         config
             .features
             .enable(Feature::UnifiedExec)
-            .expect("test config should allow feature update");
-        config
-            .features
-            .enable(Feature::CollaborationModes)
             .expect("test config should allow feature update");
     });
     let test = builder.build(&server).await?;

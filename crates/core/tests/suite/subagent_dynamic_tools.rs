@@ -101,7 +101,6 @@ async fn fresh_v2_subagent_can_call_parent_dynamic_tool_when_enabled() -> Result
     let mut test = test_codex()
         .with_config(|config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::MultiAgentV2DynamicTools,
             ] {

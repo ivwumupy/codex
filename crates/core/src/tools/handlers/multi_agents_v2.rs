@@ -64,3 +64,7 @@ fn agent_message_from_tool(
         AgentMessage::Encrypted(message)
     }
 }
+
+#[cfg(test)]
+#[path = "multi_agents_tests.rs"]
+mod handler_tests;

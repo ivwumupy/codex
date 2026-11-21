@@ -44,7 +44,6 @@ async fn memory_import_retries_after_consolidation_without_partial_dual_write() 
     .await;
     let home = TempDir::new()?;
     MockResponsesConfig::new(server.uri())
-        .enable_feature(Feature::Sqlite)
         .enable_feature(Feature::MemoryTool)
         .enable_feature(Feature::ExternalAgentMemoryImport)
         .with_extra_config("[memories]\nversion = \"v2\"\ngenerate_memories = false\n")

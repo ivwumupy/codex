@@ -9,7 +9,6 @@ use codex_app_server_protocol::ThreadMemoryModeSetParams;
 use codex_app_server_protocol::ThreadMemoryModeSetResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
-use codex_features::Feature;
 use codex_protocol::ThreadId;
 use codex_state::StateRuntime;
 use codex_utils_absolute_path::test_support::PathExt;
@@ -24,7 +23,6 @@ async fn thread_memory_mode_set_updates_loaded_thread_state() -> Result<()> {
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .with_root_config("suppress_unstable_features_warning = true")
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let state_db = init_state_db(codex_home.path()).await?;
 
@@ -62,7 +60,6 @@ async fn thread_memory_mode_set_updates_stored_thread_state() -> Result<()> {
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .with_root_config("suppress_unstable_features_warning = true")
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let state_db = init_state_db(codex_home.path()).await?;
 

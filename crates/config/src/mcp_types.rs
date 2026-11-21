@@ -423,8 +423,6 @@ pub struct RawMcpServerConfig {
     pub auth: Option<McpServerAuth>,
     #[serde(default)]
     pub startup_timeout_sec: Option<f64>,
-    #[serde(default)]
-    pub startup_timeout_ms: Option<u64>,
     #[serde(default, with = "option_duration_secs")]
     #[schemars(with = "Option<f64>")]
     pub tool_timeout_sec: Option<Duration>,
@@ -457,9 +455,6 @@ pub struct RawMcpServerConfig {
     pub oauth: Option<McpServerOAuthConfig>,
     #[serde(default)]
     pub oauth_resource: Option<String>,
-    /// Legacy display-name field accepted for backward compatibility.
-    #[serde(default, rename = "name")]
-    pub _name: Option<String>,
     #[serde(default)]
     pub tools: Option<HashMap<String, McpServerToolConfig>>,
 }
@@ -483,7 +478,6 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             environment_id,
             auth,
             startup_timeout_sec,
-            startup_timeout_ms,
             tool_timeout_sec,
             enabled,
             required,
@@ -497,17 +491,13 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             scopes,
             oauth,
             oauth_resource,
-            _name: _,
             tools,
         } = raw;
 
-        let startup_timeout_sec = match (startup_timeout_sec, startup_timeout_ms) {
-            (Some(sec), _) => {
-                Some(Duration::try_from_secs_f64(sec).map_err(|err| err.to_string())?)
-            }
-            (None, Some(ms)) => Some(Duration::from_millis(ms)),
-            (None, None) => None,
-        };
+        let startup_timeout_sec = startup_timeout_sec
+            .map(Duration::try_from_secs_f64)
+            .transpose()
+            .map_err(|err| err.to_string())?;
 
         fn throw_if_set<T>(transport: &str, field: &str, value: Option<&T>) -> Result<(), String> {
             if value.is_none() {

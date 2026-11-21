@@ -146,7 +146,7 @@ async fn guardian_refreshes_subagent_authorization(change: Change) -> Result<()>
         .with_config(move |config| {
             config.model_provider.base_url = Some(base_url);
             config.feedback_enabled = true;
-            for feature in [Feature::Collab, Feature::MultiAgentV2] {
+            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
                 config
                     .features
                     .enable(feature)

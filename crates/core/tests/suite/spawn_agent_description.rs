@@ -38,7 +38,6 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
 
-const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V2_NAMESPACE: &str = "collaboration";
 const SPAWN_AGENT_TOOL_NAME: &str = "spawn_agent";
 
@@ -150,7 +149,6 @@ async fn wait_for_model_available(manager: &SharedModelsManager, slug: &str) {
     }
 }
 
-#[test_case(MultiAgentVersion::V1, false; "v1_default")]
 #[test_case(MultiAgentVersion::V2, false; "v2_default")]
 #[test_case(MultiAgentVersion::V2, true; "v2_context")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -158,7 +156,6 @@ async fn model_catalog_flag_controls_refresh(
     multi_agent_version: MultiAgentVersion,
     model_catalog_in_context: bool,
 ) -> Result<()> {
-    // The V1 opt-in case also snapshots the full request history in scenarios.rs.
     model_catalog_refresh_requests(multi_agent_version, model_catalog_in_context).await?;
     Ok(())
 }
@@ -226,7 +223,7 @@ pub(super) async fn model_catalog_refresh_requests(
         .with_config(move |config| {
             config
                 .features
-                .enable(Feature::Collab)
+                .enable(Feature::MultiAgentV2)
                 .expect("test config should allow feature update");
             config
                 .features
@@ -252,11 +249,7 @@ pub(super) async fn model_catalog_refresh_requests(
 
     let request = resp_mock.single_request();
     let body = request.body_json();
-    let namespace = match multi_agent_version {
-        MultiAgentVersion::V1 => MULTI_AGENT_V1_NAMESPACE,
-        MultiAgentVersion::V2 => MULTI_AGENT_V2_NAMESPACE,
-        MultiAgentVersion::Disabled => unreachable!("this scenario requires spawning"),
-    };
+    let namespace = MULTI_AGENT_V2_NAMESPACE;
     let description = spawn_agent_description(&body, namespace)
         .expect("spawn_agent description should be present");
     let catalog = request.message_input_texts("developer").join("\n");
@@ -297,7 +290,7 @@ pub(super) async fn model_catalog_refresh_requests(
         description.contains(
             "Do not set the `model` field unless the user explicitly asks for a different model."
         ),
-        multi_agent_version == MultiAgentVersion::V1 || model_catalog_in_context,
+        model_catalog_in_context,
         "expected model override usage guidance in spawn_agent description: {description:?}"
     );
     assert!(
@@ -312,25 +305,6 @@ pub(super) async fn model_catalog_refresh_requests(
         !listing.contains("hidden-model"),
         "hidden picker model should be omitted from model catalog: {catalog:?}"
     );
-    if multi_agent_version == MultiAgentVersion::V1 {
-        assert!(
-        description.contains(
-            "Do not spawn sub-agents unless the user or applicable AGENTS.md/skill instructions explicitly ask for sub-agents, delegation, or parallel agent work."
-        ),
-        "expected explicit authorization rule in spawn_agent description: {description:?}"
-    );
-        assert!(
-        description.contains(
-            "Requests for depth, thoroughness, research, investigation, or detailed codebase analysis do not count as permission to spawn."
-        ) && description.contains("### When to delegate vs. do the subtask yourself"),
-        "expected delegation decision guidance in spawn_agent description: {description:?}"
-    );
-        assert!(
-            !description.contains("A mini model can solve many tasks faster than the main model."),
-            "spawn_agent description should not encourage choosing a smaller model by default: {description:?}"
-        );
-    }
-
     // Only the opt-in path keeps the tool schema stable across a catalog refresh.
     let manager = test.thread_manager.get_models_manager();
     let mut refreshed = manager
@@ -394,7 +368,7 @@ pub(super) async fn model_catalog_refresh_requests(
     Ok(requests)
 }
 
-#[test_case(false, false, MULTI_AGENT_V1_NAMESPACE; "v1 hides agent type without roles")]
+#[test_case(true, false, "collaboration"; "v2 hides agent type without roles")]
 #[test_case(true, true, "collaboration"; "v2 exposes agent type with a role")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_agent_roles_control_spawn_agent_type(
@@ -412,7 +386,7 @@ async fn configured_agent_roles_control_spawn_agent_type(
         .with_config(move |config| {
             config
                 .features
-                .enable(Feature::Collab)
+                .enable(Feature::MultiAgentV2)
                 .expect("test config should allow feature update");
             if multi_agent_v2 {
                 config

@@ -453,7 +453,7 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
             .with_config(move |config| {
                 config
                     .features
-                    .enable(Feature::Collab)
+                    .enable(Feature::MultiAgentV2)
                     .expect("enable multi-agent tools");
                 if is_v2 {
                     config
@@ -687,7 +687,6 @@ async fn saved_daybreak_rejection_records_child_input(
         })
         .with_config(|config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::DaybreakProgramPropagation,
             ] {
@@ -863,7 +862,6 @@ async fn saved_daybreak_uses_existing_websocket_requests() -> Result<()> {
         })
         .with_config(|config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::DaybreakProgramPropagation,
                 Feature::StepModelSwitching,
@@ -1072,7 +1070,7 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
         .with_config(move |config| {
             config
                 .features
-                .enable(Feature::Collab)
+                .enable(Feature::MultiAgentV2)
                 .expect("enable spawn");
             config
                 .features

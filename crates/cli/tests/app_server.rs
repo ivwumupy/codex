@@ -63,12 +63,10 @@ fn agents_accept_interactive_configuration_overrides() -> Result<()> {
     for args in [
         ["-c", "features.multi_agent_mode=true", "agents"].as_slice(),
         ["--enable", "multi_agent_mode", "agents"].as_slice(),
-        ["--yolo", "agents"].as_slice(),
         ["--no-daemon", "agents"].as_slice(),
         ["agents", "--no-daemon"].as_slice(),
         ["--search", "agents"].as_slice(),
         ["--model", "gpt-5", "agents"].as_slice(),
-        ["--approve-for-me", "agents"].as_slice(),
         ["--cd", ".", "agents"].as_slice(),
     ] {
         let mut cmd = codex_command(codex_home.path())?;

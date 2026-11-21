@@ -327,7 +327,6 @@ pub struct MemoriesToml {
     /// Generate both versions while v1 is selected; v2 runs alone after cutover.
     pub dual_write: Option<bool>,
     /// When `true`, external context sources mark the thread `memory_mode` as `"polluted"`.
-    #[serde(alias = "no_memories_if_mcp_or_web_search")]
     pub disable_on_external_context: Option<bool>,
     /// When `false`, newly created threads are stored with `memory_mode = "disabled"` in the state DB.
     pub generate_memories: Option<bool>,
@@ -906,7 +905,7 @@ pub struct Tui {
     /// When true, disables burst-paste detection for typed input entirely.
     /// All characters are inserted as they are received, and no buffering
     /// or placeholder replacement will occur for fast keypress bursts.
-    /// Overrides the legacy top-level `disable_paste_burst` setting. Defaults to `false`.
+    /// Defaults to `false`.
     pub disable_paste_burst: Option<bool>,
 
     /// Start the composer in Vim mode (`Normal`) by default.

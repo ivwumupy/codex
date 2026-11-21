@@ -169,9 +169,6 @@ pub struct GuardianV2ConfigToml {
     /// Transcript encoding for synchronous Guardian review and asynchronous scoring. Defaults to line.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transcript_mode: Option<codex_protocol::TranscriptFormat>,
-    /// Deprecated and ignored; asynchronous classification always uses conversations.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub async_classifier_mode: Option<codex_protocol::openai_models::AsyncClassifierMode>,
     /// Reset retained async history when the next request exceeds this token estimate.
     /// Defaults to 100,000. Fresh requests remain subject to the model's input limit.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,12 +176,6 @@ pub struct GuardianV2ConfigToml {
     pub async_classifier_conversation_token_limit: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-    /// Legacy setting retained for config compatibility; the backend now controls Guardian billing.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub free_guardian: Option<bool>,
-    /// Deprecated and ignored; thread-owned Guardian context is always enabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thread_context: Option<bool>,
     /// Persist reviewed actions and risk scores to rollout files for debugging.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub persist_scores: Option<bool>,
@@ -332,9 +323,6 @@ pub struct MultiAgentV2ConfigToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 3600000))]
     pub default_wait_timeout_ms: Option<i64>,
-    /// Deprecated compatibility field. Its value is ignored.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage_hint_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_hint_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -528,15 +516,6 @@ impl FeatureConfig for SleepToolConfigToml {
     fn enabled(&self) -> Option<bool> {
         self.enabled
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct RemovedAppsMcpPathOverrideConfigToml {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]

@@ -1676,7 +1676,6 @@ async fn child_completion_wakes_parent_after_final_answer() -> Result<()> {
             config.model_reasoning_effort = Some(ReasoningEffort::Medium);
             config.include_environment_context = false;
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::MultiAgentV2DynamicTools,
                 Feature::WakeOnAgentMessages,
@@ -3416,7 +3415,7 @@ async fn app_tool_exposure_request_history() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_catalog_refresh_preserves_tools_and_history() -> Result<()> {
     let requests = super::spawn_agent_description::model_catalog_refresh_requests(
-        MultiAgentVersion::V1,
+        MultiAgentVersion::V2,
         /*model_catalog_in_context*/ true,
     )
     .await?;

@@ -65,11 +65,6 @@ fn render_agents_config_lines(config: &Config) -> Vec<Line<'static>> {
         )
         .into(),
         format!(
-            "  - max_depth = {} (V1 only; ignored by V2)",
-            config.agent_max_depth
-        )
-        .into(),
-        format!(
             "  - default_subagent_model = {}",
             format_optional(config.agent_default_subagent_model.as_deref())
         )
@@ -698,7 +693,6 @@ mod tests {
             r#"[agents]
 enabled = false
 max_concurrent_threads_per_session = 7
-max_depth = -2
 default_subagent_model = "gpt-5.6-terra"
 default_subagent_reasoning_effort = "high"
 interrupt_message = false

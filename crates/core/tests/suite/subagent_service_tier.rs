@@ -67,7 +67,7 @@ fn assert_request_service_tier(request: &ResponseMock, expected: Option<&str>) {
 }
 
 fn configure_priority_role(config: &mut Config) {
-    for feature in [Feature::Collab, Feature::MultiAgentV2] {
+    for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
         config
             .features
             .enable(feature)

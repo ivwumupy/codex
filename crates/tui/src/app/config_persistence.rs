@@ -1567,8 +1567,6 @@ mod tests {
         app.config.model_reasoning_effort = Some(ReasoningEffortConfig::Low);
         app.config.plan_mode_reasoning_effort = Some(ReasoningEffortConfig::High);
         app.chat_widget
-            .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-        app.chat_widget
             .set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::High));
         app.chat_widget
             .handle_key_event(KeyEvent::from(KeyCode::BackTab));
@@ -1611,8 +1609,6 @@ mod tests {
         app.config.model_reasoning_effort = Some(ReasoningEffortConfig::Low);
         app.config.plan_mode_reasoning_effort = Some(ReasoningEffortConfig::High);
         app.chat_widget
-            .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-        app.chat_widget
             .set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::High));
 
         app.on_apply_advanced_reasoning("gpt-5.4", ReasoningEffortConfig::Ultra);
@@ -1635,8 +1631,6 @@ mod tests {
         let mut app = make_test_app().await;
         app.config.model_reasoning_effort = Some(ReasoningEffortConfig::Low);
         app.config.plan_mode_reasoning_effort = Some(ReasoningEffortConfig::High);
-        app.chat_widget
-            .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
         app.chat_widget
             .set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::High));
         app.chat_widget

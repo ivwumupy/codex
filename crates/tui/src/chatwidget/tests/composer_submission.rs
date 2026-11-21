@@ -245,7 +245,6 @@ async fn parent_owned_thread_blocks_all_direct_input_entry_points() {
         make_chatwidget_manual(/*model_override*/ Some("gpt-5")).await;
     chat.thread_id = Some(ThreadId::new());
     drain_insert_history(&mut rx);
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.set_parent_owned_thread();
     chat.set_side_conversation_active(/*active*/ false);
     chat.bottom_pane
@@ -303,7 +302,6 @@ async fn parent_owned_thread_blocks_settings_shortcuts() {
     let (mut chat, mut rx, _op_rx) =
         make_chatwidget_manual(/*model_override*/ Some("gpt-5.4")).await;
     chat.thread_id = Some(ThreadId::new());
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
     chat.set_parent_owned_thread();
     drain_insert_history(&mut rx);
@@ -1714,7 +1712,6 @@ async fn restored_message_preserves_existing_composer_draft_and_attachments() {
 async fn interrupted_turn_restore_keeps_active_mode_for_resubmission() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.thread_id = Some(ThreadId::new());
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
 
     let plan_mask = collaboration_modes::plan_mask(chat.model_catalog.as_ref())
         .expect("expected plan collaboration mode");

@@ -71,7 +71,7 @@ async fn sampling_records_tool_registrations_once_across_stream_retry() -> Resul
                 .expect("enable incremental tools");
             // Keep request_user_input as the only model-only registration.
             for feature in [
-                Feature::Collab,
+                Feature::MultiAgentV2,
                 Feature::SleepTool,
                 Feature::TokenBudget,
                 Feature::SendMessageToUserAsync,

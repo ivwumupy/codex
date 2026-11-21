@@ -31,7 +31,6 @@ use codex_core_api::ExecServerRuntimeOptions;
 use codex_core_api::ExtensionRegistryBuilder;
 use codex_core_api::Feature;
 use codex_core_api::Features;
-use codex_core_api::GhostSnapshotConfig;
 use codex_core_api::History;
 use codex_core_api::MemoriesConfig;
 use codex_core_api::ModelAvailabilityNuxConfig;
@@ -341,7 +340,6 @@ async fn new_config(
         agent_default_subagent_model: None,
         agent_default_subagent_reasoning_effort: None,
         agent_interrupt_message_enabled: false,
-        agent_max_depth: 1,
         agent_roles: BTreeMap::new(),
         memories: MemoriesConfig::default(),
         sqlite: SqliteConfig::from_sqlite_home_with_nfs_enforcement(
@@ -357,8 +355,6 @@ async fn new_config(
         file_opener: UriBasedFileOpener::VsCode,
         codex_self_exe: arg0_paths.codex_self_exe,
         codex_linux_sandbox_exe: arg0_paths.codex_linux_sandbox_exe,
-        main_execve_wrapper_exe: None,
-        zsh_path: None,
         model_reasoning_effort: None,
         plan_mode_reasoning_effort: None,
         model_reasoning_summary: None,
@@ -383,7 +379,6 @@ async fn new_config(
         code_mode: Default::default(),
         background_terminal_max_timeout: 300_000,
         thread_unload_delay: std::time::Duration::from_secs(/*secs*/ 60),
-        ghost_snapshot: GhostSnapshotConfig::default(),
         multi_agent_v2: MultiAgentV2Config::default(),
         max_goal_token_budget: None,
         token_budget: None,

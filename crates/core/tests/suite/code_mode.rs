@@ -3410,7 +3410,6 @@ async fn code_mode_recovers_complete_inventory_after_orphaned_mapping_pressure()
             config.model_provider.base_url = Some(base_url);
             let _ = config.features.enable(Feature::CodeMode);
             let _ = config.features.enable(Feature::ExecutedToolCallMetadata);
-            let _ = config.features.disable(Feature::RemoteCompactionV2);
         })
         .build_with_auto_env(&config_server)
         .await?;
@@ -3516,7 +3515,6 @@ text("pressure ready");"#,
             config.model_provider.base_url = Some(base_url);
             let _ = config.features.enable(Feature::CodeMode);
             let _ = config.features.enable(Feature::ExecutedToolCallMetadata);
-            let _ = config.features.disable(Feature::RemoteCompactionV2);
         })
         .build_with_auto_env(&config_server)
         .await?;
@@ -3582,9 +3580,7 @@ async fn code_mode_complete_calls_preserve_large_arguments() -> Result<()> {
         &server,
         "Record an oversized call",
         r#"await tools.test_sync_tool({ barrier: { id: "x".repeat(8192), participants: 1 } }); text("done");"#,
-        |config| {
-            let _ = config.features.disable(Feature::RemoteCompactionV2);
-        },
+        |_| {},
     )
     .await?;
 
@@ -9353,10 +9349,6 @@ async fn code_mode_argument_truncation_preserves_later_wait_completeness() -> Re
         config
             .features
             .enable(Feature::ExecutedToolCallMetadata)
-            .unwrap();
-        config
-            .features
-            .disable(Feature::RemoteCompactionV2)
             .unwrap();
         config.model_provider.request_max_retries = Some(0);
         config.model_provider.stream_max_retries = Some(0);

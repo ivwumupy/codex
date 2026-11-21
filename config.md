@@ -1,6 +1,3 @@
-# Configuration docs moved
+# Configuration
 
-This file has moved. Please see the latest configuration documentation here:
-
-- Full config docs: [docs/config.md](https://github.com/openai/codex/blob/main/docs/config.md)
-- MCP servers section: [docs/config.md#connecting-to-mcp-servers](https://github.com/openai/codex/blob/main/docs/config.md#connecting-to-mcp-servers)
+The [configuration schema](crates/core/config.schema.json) lists the settings available in this fork's `config.toml`. Run `codex features list` to see feature defaults and `codex --help` for command-line options.

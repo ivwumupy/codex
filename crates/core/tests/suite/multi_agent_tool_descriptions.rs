@@ -132,7 +132,7 @@ async fn multi_agent_catalog_messages_change_only_selected_tool_fields(
             })
             .with_config(move |config| {
                 if matches!(exposure, Exposure::V1) {
-                    config.features.enable(Feature::Collab).expect("enable V1");
+                    config.features.enable(Feature::MultiAgentV2).expect("enable V1");
                     config
                         .features
                         .disable(Feature::MultiAgentV2)

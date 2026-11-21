@@ -135,8 +135,6 @@ of strings; comma-separated strings are not supported. Use \
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct OrchestratorToml {
-    /// Legacy no-op setting retained for compatibility. Use `cloud.skills` to configure cloud skills.
-    pub skills: Option<FeatureToggleToml>,
     pub mcp: Option<FeatureToggleToml>,
 }
 
@@ -186,12 +184,13 @@ pub struct ConfigToml {
     pub model_post_turn_compact_threshold_percent: Option<u8>,
 
     /// Default approval policy for executing commands.
-    #[schemars(with = "Option<crate::schema::ConfigAskForApproval>")]
+    #[schemars(skip)]
     pub approval_policy: Option<AskForApproval>,
 
     /// Configures who approval requests are routed to for review once they have
     /// been escalated. This does not disable separate safety checks such as
     /// ARC.
+    #[schemars(skip)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
 
     /// Optional policy instructions for the guardian auto-reviewer.
@@ -216,6 +215,7 @@ pub struct ConfigToml {
     pub allow_login_shell: Option<bool>,
 
     /// Sandbox mode to use.
+    #[schemars(skip)]
     pub sandbox_mode: Option<SandboxMode>,
 
     /// Allow macOS sandbox writable roots at or beneath CODEX_HOME to traverse
@@ -223,14 +223,17 @@ pub struct ConfigToml {
     /// This grants no write access by itself, but trusts symlink targets even if
     /// they change between commands or lie outside CODEX_HOME.
     /// This setting has no effect on Linux or Windows.
+    #[schemars(skip)]
     pub allow_symlinked_codex_home: Option<bool>,
 
     /// Sandbox configuration to apply if `sandbox` is `WorkspaceWrite`.
+    #[schemars(skip)]
     pub sandbox_workspace_write: Option<SandboxWorkspaceWrite>,
 
     /// Default permissions profile to apply. Names starting with `:` refer to
     /// built-in profiles; other names are resolved from the `[permissions]`
     /// table.
+    #[schemars(skip)]
     pub default_permissions: Option<String>,
 
     /// Named permissions profiles.
@@ -346,19 +349,13 @@ pub struct ConfigToml {
     /// Resolved when each thread is loaded; request config overrides apply per thread.
     pub thread_unload_delay_secs: Option<u64>,
 
-    /// Deprecated: ignored.
-    #[schemars(skip)]
-    pub js_repl_node_path: Option<AbsolutePathBuf>,
-
-    /// Deprecated: ignored.
-    #[schemars(skip)]
-    pub js_repl_node_module_dirs: Option<Vec<AbsolutePathBuf>>,
-
     /// Profile to use from the `profiles` map.
+    #[schemars(skip)]
     pub profile: Option<String>,
 
     /// Named profiles to facilitate switching between different configurations.
     #[serde(default)]
+    #[schemars(skip)]
     pub profiles: HashMap<String, ConfigProfile>,
 
     /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
@@ -477,11 +474,6 @@ pub struct ConfigToml {
     /// Suppress warnings about unstable (under development) features.
     pub suppress_unstable_features_warning: Option<bool>,
 
-    /// Compatibility-only settings retained so legacy `ghost_snapshot`
-    /// config still loads.
-    #[serde(default)]
-    pub ghost_snapshot: Option<GhostSnapshotToml>,
-
     /// Markers used to detect the project root when searching parent
     /// directories for `.codex` folders. Defaults to [".git"] when unset.
     #[serde(default)]
@@ -491,9 +483,6 @@ pub struct ConfigToml {
     /// Set to `false` only if your Codex updates are centrally managed.
     /// Defaults to `true`.
     pub check_for_update_on_startup: Option<bool>,
-
-    /// Legacy fallback for `tui.disable_paste_burst`. Prefer the setting under `[tui]`.
-    pub disable_paste_burst: Option<bool>,
 
     /// When `enabled` is `false`, disables OpenAI analytics across Codex product surfaces on this machine.
     /// Custom OTLP metrics exporters are controlled by `otel.metrics_exporter`.
@@ -517,6 +506,7 @@ pub struct ConfigToml {
 
     /// Windows-specific configuration.
     #[serde(default)]
+    #[schemars(skip)]
     pub windows: Option<WindowsToml>,
 
     /// Collection of in-product notices (different from notifications)
@@ -524,7 +514,6 @@ pub struct ConfigToml {
     pub notice: Option<Notice>,
 
     pub experimental_compact_prompt_file: Option<AbsolutePathBuf>,
-    pub experimental_use_unified_exec_tool: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
@@ -651,18 +640,12 @@ pub struct AgentsToml {
     pub enabled: Option<bool>,
     /// Maximum number of spawned agent threads that can be open concurrently per session.
     /// When unset, the selected multi-agent backend uses its default.
-    #[serde(alias = "max_threads")]
     #[schemars(range(min = 1))]
     pub max_concurrent_threads_per_session: Option<usize>,
-    /// Maximum nesting depth for V1 agent threads. Ignored by V2.
-    pub max_depth: Option<i32>,
     /// Default model for spawned subagents when the spawn call does not select one.
     pub default_subagent_model: Option<String>,
     /// Default reasoning effort for spawned subagents when the spawn call does not select one.
     pub default_subagent_reasoning_effort: Option<ReasoningEffort>,
-    /// Removed agent-job setting retained as a no-op for compatibility.
-    #[schemars(skip)]
-    pub job_max_runtime_seconds: Option<u64>,
     /// Whether to record a model-visible message when an agent turn is interrupted.
     /// Defaults to true.
     pub interrupt_message: Option<bool>,
@@ -693,19 +676,6 @@ pub struct AgentRoleToml {
 
     /// Candidate nicknames for agents spawned with this role.
     pub nickname_candidates: Option<Vec<String>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct GhostSnapshotToml {
-    /// Legacy no-op setting retained for compatibility.
-    #[serde(alias = "ignore_untracked_files_over_bytes")]
-    pub ignore_large_untracked_files: Option<i64>,
-    /// Legacy no-op setting retained for compatibility.
-    #[serde(alias = "large_untracked_dir_warning_threshold")]
-    pub ignore_large_untracked_dirs: Option<i64>,
-    /// Legacy no-op setting retained for compatibility.
-    pub disable_warnings: Option<bool>,
 }
 
 /// Apply the executor's sandbox availability to an already selected sandbox mode.

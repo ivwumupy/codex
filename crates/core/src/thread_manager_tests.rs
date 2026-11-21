@@ -1646,7 +1646,7 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
             shell_environment_policy: Default::default(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
             windows_sandbox_type: config.permissions.windows_sandbox_type,
-            use_legacy_landlock: config.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             exec_policy: Some(codex_execpolicy::RequirementsExecPolicy::new(
                 codex_execpolicy::Policy::empty(),
             )),

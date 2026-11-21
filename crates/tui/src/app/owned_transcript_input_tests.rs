@@ -178,8 +178,6 @@ fn screen(tui: &tui::Tui) -> String {
 }
 
 fn complete_plan_turn(app: &mut App) {
-    app.chat_widget
-        .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     app.chat_widget.set_collaboration_mask(
         crate::collaboration_modes::plan_mask(app.model_catalog.as_ref()).unwrap(),
     );
@@ -640,7 +638,8 @@ async fn enter_preserves_search_backtrack_and_modal_ownership_while_scrolled() -
         .set_remote_image_urls(vec!["https://example.com/image.png".into()]);
     assert!(!app.handle_owned_transcript_event(&mut tui, &mut server, &enter)?);
     app.chat_widget.set_remote_image_urls(Vec::new());
-    app.chat_widget.open_feature_enable_prompt(Feature::Collab);
+    app.chat_widget
+        .open_feature_enable_prompt(Feature::MultiAgentV2);
     assert!(!app.handle_owned_transcript_event(&mut tui, &mut server, &enter)?);
     assert!(!app.transcript_view.is_following());
 

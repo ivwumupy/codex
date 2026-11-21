@@ -4178,7 +4178,6 @@ async fn status_line_and_terminal_title_reasoning_render_only_effort() {
 #[tokio::test]
 async fn status_line_reasoning_updates_on_mode_switch_without_manual_refresh() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.local_settings.tui.status_line = Some(vec!["reasoning".to_string()]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
 
@@ -4194,7 +4193,6 @@ async fn status_line_reasoning_updates_on_mode_switch_without_manual_refresh() {
 #[tokio::test]
 async fn status_line_model_with_reasoning_updates_on_mode_switch_without_manual_refresh() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.local_settings.tui.status_line = Some(vec!["model-with-reasoning".to_string()]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
 
@@ -4220,7 +4218,6 @@ async fn status_line_model_with_reasoning_plan_mode_footer_snapshot() {
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
     chat.show_welcome_banner = false;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.local_settings.tui.status_line = Some(vec!["model-with-reasoning".to_string()]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
 
@@ -4791,7 +4788,6 @@ async fn unterminated_prose_is_visible_before_completion() {
     for mode in [ModeKind::Default, ModeKind::Plan] {
         let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         if mode == ModeKind::Plan {
-            chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
             let mask = collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), mode)
                 .expect("plan collaboration mask");
             chat.set_collaboration_mask(mask);
@@ -4895,7 +4891,6 @@ async fn newline_plan_delta_redraws_stream_tail_after_noop_catch_up() {
         frame_requester,
     )
     .await;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     let plan_mask = collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), ModeKind::Plan)
         .expect("expected plan collaboration mask");
     chat.set_collaboration_mask(plan_mask);
@@ -4917,7 +4912,6 @@ async fn newline_plan_delta_redraws_stream_tail_after_noop_catch_up() {
 #[tokio::test]
 async fn regular_commit_tick_clears_orphaned_plan_stream_tail() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
-    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     let plan_mask = collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), ModeKind::Plan)
         .expect("expected plan collaboration mask");
     chat.set_collaboration_mask(plan_mask);

@@ -4,8 +4,6 @@ use super::ManagedFeatures;
 use super::resolve_bootstrap_auth_route_config;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_features::Feature;
-use codex_features::FeatureConfigSource;
-use codex_features::FeatureOverrides;
 use codex_features::Features;
 use codex_login::AuthConfig;
 use std::path::Path;
@@ -87,12 +85,8 @@ pub fn resolve_bootstrap_auth_keyring_backend_kind(
 ) -> std::io::Result<AuthKeyringBackendKind> {
     let config_toml = &bootstrap_config.config_toml;
     let features = Features::from_sources(
-        FeatureConfigSource {
-            features: config_toml.features.as_ref(),
-            experimental_use_unified_exec_tool: config_toml.experimental_use_unified_exec_tool,
-        },
-        FeatureConfigSource::default(),
-        FeatureOverrides::default(),
+        config_toml.features.as_ref(),
+        None,
     );
     let managed_features = ManagedFeatures::from_configured(
         features,

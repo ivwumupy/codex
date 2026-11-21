@@ -19,7 +19,6 @@ use codex_app_server_protocol::ThreadRevertResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::UserInput;
-use codex_features::Feature;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -67,7 +66,6 @@ async fn read_state_tracks_terminal_activity_and_reverted_history() -> Result<()
     let responses = create_mock_responses_server_repeating_assistant("Ready").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())

@@ -366,7 +366,6 @@ async fn code_mode_messaging_fixture(
                 Feature::Apps,
                 Feature::CodeMode,
                 Feature::CodeModeInterrupt,
-                Feature::Collab,
                 Feature::MultiAgentV2,
             ] {
                 config.features.enable(feature).expect("enable feature");
@@ -769,7 +768,6 @@ async fn run_guardian_subagent_review(
                 }
             }
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::DefaultModeRequestUserInput,
             ] {

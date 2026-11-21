@@ -288,10 +288,6 @@ elif kind == "stop" and Path(json.load(sys.stdin)["cwd"]).name == "memories":
                 CloudConfigBundleFixture::loader_with_enterprise_requirement(requirements),
             )
             .with_config(move |config| {
-                config
-                    .features
-                    .enable(Feature::Sqlite)
-                    .expect("enable SQLite");
                 config.memories = startup_test_memories_config();
                 config.notify = Some(vec![
                     python.to_string(),
@@ -1203,10 +1199,6 @@ async fn build_test_codex(
 
 fn memory_test_codex(home: Arc<TempDir>, memories: MemoriesConfig) -> TestCodexBuilder {
     test_codex().with_home(home).with_config(move |config| {
-        config
-            .features
-            .enable(Feature::Sqlite)
-            .expect("test config should allow feature update");
         config.memories = memories;
     })
 }
@@ -1709,10 +1701,6 @@ async fn memories_startup_uses_thread_runtime_and_keeps_custom_destinations_inde
                     .with_home(Arc::clone(&home))
                     .with_auth(CodexAuth::from_api_key("ambient-key"))
                     .with_config(|config| {
-                        config
-                            .features
-                            .enable(Feature::Sqlite)
-                            .expect("enable state database");
                         config.memories = startup_test_memories_config();
                         config.memories.version = codex_protocol::MemoryVersion::V1;
                         config.memories.dual_write = false;

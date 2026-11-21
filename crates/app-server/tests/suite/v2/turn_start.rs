@@ -3935,7 +3935,6 @@ async fn turn_start_streams_apply_patch_change_updates_v2() -> Result<()> {
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::ApplyPatchStreamingEvents)
         .disable_feature(Feature::Plugins)
-        .disable_feature(Feature::RemoteModels)
         .disable_feature(Feature::ShellSnapshot)
         .write(&codex_home)?;
     write_models_cache(&codex_home).await?;
@@ -4081,7 +4080,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .with_root_config(&format!(
             "chatgpt_base_url = \"{}\"\ntools.update_plan.enabled = true",
             server.uri()
@@ -4618,7 +4617,7 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .write(codex_home.path())?;
     std::fs::write(
         codex_home.path().join("custom-role.toml"),

@@ -23,8 +23,6 @@ async fn session_model_selection_preserves_defaults_and_updates_active_thread() 
         let thread_id = started.session.thread_id;
         app.enqueue_primary_thread_session(started.session, started.turns)
             .await?;
-        app.chat_widget
-            .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
         if mode == ModeKind::Plan {
             let mask = collaboration_modes::plan_mask(app.model_catalog.as_ref()).unwrap();
             app.chat_widget.set_collaboration_mask(mask);

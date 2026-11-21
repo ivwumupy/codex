@@ -30,7 +30,6 @@ use codex_protocol::ThreadId;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadMemoryMode;
 use codex_rollout::RolloutItem;
@@ -486,7 +485,7 @@ impl ExternalAgentSessionImporter {
             dynamic_tools: Vec::new(),
             selected_capability_roots: Vec::new(),
             runtime_workspace_roots: None,
-            multi_agent_version: Some(MultiAgentVersion::V1),
+            multi_agent_version: None,
             history_mode: ThreadHistoryMode::Legacy,
             history_base: None,
             subagent_history_start_ordinal: None,

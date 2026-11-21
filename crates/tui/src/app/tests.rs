@@ -5717,7 +5717,7 @@ async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
     ))
     .await
     .expect("embedded app server");
-    let _ = app.config.features.disable(Feature::Collab);
+    let _ = app.config.features.disable(Feature::MultiAgentV2);
     let primary_thread_id = ThreadId::new();
     app.enqueue_primary_thread_session(
         test_thread_session(primary_thread_id, test_path_buf("/tmp/project")),
@@ -9411,8 +9411,6 @@ async fn owned_stream_reflows_at_allocated_width_without_reporting_activity() ->
             .map(|i| plain_line_cell(format!("history-{i}")))
             .collect();
         if kind == "plan" {
-            app.chat_widget
-                .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
             app.chat_widget.set_collaboration_mask(
                 crate::collaboration_modes::plan_mask(&app.model_catalog).unwrap(),
             );
@@ -12535,8 +12533,6 @@ async fn changing_cyber_model_reasoning_preserves_selected_permissions() {
                 app.chat_widget.set_model("different-base-model");
                 let default_mode = app.chat_widget.current_collaboration_mode().clone();
                 app.chat_widget
-                    .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-                app.chat_widget
                     .set_collaboration_mask(CollaborationModeMask {
                         name: "Plan".to_string(),
                         mode: Some(ModeKind::Plan),
@@ -12557,8 +12553,6 @@ async fn changing_cyber_model_reasoning_preserves_selected_permissions() {
                 .expect("session-only reasoning selection should succeed");
                 assert_eq!(app.chat_widget.current_collaboration_mode(), &default_mode);
             } else if effort == ReasoningEffortConfig::Ultra {
-                app.chat_widget
-                    .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
                 app.chat_widget
                     .set_collaboration_mask(CollaborationModeMask {
                         name: "Plan".to_string(),

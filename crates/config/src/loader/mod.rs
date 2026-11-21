@@ -517,21 +517,6 @@ pub async fn load_config_layers_state(
             );
     config_layer_stack.is_projectless = is_projectless;
     config_layer_stack.project_trust = project_trust;
-    if config_layer_stack.layers_low_to_high().any(|layer| {
-        matches!(
-            layer.name,
-            ConfigLayerSource::User { .. } | ConfigLayerSource::Project { .. }
-        ) && layer
-            .config
-            .get("features")
-            .and_then(|features| features.get("multi_agent"))
-            .and_then(TomlValue::as_bool)
-            .is_some()
-    }) {
-        startup_warnings.push(
-            "`[features].multi_agent` is deprecated. It still controls the V1 fallback. `[agents].enabled = false` disables subagent tools even when the model selects a subagent version, unless `[features].multi_agent_v2` is enabled.".to_string(),
-        );
-    }
     startup_warnings.extend(ignored_config_warning(
         &config_layer_stack,
         &requirements_layers,

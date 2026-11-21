@@ -2,7 +2,6 @@ use anyhow::Result;
 use codex_config::CONFIG_TOML_FILE;
 use codex_config::LoaderOverrides;
 use codex_config::loader::project_trust_key;
-use codex_config::test_support::CloudConfigBundleFixture;
 use codex_core::TurnInputRequest;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
@@ -366,10 +365,6 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
         config.agents_enabled = false;
         config
             .features
-            .enable(Feature::Collab)
-            .expect("test config should allow feature update");
-        config
-            .features
             .disable(Feature::MultiAgentV2)
             .expect("test config should allow feature update");
     })
@@ -389,15 +384,11 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
     let v1_body = response_body_for_remote_model(v1_model, |config| {
         config
             .features
-            .enable(Feature::Collab)
-            .expect("test config should allow feature update");
-        config
-            .features
             .disable(Feature::MultiAgentV2)
             .expect("test config should allow feature update");
     })
     .await?;
-    assert!(tool_names(&v1_body).contains(&"multi_agent_v1".to_string()));
+    assert!(!tool_names(&v1_body).contains(&"multi_agent_v1".to_string()));
 
     let mut disabled_model = remote_model("test-multi-agent-disabled");
     disabled_model.multi_agent_version = Some(MultiAgentVersion::Disabled);
@@ -415,7 +406,7 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn migrating_only_the_project_agent_setting_preserves_v1_tools() -> Result<()> {
+async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let home = TempDir::new()?;
     let project = TempDir::new()?;
@@ -423,7 +414,7 @@ async fn migrating_only_the_project_agent_setting_preserves_v1_tools() -> Result
     std::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         format!(
-            "[features]\nmulti_agent = false\n[projects.{project_key}]\ntrust_level = 'trusted'"
+            "[projects.{project_key}]\ntrust_level = 'trusted'"
         ),
     )?;
     let project_dir = project.path().join(".codex");
@@ -437,77 +428,26 @@ async fn migrating_only_the_project_agent_setting_preserves_v1_tools() -> Result
                 ..Default::default()
             })
     };
-    let migrated = "[agents]\nenabled = true";
-    for (project_settings, builder, model_version, expected_namespace) in [
-        ("", config(), None, None),
+    for (project_settings, model_version, expected_namespace) in [
+        ("", None, None),
         (
-            "[features]\nmulti_agent = true",
-            config(),
-            None,
-            Some("multi_agent_v1"),
-        ),
-        (migrated, config(), None, Some("multi_agent_v1")),
-        (
-            "[features]\nmulti_agent = true",
-            config().cli_overrides(vec![("features.collab".to_string(), true.into())]),
-            None,
-            Some("multi_agent_v1"),
-        ),
-        (
-            migrated,
-            config().cli_overrides(vec![("features.collab".to_string(), true.into())]),
-            None,
-            Some("multi_agent_v1"),
-        ),
-        (
-            "[agents]\nenabled = true\n[features]\ncollab = true",
-            config(),
-            None,
-            Some("multi_agent_v1"),
-        ),
-        (
-            "[agents]\nenabled = true\n[features]\ncollab = false",
-            config(),
-            None,
+            "[agents]\nenabled = true",
+            Some(MultiAgentVersion::V1),
             None,
         ),
         (
-            migrated,
-            config().cli_overrides(vec![("features.collab".to_string(), false.into())]),
-            None,
-            None,
-        ),
-        (
-            migrated,
-            config(),
+            "[agents]\nenabled = true",
             Some(MultiAgentVersion::V2),
             Some(MULTI_AGENT_V2_NAMESPACE),
         ),
         (
-            "[agents]\nenabled = true\n[features]\nmulti_agent = false",
-            config(),
-            None,
-            None,
-        ),
-        (
-            migrated,
-            config().cli_overrides(vec![("features.multi_agent".to_string(), false.into())]),
-            None,
-            None,
-        ),
-        (
-            migrated,
-            config().cloud_config_bundle(
-                CloudConfigBundleFixture::loader_with_enterprise_requirement(
-                    "[features]\nmulti_agent = false",
-                ),
-            ),
-            None,
+            "[agents]\nenabled = false",
+            Some(MultiAgentVersion::V2),
             None,
         ),
     ] {
         std::fs::write(project_dir.join(CONFIG_TOML_FILE), project_settings)?;
-        let mut loaded = builder.build().await?;
+        let mut loaded = config().build().await?;
         let mut model = remote_model("project-agent-selector");
         model.multi_agent_version = model_version;
         let body = response_body_for_remote_model(model, move |fixture| {

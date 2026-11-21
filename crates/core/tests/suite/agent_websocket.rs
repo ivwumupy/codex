@@ -109,7 +109,7 @@ async fn spawned_agent_prewarm_handshake_inherits_effective_root_service_tier(
             });
         })
         .with_config(move |config| {
-            for feature in [Feature::Collab, Feature::MultiAgentV2] {
+            for feature in [Feature::MultiAgentV2, Feature::MultiAgentV2] {
                 config.features.enable(feature).expect("spawn feature");
             }
             if fast_mode_enabled {
@@ -991,12 +991,7 @@ async fn websocket_v2_test_codex_shell_chain() -> Result<()> {
     ]])
     .await;
 
-    let mut builder = test_codex().with_windows_cmd_shell().with_config(|config| {
-        config
-            .features
-            .enable(Feature::ResponsesWebsocketsV2)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_windows_cmd_shell().with_config(|_| {});
 
     let test = builder.build_with_websocket_server(&server).await?;
     test.submit_turn_with_policy("run the echo command", test.config.legacy_sandbox_policy())
@@ -1099,7 +1094,7 @@ async fn websocket_v2_first_turn_sends_full_create_when_tier_changes_after_start
         })
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
-            for feature in [Feature::ResponsesWebsocketsV2, Feature::FastMode] {
+            for feature in [Feature::FastMode] {
                 config
                     .features
                     .enable(feature)
@@ -1176,12 +1171,7 @@ async fn websocket_v2_next_turn_uses_updated_service_tier() -> Result<()> {
     ]])
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::ResponsesWebsocketsV2)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex().with_config(|_| {});
     let test = builder.build_with_websocket_server(&server).await?;
 
     let warmup = server

@@ -128,11 +128,7 @@ impl LocalSettings {
             Some(tui) => tui.clone(),
             None => toml::Value::Table(Default::default()).try_into()?,
         };
-        tui.disable_paste_burst = Some(
-            tui.disable_paste_burst
-                .or(config.disable_paste_burst)
-                .unwrap_or(false),
-        );
+        tui.disable_paste_burst = Some(tui.disable_paste_burst.unwrap_or(false));
         tui.session_picker_view = Some(tui.session_picker_view.unwrap_or_default());
         tui.screen_reader_detection_done = None;
         let mut settings = Self {

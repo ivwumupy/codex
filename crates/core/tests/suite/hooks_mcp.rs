@@ -828,10 +828,6 @@ async fn mcp_tool_hook_marks_thread_memory_mode_polluted_when_configured() -> Re
                 AppToolApproval::Prompt,
                 /*prefix_mcp_tool_names*/ true,
             );
-            config
-                .features
-                .enable(Feature::Sqlite)
-                .expect("test config should allow feature update");
             config.memories.disable_on_external_context = true;
         })
         .build(&server)

@@ -314,7 +314,6 @@ async fn test_with_host_control(
     let test = test_codex()
         .with_config(move |config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::AgentMessageBoard,
             ]

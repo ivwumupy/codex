@@ -2588,7 +2588,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
             .expect("set sandbox policy");
         config
             .features
-            .enable(Feature::Collab)
+            .enable(Feature::MultiAgentV2)
             .expect("test config should allow feature update");
     });
     let test = builder.build(&server).await?;
@@ -2603,6 +2603,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     let _ = fs::remove_file(&child_file);
 
     let spawn_args = serde_json::to_string(&json!({
+        "task_name":"worker", "fork_turns":"none",
         "message": CHILD_PROMPT,
     }))?;
     mount_sse_once_match(
@@ -2612,7 +2613,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
             ev_response_created("resp-parent-1"),
             ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),

@@ -1,5 +1,3 @@
-use crate::key_aliases::normalize_base_key_aliases;
-use crate::key_aliases::normalize_key_aliases;
 use codex_network_proxy::normalize_host;
 use toml::Value as TomlValue;
 
@@ -55,9 +53,7 @@ impl ShellEnvironmentPolicyFilterRepresentation {
 
 /// Merge config `overlay` into `base`, giving `overlay` precedence.
 pub fn merge_toml_values(base: &mut TomlValue, overlay: &TomlValue) {
-    let overlay = normalize_key_aliases(overlay);
-    normalize_base_key_aliases(base, &overlay, &mut Vec::new());
-    merge_toml_values_at_path(base, overlay, &mut Vec::new());
+    merge_toml_values_at_path(base, overlay.clone(), &mut Vec::new());
 }
 
 pub fn is_structured_feature_path<S: AsRef<str>>(path: &[S]) -> bool {
