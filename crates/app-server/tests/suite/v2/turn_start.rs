@@ -23,9 +23,6 @@ use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::ByteRange;
 use codex_app_server_protocol::ClientInfo;
 use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::CollabAgentStatus;
-use codex_app_server_protocol::CollabAgentTool;
-use codex_app_server_protocol::CollabAgentToolCallStatus;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
 use codex_app_server_protocol::CommandExecutionStatus;
@@ -4023,6 +4020,8 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     let server = responses::start_mock_server().await;
     let spawn_args = serde_json::to_string(&json!({
         "message": CHILD_PROMPT,
+        "task_name": "worker",
+        "fork_turns": "none",
         "model": REQUESTED_MODEL,
         "reasoning_effort": REQUESTED_REASONING_EFFORT,
     }))?;
@@ -4033,7 +4032,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
             responses::ev_response_created("resp-turn1-1"),
             responses::ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -4081,6 +4080,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::MultiAgentV2)
+        .with_root_config("features.multi_agent_v2.expose_spawn_agent_model_overrides = true")
         .with_root_config(&format!(
             "chatgpt_base_url = \"{}\"\ntools.update_plan.enabled = true",
             server.uri()
@@ -4114,82 +4114,27 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
         })
         .await?;
 
-    let spawn_started = timeout(DEFAULT_READ_TIMEOUT, async {
-        loop {
-            let started: ItemStartedNotification = mcp.read_notification("item/started").await?;
-            if let ThreadItemPayload::CollabAgentToolCall { id, .. } = &started.item.payload
-                && id == SPAWN_CALL_ID
-            {
-                return Ok::<ThreadItemPayload, anyhow::Error>(started.item.payload);
-            }
-        }
-    })
-    .await??;
-    assert_eq!(
-        spawn_started,
-        ThreadItemPayload::CollabAgentToolCall {
-            id: SPAWN_CALL_ID.to_string(),
-            tool: CollabAgentTool::SpawnAgent,
-            status: CollabAgentToolCallStatus::InProgress,
-            sender_thread_id: thread.id.clone(),
-            receiver_thread_ids: Vec::new(),
-            prompt: Some(CHILD_PROMPT.to_string()),
-            model: Some(REQUESTED_MODEL.to_string()),
-            reasoning_effort: Some(REQUESTED_REASONING_EFFORT),
-            agents_states: HashMap::new(),
-        }
-    );
-
-    let spawn_completed = timeout(DEFAULT_READ_TIMEOUT, async {
+    let receiver_thread_id = timeout(DEFAULT_READ_TIMEOUT, async {
         loop {
             let completed: ItemCompletedNotification =
                 mcp.read_notification("item/completed").await?;
-            if let ThreadItemPayload::CollabAgentToolCall { id, .. } = &completed.item.payload
+            if let ThreadItemPayload::SubAgentActivity {
+                id,
+                kind: SubAgentActivityKind::Started,
+                agent_thread_id,
+                model,
+                reasoning_effort,
+                ..
+            } = completed.item.payload
                 && id == SPAWN_CALL_ID
             {
-                return Ok::<ThreadItemPayload, anyhow::Error>(completed.item.payload);
+                assert_eq!(model.as_deref(), Some(REQUESTED_MODEL));
+                assert_eq!(reasoning_effort, Some(REQUESTED_REASONING_EFFORT));
+                return Ok::<String, anyhow::Error>(agent_thread_id);
             }
         }
     })
     .await??;
-    let ThreadItemPayload::CollabAgentToolCall {
-        id,
-        tool,
-        status,
-        sender_thread_id,
-        receiver_thread_ids,
-        prompt,
-        model,
-        reasoning_effort,
-        agents_states,
-    } = spawn_completed
-    else {
-        unreachable!("loop ensures we break on collab agent tool call items");
-    };
-    let receiver_thread_id = receiver_thread_ids
-        .first()
-        .cloned()
-        .expect("spawn completion should include child thread id");
-    assert_eq!(id, SPAWN_CALL_ID);
-    assert_eq!(tool, CollabAgentTool::SpawnAgent);
-    assert_eq!(status, CollabAgentToolCallStatus::Completed);
-    assert_eq!(sender_thread_id, thread.id);
-    assert_eq!(receiver_thread_ids, vec![receiver_thread_id.clone()]);
-    assert_eq!(prompt, Some(CHILD_PROMPT.to_string()));
-    assert_eq!(model, Some(REQUESTED_MODEL.to_string()));
-    assert_eq!(reasoning_effort, Some(REQUESTED_REASONING_EFFORT));
-    let agent_state = agents_states
-        .get(&receiver_thread_id)
-        .expect("spawn completion should include child agent state");
-    assert!(
-        matches!(
-            agent_state.status,
-            CollabAgentStatus::PendingInit | CollabAgentStatus::Running
-        ),
-        "child agent should still be initializing or already running, got {:?}",
-        agent_state.status
-    );
-    assert_eq!(agent_state.message, None);
 
     let turn_completed = timeout(DEFAULT_READ_TIMEOUT, async {
         loop {
@@ -4573,6 +4518,8 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     let server = responses::start_mock_server().await;
     let spawn_args = serde_json::to_string(&json!({
         "message": CHILD_PROMPT,
+        "task_name": "worker",
+        "fork_turns": "none",
         "agent_type": "custom",
         "model": REQUESTED_MODEL,
         "reasoning_effort": REQUESTED_REASONING_EFFORT,
@@ -4584,7 +4531,7 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
             responses::ev_response_created("resp-turn1-1"),
             responses::ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -4618,6 +4565,7 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::MultiAgentV2)
+        .with_root_config("features.multi_agent_v2.expose_spawn_agent_model_overrides = true")
         .write(codex_home.path())?;
     std::fs::write(
         codex_home.path().join("custom-role.toml"),
@@ -4664,56 +4612,27 @@ config_file = "./custom-role.toml"
         })
         .await?;
 
-    let spawn_completed = timeout(DEFAULT_READ_TIMEOUT, async {
+    let _ = timeout(DEFAULT_READ_TIMEOUT, async {
         loop {
             let completed: ItemCompletedNotification =
                 mcp.read_notification("item/completed").await?;
-            if let ThreadItemPayload::CollabAgentToolCall { id, .. } = &completed.item.payload
+            if let ThreadItemPayload::SubAgentActivity {
+                id,
+                kind: SubAgentActivityKind::Started,
+                agent_thread_id,
+                model,
+                reasoning_effort,
+                ..
+            } = completed.item.payload
                 && id == SPAWN_CALL_ID
             {
-                return Ok::<ThreadItemPayload, anyhow::Error>(completed.item.payload);
+                assert_eq!(model.as_deref(), Some(ROLE_MODEL));
+                assert_eq!(reasoning_effort, Some(ROLE_REASONING_EFFORT));
+                return Ok::<String, anyhow::Error>(agent_thread_id);
             }
         }
     })
     .await??;
-    let ThreadItemPayload::CollabAgentToolCall {
-        id,
-        tool,
-        status,
-        sender_thread_id,
-        receiver_thread_ids,
-        prompt,
-        model,
-        reasoning_effort,
-        agents_states,
-    } = spawn_completed
-    else {
-        unreachable!("loop ensures we break on collab agent tool call items");
-    };
-    let receiver_thread_id = receiver_thread_ids
-        .first()
-        .cloned()
-        .expect("spawn completion should include child thread id");
-    assert_eq!(id, SPAWN_CALL_ID);
-    assert_eq!(tool, CollabAgentTool::SpawnAgent);
-    assert_eq!(status, CollabAgentToolCallStatus::Completed);
-    assert_eq!(sender_thread_id, thread.id);
-    assert_eq!(receiver_thread_ids, vec![receiver_thread_id.clone()]);
-    assert_eq!(prompt, Some(CHILD_PROMPT.to_string()));
-    assert_eq!(model, Some(ROLE_MODEL.to_string()));
-    assert_eq!(reasoning_effort, Some(ROLE_REASONING_EFFORT));
-    let agent_state = agents_states
-        .get(&receiver_thread_id)
-        .expect("spawn completion should include child agent state");
-    assert!(
-        matches!(
-            agent_state.status,
-            CollabAgentStatus::PendingInit | CollabAgentStatus::Running
-        ),
-        "child agent should still be initializing or already running, got {:?}",
-        agent_state.status
-    );
-    assert_eq!(agent_state.message, None);
 
     let turn_completed = timeout(DEFAULT_READ_TIMEOUT, async {
         loop {

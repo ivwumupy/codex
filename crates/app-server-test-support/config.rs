@@ -1,5 +1,5 @@
-use codex_features::FEATURES;
 use codex_features::Feature;
+use codex_features::feature_enabled_key;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -10,7 +10,7 @@ pub struct MockResponsesConfig {
     provider_base_url: String,
     model: String,
     approval_policy: String,
-    sandbox_mode: String,
+    sandbox_mode: Option<String>,
     features: BTreeMap<Feature, bool>,
     root_config: Vec<String>,
     provider_config: Vec<String>,
@@ -25,7 +25,7 @@ impl MockResponsesConfig {
             provider_base_url: format!("{server_uri}/v1"),
             model: "mock-model".to_string(),
             approval_policy: "never".to_string(),
-            sandbox_mode: "read-only".to_string(),
+            sandbox_mode: None,
             features: BTreeMap::new(),
             root_config: Vec::new(),
             provider_config: Vec::new(),
@@ -59,7 +59,7 @@ impl MockResponsesConfig {
     }
 
     pub fn with_sandbox_mode(mut self, sandbox_mode: &str) -> Self {
-        self.sandbox_mode = sandbox_mode.to_string();
+        self.sandbox_mode = Some(sandbox_mode.to_string());
         self
     }
 
@@ -111,25 +111,19 @@ impl MockResponsesConfig {
             extra_config,
         } = self;
         let root_config = root_config.join("\n");
+        let sandbox_config = sandbox_mode
+            .map(|mode| format!("sandbox_mode = \"{mode}\""))
+            .unwrap_or_default();
         let provider_config = provider_config.join("\n");
         let extra_config = extra_config.join("\n");
-        let feature_entries = features
+        let feature_config = features
             .into_iter()
             .map(|(feature, enabled)| {
-                let key = FEATURES
-                    .iter()
-                    .find(|spec| spec.id == feature)
-                    .map(|spec| spec.key)
-                    .expect("feature should have a config key");
+                let key = feature_enabled_key(feature.key());
                 format!("{key} = {enabled}")
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let feature_config = if feature_entries.is_empty() {
-            String::new()
-        } else {
-            format!("[features]\n{feature_entries}\n\n")
-        };
 
         std::fs::write(
             codex_home.join("config.toml"),
@@ -137,11 +131,13 @@ impl MockResponsesConfig {
                 r#"
 model = "{model}"
 approval_policy = "{approval_policy}"
-sandbox_mode = "{sandbox_mode}"
+{sandbox_config}
 {root_config}
 model_provider = "{provider_id}"
 
-{feature_config}[model_providers.{provider_id}]
+{feature_config}
+
+[model_providers.{provider_id}]
 name = "{provider_name}"
 base_url = "{provider_base_url}"
 wire_api = "responses"

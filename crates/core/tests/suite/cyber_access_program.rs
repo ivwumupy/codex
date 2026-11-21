@@ -408,19 +408,13 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
             responses::ev_completed(id),
         ])
     };
-    for (namespace, fork_turns) in [
-        ("collaboration", "none"),
-        ("collaboration", "all"),
-        ("multi_agent_v1", "none"),
-    ] {
-        let is_v2 = namespace == "collaboration";
-        let spawn_arguments = if is_v2 {
-            json!({"message": "inspect the repository", "task_name": "worker", "fork_turns": fork_turns})
-        } else {
-            json!({"message": "inspect the repository"})
-        };
+    for fork_turns in ["none", "all"] {
+        let spawn_arguments = json!({
+            "message": "inspect the repository",
+            "task_name": "worker",
+            "fork_turns": fork_turns
+        });
         let server = responses::start_mock_server().await;
-        // V1 completion notifications can require another parent response.
         Mock::given(method("POST"))
             .and(path("/v1/responses"))
             .and(|request: &wiremock::Request| !request.headers.contains_key("x-openai-subagent"))
@@ -433,7 +427,7 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
             responses::sse(vec![
                 responses::ev_function_call_with_namespace(
                     "spawn-worker",
-                    namespace,
+                    "collaboration",
                     "spawn_agent",
                     &spawn_arguments.to_string(),
                 ),
@@ -449,18 +443,12 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
         .await;
         let test = test_codex()
             .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
-            .with_model(if is_v2 { "gpt-5.6-sol" } else { "gpt-5.1" })
+            .with_model("gpt-5.6-sol")
             .with_config(move |config| {
                 config
                     .features
                     .enable(Feature::MultiAgentV2)
                     .expect("enable multi-agent tools");
-                if is_v2 {
-                    config
-                        .features
-                        .enable(Feature::MultiAgentV2)
-                        .expect("enable v2 tools");
-                }
             })
             .build_with_auto_env(&server)
             .await?;
@@ -483,7 +471,7 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
         assert_eq!(
             child_programs(&initial_child_request),
             vec![json!({"cyber": "daybreak_red"})],
-            "namespace={namespace}, fork_turns={fork_turns}"
+            "fork_turns={fork_turns}"
         );
 
         for (program, expected, reload) in [
@@ -509,32 +497,20 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
                 child.shutdown_and_wait().await?;
                 test.thread_manager.remove_thread(&child_id).await;
             }
-            let mut reply_sequence = Vec::new();
-            if reload && !is_v2 {
-                reply_sequence.push(responses::sse(vec![
-                    responses::ev_function_call_with_namespace(
-                        "resume-worker",
-                        namespace,
-                        "resume_agent",
-                        &json!({"id": child_id}).to_string(),
-                    ),
-                    responses::ev_completed("resp-resume"),
-                ]));
-            }
-            reply_sequence.push(responses::sse(vec![
+            let reply = responses::sse(vec![
                 responses::ev_function_call_with_namespace(
                     "followup-worker",
-                    namespace,
-                    if is_v2 { "followup_task" } else { "send_input" },
+                    "collaboration",
+                    "followup_task",
                     &json!({
-                        "target": if is_v2 { "worker".to_string() } else { child_id.to_string() },
+                        "target": "worker",
                         "message": "inspect the tests too",
                     })
                     .to_string(),
                 ),
                 responses::ev_completed("resp-followup"),
-            ]));
-            responses::mount_sse_sequence(&server, reply_sequence).await;
+            ]);
+            responses::mount_sse_once(&server, reply).await;
             let followup_child_request = responses::mount_sse_once_match(
                 &server,
                 header("x-openai-subagent", "collab_spawn"),
@@ -547,7 +523,7 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
             assert_eq!(
                 child_programs(&followup_child_request),
                 vec![expected],
-                "namespace={namespace}, fork_turns={fork_turns}, reload={reload}"
+                "fork_turns={fork_turns}, reload={reload}"
             );
         }
     }
@@ -686,10 +662,7 @@ async fn saved_daybreak_rejection_records_child_input(
             model.use_responses_lite = false;
         })
         .with_config(|config| {
-            for feature in [
-                Feature::MultiAgentV2,
-                Feature::DaybreakProgramPropagation,
-            ] {
+            for feature in [Feature::MultiAgentV2, Feature::DaybreakProgramPropagation] {
                 config
                     .features
                     .enable(feature)
@@ -956,19 +929,16 @@ async fn saved_daybreak_uses_existing_websocket_requests() -> Result<()> {
     Ok(())
 }
 
-#[test_case("multi_agent_v1", true, true, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "v1 blue to red")]
-#[test_case("multi_agent_v1", true, true, Some(true), CyberAccessProgram::DaybreakRed, CyberAccessProgram::DaybreakBlue; "v1 red to blue")]
-#[test_case("collaboration", true, true, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "v2 blue to red")]
-#[test_case("collaboration", true, true, Some(true), CyberAccessProgram::DaybreakRed, CyberAccessProgram::DaybreakBlue; "v2 red to blue")]
-#[test_case("collaboration", true, true, Some(false), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "turn override wins over saved off")]
-#[test_case("collaboration", true, true, Some(true), CyberAccessProgram::Standard, CyberAccessProgram::DaybreakRed; "standard override wins over saved on")]
-#[test_case("collaboration", true, true, Some(false), CyberAccessProgram::Standard, CyberAccessProgram::DaybreakRed; "standard with saved off")]
-#[test_case("collaboration", false, true, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "rollout disabled")]
-#[test_case("collaboration", true, true, None, CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "choice unset")]
-#[test_case("collaboration", true, false, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "provider opt out")]
+#[test_case(true, true, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "v2 blue to red")]
+#[test_case(true, true, Some(true), CyberAccessProgram::DaybreakRed, CyberAccessProgram::DaybreakBlue; "v2 red to blue")]
+#[test_case(true, true, Some(false), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "turn override wins over saved off")]
+#[test_case(true, true, Some(true), CyberAccessProgram::Standard, CyberAccessProgram::DaybreakRed; "standard override wins over saved on")]
+#[test_case(true, true, Some(false), CyberAccessProgram::Standard, CyberAccessProgram::DaybreakRed; "standard with saved off")]
+#[test_case(false, true, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "rollout disabled")]
+#[test_case(true, true, None, CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "choice unset")]
+#[test_case(true, false, Some(true), CyberAccessProgram::DaybreakBlue, CyberAccessProgram::DaybreakRed; "provider opt out")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
-    namespace: &'static str,
     propagation_enabled: bool,
     provider_programs: bool,
     saved_choice: Option<bool>,
@@ -983,12 +953,12 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
         CyberAccessProgram::Standard => CyberAccessProgram::DaybreakBlue,
         program => program,
     };
-    let is_v2 = namespace == "collaboration";
-    let mut spawn = json!({"message": "inspect the repository", "model": child_model});
-    if is_v2 {
-        spawn["task_name"] = json!("worker");
-        spawn["fork_turns"] = json!("none");
-    }
+    let spawn = json!({
+        "message": "inspect the repository",
+        "model": child_model,
+        "task_name": "worker",
+        "fork_turns": "none"
+    });
     let summary = json!({"type": "response.output_item.done", "item": {
         "type": "compaction", "encrypted_content": "CHILD_SUMMARY"
     }});
@@ -1036,11 +1006,6 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
         ],
     )
     .await;
-    let version = if is_v2 {
-        MultiAgentVersion::V2
-    } else {
-        MultiAgentVersion::V1
-    };
     let test = test_codex()
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model_info_override(parent_model, move |model| {
@@ -1048,7 +1013,7 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
                 cyber: vec![parent_daybreak, CyberAccessProgram::Standard],
             });
             model.comp_hash = Some("parent-window".to_owned());
-            model.multi_agent_version = Some(version);
+            model.multi_agent_version = Some(MultiAgentVersion::V2);
             model.use_responses_lite = false;
         })
         .with_model_info_override(child_model, move |model| {
@@ -1063,7 +1028,7 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
                 },
             });
             model.comp_hash = Some("child-window".to_owned());
-            model.multi_agent_version = Some(version);
+            model.multi_agent_version = Some(MultiAgentVersion::V2);
             model.use_responses_lite = false;
         })
         .with_model(parent_model)
@@ -1072,10 +1037,6 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
                 .features
                 .enable(Feature::MultiAgentV2)
                 .expect("enable spawn");
-            config
-                .features
-                .set_enabled(Feature::MultiAgentV2, is_v2)
-                .expect("set spawn version");
             config
                 .features
                 .set_enabled(Feature::DaybreakProgramPropagation, propagation_enabled)
@@ -1102,7 +1063,7 @@ async fn saved_daybreak_follows_the_child_model_and_automatic_compaction(
         .respond_with(responses::sse_response(responses::sse(vec![
             responses::ev_function_call_with_namespace(
                 "spawn-worker",
-                namespace,
+                "collaboration",
                 "spawn_agent",
                 &spawn.to_string(),
             ),
