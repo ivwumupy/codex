@@ -779,10 +779,6 @@
           "format": "uint64",
           "minimum": 0.0,
           "type": "integer"
-        },
-        "sleep_tool": {
-          "description": "Expose the input-interruptible `clock.sleep` tool.",
-          "type": "boolean"
         }
       },
       "type": "object"
@@ -3521,14 +3517,14 @@
       "description": "How the sleep tool is selected when its feature gate is enabled.",
       "oneOf": [
         {
-          "description": "Preserve the existing model and legacy clock configuration defaults.",
+          "description": "Register sleep when the model advertises the clock tool.",
           "enum": [
             "model_driven"
           ],
           "type": "string"
         },
         {
-          "description": "Register sleep regardless of the model or legacy clock configuration.",
+          "description": "Register sleep regardless of model support.",
           "enum": [
             "always_on"
           ],

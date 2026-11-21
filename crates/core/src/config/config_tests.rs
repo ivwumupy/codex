@@ -970,13 +970,11 @@ enabled = true
 reminder_interval_seconds = 0
 clock_source = "external"
 delivery_mode = "after_user_or_tool_output"
-sleep_tool.enabled = true
 "#,
             CurrentTimeReminderConfig {
                 reminder_interval_seconds: 0,
                 clock_source: CurrentTimeSource::External,
                 delivery_mode: CurrentTimeReminderDeliveryMode::AfterUserOrToolOutput,
-                sleep_tool: true,
             },
         ),
     ] {
@@ -12210,7 +12208,9 @@ wait_agent_enabled = false
 
 [features.current_time_reminder]
 enabled = true
-sleep_tool.enabled = false
+
+[features.sleep_tool]
+enabled = false
 "#,
         r#"
 [features.multi_agent_v2]
@@ -12219,7 +12219,9 @@ wait_agent_enabled = false
 
 [features.current_time_reminder]
 enabled = false
-sleep_tool.enabled = true
+
+[features.sleep_tool]
+enabled = true
 "#,
     ] {
         let codex_home = tempdir()?;

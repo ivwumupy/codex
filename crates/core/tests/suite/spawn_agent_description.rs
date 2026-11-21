@@ -796,7 +796,8 @@ async fn multi_agent_v2_wait_agent_tool_follows_configuration(
         r#"
 [features.current_time_reminder]
 enabled = true
-sleep_tool.enabled = true
+[features.sleep_tool]
+mode = "always_on"
 "#
     } else {
         ""

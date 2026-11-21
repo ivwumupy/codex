@@ -516,17 +516,15 @@ async fn client_feature_map_can_disable_sleep_tool(
     Ok(())
 }
 
-#[test_case("[features]\nsleep_tool.enabled = true", Some(true), [true, true]; "boolean_enabled")]
-#[test_case("[features]\nsleep_tool.enabled = false", Some(true), [true, false]; "boolean_disabled")]
-#[test_case("[features.sleep_tool]\nmode = 'always_on'", None, [false, true]; "always_on_without_model_clock")]
-#[test_case("[features.sleep_tool]\nenabled = false\nmode = 'always_on'", Some(true), [true, false]; "disabled_overrides_always_on")]
-#[test_case("[features.sleep_tool]\nmode = 'model_driven'", None, [false, false]; "model_driven_without_model_clock")]
-#[test_case("[features.sleep_tool]\nmode = 'model_driven'", Some(false), [true, false]; "model_driven_preserves_legacy_disable")]
-#[test_case("[features.sleep_tool]\nmode = 'always_on'", Some(false), [true, true]; "always_on_overrides_legacy_disable")]
+#[test_case("[features.sleep_tool]\nenabled = true\nmode = 'always_on'", true, [true, true]; "both_enabled")]
+#[test_case("[features.sleep_tool]\nenabled = false\nmode = 'always_on'", true, [true, false]; "sleep_disabled")]
+#[test_case("[features.sleep_tool]\nmode = 'always_on'", false, [false, true]; "sleep_without_reminders")]
+#[test_case("[features.sleep_tool]\nmode = 'model_driven'", false, [false, false]; "model_without_clock")]
+#[test_case("[features.sleep_tool]\nmode = 'model_driven'", true, [true, false]; "reminders_without_model_clock")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn sleep_tool_configuration_controls_registration(
     sleep_config: &str,
-    legacy_sleep_tool: Option<bool>,
+    reminders_enabled: bool,
     expected_tools: [bool; 2],
 ) -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -538,10 +536,8 @@ async fn sleep_tool_configuration_controls_registration(
     )
     .await;
     let mut config_toml = sleep_config.to_string();
-    if let Some(sleep_tool) = legacy_sleep_tool {
-        config_toml.push_str(&format!(
-            "\n[features.current_time_reminder]\nenabled = true\nsleep_tool = {sleep_tool}\n"
-        ));
+    if reminders_enabled {
+        config_toml.push_str("\n[features.current_time_reminder]\nenabled = true\n");
     }
     let test = test_codex()
         .with_model_info_override("gpt-5.5", |model_info| {
@@ -569,7 +565,7 @@ async fn sleep_tool_configuration_controls_registration(
     );
     assert_eq!(
         current_time_reminders(&request).is_empty(),
-        legacy_sleep_tool.is_none()
+        !reminders_enabled
     );
     Ok(())
 }
@@ -919,11 +915,7 @@ async fn sleep_tool_uses_configured_time_provider() -> Result<()> {
                 /*interval*/ 3_000,
                 CurrentTimeSource::External,
             );
-            config
-                .current_time_reminder
-                .as_mut()
-                .expect("current-time reminder config should be present")
-                .sleep_tool = true;
+            config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
         })
         .with_external_time_provider(time_provider.clone())
         .build(&server)

@@ -1308,8 +1308,6 @@ pub struct CurrentTimeReminderConfig {
     pub reminder_interval_seconds: u64,
     pub clock_source: CurrentTimeSource,
     pub delivery_mode: CurrentTimeReminderDeliveryMode,
-    /// Whether to expose the input-interruptible `clock.sleep` tool.
-    pub sleep_tool: bool,
 }
 
 impl Default for CurrentTimeReminderConfig {
@@ -1318,7 +1316,6 @@ impl Default for CurrentTimeReminderConfig {
             reminder_interval_seconds: 1,
             clock_source: CurrentTimeSource::System,
             delivery_mode: CurrentTimeReminderDeliveryMode::AnyInference,
-            sleep_tool: false,
         }
     }
 }
@@ -2902,9 +2899,6 @@ fn resolve_current_time_reminder_config(
         delivery_mode: base
             .and_then(|config| config.delivery_mode)
             .unwrap_or(default.delivery_mode),
-        sleep_tool: base
-            .and_then(|config| config.sleep_tool)
-            .unwrap_or(default.sleep_tool),
     }))
 }
 

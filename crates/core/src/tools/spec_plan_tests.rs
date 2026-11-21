@@ -32,7 +32,6 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 
 use crate::WaitForEnvironmentToolConfig;
-use crate::config::CurrentTimeReminderConfig;
 use crate::environment_selection::EnvironmentAttachment;
 use crate::environment_selection::TurnEnvironmentState;
 use crate::responses_metadata::TurnToolFunctionInfo;
@@ -1153,9 +1152,10 @@ async fn environment_tools_follow_the_step_context() {
 }
 
 #[tokio::test]
-async fn sleep_tool_follows_current_time_config() {
+async fn sleep_tool_follows_its_own_configuration() {
     let disabled = probe(|turn| {
         set_feature(turn, Feature::CurrentTimeReminder, /*enabled*/ true);
+        set_feature(turn, Feature::SleepTool, /*enabled*/ false);
     })
     .await;
     assert_eq!(disabled.namespace_function_names("clock"), ["curr_time"]);
@@ -1163,10 +1163,7 @@ async fn sleep_tool_follows_current_time_config() {
     let enabled = probe(|turn| {
         set_feature(turn, Feature::CurrentTimeReminder, /*enabled*/ true);
         let mut config = (*turn.config).clone();
-        config.current_time_reminder = Some(CurrentTimeReminderConfig {
-            sleep_tool: true,
-            ..CurrentTimeReminderConfig::default()
-        });
+        config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
         turn.config = Arc::new(config);
     })
     .await;
@@ -1192,10 +1189,7 @@ async fn sleep_tool_stays_direct_and_outside_code_mode() {
                 set_feature(turn, Feature::CodeModeOnly, /*enabled*/ true);
             }
             update_config(turn, |config| {
-                config.current_time_reminder = Some(CurrentTimeReminderConfig {
-                    sleep_tool: true,
-                    ..CurrentTimeReminderConfig::default()
-                });
+                config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
                 config.multi_agent_v2.wait_agent_enabled = false;
             });
         })

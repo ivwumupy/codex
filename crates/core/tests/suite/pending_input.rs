@@ -1106,10 +1106,8 @@ async fn any_new_input_interrupts_sleep(input: WaitInput) {
                 .features
                 .enable(Feature::CurrentTimeReminder)
                 .expect("test config should allow current-time reminders");
-            config.current_time_reminder = Some(CurrentTimeReminderConfig {
-                sleep_tool: true,
-                ..CurrentTimeReminderConfig::default()
-            });
+            config.current_time_reminder = Some(CurrentTimeReminderConfig::default());
+            config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
         })
         .build_with_streaming_server(&server)
         .await

@@ -1412,17 +1412,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     if features.enabled(Feature::SleepTool)
         && match turn_context.config.sleep_tool_mode {
             SleepToolMode::AlwaysOn => true,
-            SleepToolMode::ModelDriven => {
-                if current_time_reminder_enabled {
-                    turn_context
-                        .config
-                        .current_time_reminder
-                        .as_ref()
-                        .is_some_and(|config| config.sleep_tool)
-                } else {
-                    model_has_clock
-                }
-            }
+            SleepToolMode::ModelDriven => model_has_clock,
         }
     {
         registry.add(SleepHandler);

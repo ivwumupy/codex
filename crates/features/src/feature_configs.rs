@@ -426,19 +426,16 @@ pub struct CurrentTimeReminderConfigToml {
     pub clock_source: Option<CurrentTimeSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_mode: Option<CurrentTimeReminderDeliveryMode>,
-    /// Expose the input-interruptible `clock.sleep` tool.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sleep_tool: Option<bool>,
 }
 
 /// How the sleep tool is selected when its feature gate is enabled.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SleepToolMode {
-    /// Preserve the existing model and legacy clock configuration defaults.
+    /// Register sleep when the model advertises the clock tool.
     #[default]
     ModelDriven,
-    /// Register sleep regardless of the model or legacy clock configuration.
+    /// Register sleep regardless of model support.
     AlwaysOn,
 }
 
