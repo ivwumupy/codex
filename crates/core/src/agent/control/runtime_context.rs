@@ -3,7 +3,6 @@
 
 use super::LocalAgentRuntime;
 use crate::agent::types::AgentMetadata;
-use crate::session_prefix::format_subagent_context_line;
 use crate::thread_manager::ThreadManagerState;
 use codex_protocol::ThreadId;
 use codex_protocol::error::AgentErrorContext;
@@ -36,27 +35,6 @@ impl LocalAgentRuntime {
         let mut thread_ids = vec![agent_id];
         thread_ids.extend(self.live_thread_spawn_descendants(agent_id).await?);
         Ok(thread_ids)
-    }
-
-    pub(crate) async fn format_legacy_environment_context_subagents(
-        &self,
-        parent_thread_id: ThreadId,
-    ) -> String {
-        let Ok(agents) = self.open_thread_spawn_children(parent_thread_id).await else {
-            return String::new();
-        };
-        agents
-            .into_iter()
-            .map(|(thread_id, metadata)| {
-                let reference = metadata
-                    .agent_path
-                    .as_ref()
-                    .map(|path| path.name().to_string())
-                    .unwrap_or_else(|| thread_id.to_string());
-                format_subagent_context_line(&reference, metadata.agent_nickname.as_deref())
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
     }
 
     pub(super) async fn open_thread_spawn_children(

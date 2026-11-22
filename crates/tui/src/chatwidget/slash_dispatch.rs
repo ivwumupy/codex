@@ -204,39 +204,6 @@ impl ChatWidget {
         }
 
         match cmd {
-            SlashCommand::Daybreak => {
-                if !self.config.features.enabled(Feature::CliDaybreak) {
-                    return;
-                }
-                if !self.daybreak_enabled {
-                    if !self.daybreak_account_eligible() {
-                        self.add_error_message("Daybreak requires the OpenAI provider with either ChatGPT sign-in or an API key with Daybreak support enabled.".into());
-                        return;
-                    }
-                    if !crate::daybreak::available(&self.model_catalog.models) {
-                        if crate::daybreak::availability(&self.model_catalog.models) == Some(false)
-                        {
-                            self.add_info_message(
-                                "Daybreak is not available for this account. Apply at https://openai.com/form/enterprise-trusted-access-for-cyber/. Learn more at https://help.openai.com/en/articles/20001326.".into(),
-                                /*hint*/ None,
-                            );
-                        } else {
-                            self.add_error_message("Daybreak availability could not be determined from the connected host's model catalog.".into());
-                        }
-                        return;
-                    }
-                }
-                let Some(thread_id) = self.thread_id else {
-                    self.add_error_message(
-                        "Daybreak is unavailable until the thread starts.".into(),
-                    );
-                    return;
-                };
-                self.app_event_tx.send(AppEvent::PersistDaybreakSelection {
-                    thread_id,
-                    enabled: !self.daybreak_enabled,
-                });
-            }
             SlashCommand::Feedback => {
                 self.app_event_tx.send(AppEvent::OpenFeedback);
             }
@@ -1220,7 +1187,6 @@ impl ChatWidget {
             token_activity_command_enabled: self.has_codex_backend_auth,
             goal_command_enabled: self.config.features.enabled(Feature::Goals),
             service_tier_commands_enabled: !self.current_model_service_tier_commands().is_empty(),
-            daybreak_command_description: self.daybreak_command_description(),
             worktrees_enabled: self.local_worktree_operations,
             allow_elevate_sandbox,
             side_conversation_active: self.active_side_conversation,
@@ -1249,7 +1215,6 @@ impl ChatWidget {
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Vim
-            | SlashCommand::Daybreak
             | SlashCommand::Diff
             | SlashCommand::App
             | SlashCommand::Rename

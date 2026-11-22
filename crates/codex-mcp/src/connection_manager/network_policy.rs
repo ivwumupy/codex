@@ -42,6 +42,8 @@ impl McpConnectionSet {
     ) -> impl Fn(&ServerCapabilities) -> anyhow::Result<Option<Value>> + Send + Sync {
         if let Some(Value::Object(meta)) = meta.as_mut() {
             meta.remove(MCP_NETWORK_POLICY_META_CAPABILITY);
+            // Older plugins may still interpret this key as host-supplied metadata.
+            meta.remove("openai/entitlementContext");
         }
         // A retry can negotiate policy support for the first time. Capture mutable grants
         // only once, when an attempt needs them, and keep that snapshot through recovery.

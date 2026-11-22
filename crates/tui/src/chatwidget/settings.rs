@@ -5,57 +5,6 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
-    pub(crate) fn set_daybreak_enabled(&mut self, enabled: bool) {
-        self.daybreak_enabled = enabled && self.daybreak_feature_enabled();
-        self.bottom_pane
-            .set_daybreak_command_description(self.daybreak_command_description());
-    }
-
-    fn daybreak_feature_enabled(&self) -> bool {
-        // Preserve a resumed preference while account state is still unknown. Once an API-key
-        // account is known, both flags must be enabled before using that preference.
-        self.config.features.enabled(Feature::CliDaybreak)
-            && (self.has_chatgpt_account
-                || !matches!(
-                    self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
-                )
-                || self
-                    .config
-                    .features
-                    .enabled(Feature::ApiKeyCyberAccessPrograms))
-    }
-
-    /// UI and turn-selection eligibility; the catalog and server still determine program access.
-    pub(crate) fn daybreak_account_eligible(&self) -> bool {
-        self.daybreak_feature_enabled()
-            && self
-                .config
-                .model_providers
-                .get(&self.config.model_provider_id)
-                .is_some_and(|provider| {
-                    provider.supports_cyber_access_programs(&self.config.model_provider_id)
-                })
-            && (self.has_chatgpt_account
-                || matches!(
-                    self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
-                ))
-    }
-
-    pub(super) fn daybreak_command_description(&self) -> Option<&'static str> {
-        if self.daybreak_enabled {
-            Some("Disable broader access for cybersecurity work")
-        } else if !self.daybreak_account_eligible() {
-            None
-        } else {
-            match crate::daybreak::availability(&self.model_catalog.models) {
-                Some(true) => Some("Enable broader access for cybersecurity work"),
-                Some(false) => Some("Learn about broader access for cybersecurity work"),
-                None => Some("Manage broader access for cybersecurity work"),
-            }
-        }
-    }
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self
@@ -128,13 +77,6 @@ impl ChatWidget {
             );
         }
         let enabled = self.config.features.enabled(feature);
-        if matches!(
-            feature,
-            Feature::CliDaybreak | Feature::ApiKeyCyberAccessPrograms
-        ) {
-            self.set_daybreak_enabled(self.daybreak_enabled);
-            self.refresh_status_surfaces();
-        }
         if matches!(feature, Feature::FastMode | Feature::UltrafastMode) {
             self.refresh_effective_service_tier();
             self.refresh_model_dependent_surfaces();
@@ -277,7 +219,6 @@ impl ChatWidget {
         if api_key_changed {
             self.refresh_account_scoped_models();
         }
-        self.set_daybreak_enabled(self.daybreak_enabled);
         self.has_codex_backend_auth = has_codex_backend_auth;
         self.bottom_pane
             .set_connectors_enabled(self.connectors_enabled());
@@ -296,7 +237,6 @@ impl ChatWidget {
     /// Set the model in the widget's config copy and stored collaboration mode.
     pub(crate) fn set_model(&mut self, model: &str) {
         if model != self.current_model() {
-            self.queue_unavailable_daybreak_disable(model);
             if self.current_model() == crate::model_catalog::LUNA_RESERVE_MODEL {
                 self.clear_reserve_return();
             } else {
@@ -316,26 +256,6 @@ impl ChatWidget {
         }
         self.refresh_effective_service_tier();
         self.refresh_model_dependent_surfaces();
-    }
-
-    pub(super) fn queue_unavailable_daybreak_disable(&self, model: &str) {
-        if let Some(thread_id) = self.thread_id
-            && self.should_disable_daybreak(model)
-        {
-            self.app_event_tx
-                .send(AppEvent::DisableUnavailableDaybreak {
-                    thread_id,
-                    model: model.to_owned(),
-                });
-        }
-    }
-
-    pub(crate) fn should_disable_daybreak(&self, model: &str) -> bool {
-        self.daybreak_enabled
-            && self.model_catalog.models.iter().any(|entry| {
-                entry.model == model
-                    && crate::daybreak::availability(std::slice::from_ref(entry)) == Some(false)
-            })
     }
 
     pub(crate) fn current_model(&self) -> &str {
@@ -514,7 +434,6 @@ impl ChatWidget {
         let cwd_changed = self.config.cwd != settings.cwd;
         self.apply_thread_settings_cwd(settings.cwd.clone());
         self.config.model_provider_id = settings.model_provider.clone();
-        self.set_daybreak_enabled(self.daybreak_enabled);
         self.set_service_tier(settings.service_tier.clone());
         if let Err(err) = self
             .config
@@ -554,9 +473,6 @@ impl ChatWidget {
             }
         }
 
-        if self.current_model() != settings.model {
-            self.queue_unavailable_daybreak_disable(&settings.model);
-        }
         settings.collaboration_mode.settings.model = settings.model;
         settings.collaboration_mode.settings.reasoning_effort = settings.effort;
         self.set_effective_collaboration_mode(settings.collaboration_mode);
@@ -745,9 +661,6 @@ impl ChatWidget {
         }
         self.active_collaboration_mask = Some(mask);
         self.update_collaboration_mode_indicator();
-        if previous_model != self.current_model() {
-            self.queue_unavailable_daybreak_disable(self.current_model());
-        }
         self.refresh_model_dependent_surfaces();
         let next_mode = self.active_mode_kind();
         let next_model = self.current_model();

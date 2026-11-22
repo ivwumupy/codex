@@ -54,7 +54,6 @@ pub(super) async fn continue_with_rewrite(
         let mut config = app.chat_widget.config_ref().clone();
         config.model = Some(app.chat_widget.current_model().to_string());
         config.model_reasoning_effort = app.chat_widget.current_reasoning_effort();
-        config.daybreak_enabled = app.chat_widget.daybreak_enabled;
         let selected_profile = app.selected_server_profile(thread_id);
         let started = app_server
             .fork_thread_at(

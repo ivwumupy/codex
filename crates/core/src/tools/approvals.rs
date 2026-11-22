@@ -61,7 +61,6 @@ pub(crate) struct ApprovalContext {
     pub(crate) cancellation_token: Option<CancellationToken>,
     pub(crate) call_id: String,
     pub(crate) tool_name: ToolName,
-    pub(crate) strict_auto_review: bool,
     pub(crate) approval_reason: Option<String>,
     pub(crate) retry_reason: Option<String>,
     pub(crate) network_approval_context: Option<NetworkApprovalContext>,
@@ -531,12 +530,10 @@ impl Session {
             }
             let config = self.get_config().await;
             let requirements = config.config_layer_stack.requirements();
-            if ctx.strict_auto_review
-                || ctx.review_context.turn().strict_auto_review_enabled()
-                || requirements
-                    .approvals_reviewer
-                    .can_set(&ApprovalsReviewer::User)
-                    .is_err()
+            if requirements
+                .approvals_reviewer
+                .can_set(&ApprovalsReviewer::User)
+                .is_err()
                 || requirements.auto_review_required_for_model(&ctx.review_context.model_info.slug)
             {
                 return Err(ToolError::Rejected("Managed command policy requires human approval, but this session requires automatic review.".to_string()));
@@ -577,7 +574,6 @@ impl Session {
         if matches!(action, ApprovalAction::WriteStdin { sandbox_permissions, additional_permissions_preapproved, .. }
             if sandbox_permissions.requests_sandbox_override()
                 && (!additional_permissions_preapproved || matches!(policy, AskForApproval::Never)))
-            && !(ctx.strict_auto_review && matches!(policy, AskForApproval::Never))
             && let Some(reason) =
                 prompt_is_rejected_by_policy(policy, /*prompt_is_rule*/ false)
         {
@@ -726,7 +722,7 @@ impl Session {
             retry: ctx.retry_reason.clone(),
         };
         let options = GuardianReviewOptions {
-            require_guardian: ctx.strict_auto_review,
+            require_guardian: false,
             plugin_attribution_override: None,
             approval_request_source: GuardianApprovalRequestSource::MainTurn,
             external_cancel: ctx.cancellation_token.clone(),

@@ -195,12 +195,6 @@
             "boolean",
             "null"
           ]
-        },
-        "cyberTrustedAccess": {
-          "type": [
-            "boolean",
-            "null"
-          ]
         }
       },
       "required": [
@@ -3230,34 +3224,6 @@
         "threadId",
         "turnId",
         "useCases"
-      ],
-      "type": "object"
-    },
-    "ModelVerification": {
-      "enum": [
-        "trustedAccessForCyber"
-      ],
-      "type": "string"
-    },
-    "ModelVerificationNotification": {
-      "properties": {
-        "threadId": {
-          "type": "string"
-        },
-        "turnId": {
-          "type": "string"
-        },
-        "verifications": {
-          "items": {
-            "$ref": "#/definitions/ModelVerification"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "threadId",
-        "turnId",
-        "verifications"
       ],
       "type": "object"
     },
@@ -8009,26 +7975,6 @@
         "params"
       ],
       "title": "Model/reroutedNotification",
-      "type": "object"
-    },
-    {
-      "properties": {
-        "method": {
-          "enum": [
-            "model/verification"
-          ],
-          "title": "Model/verificationNotificationMethod",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "#/definitions/ModelVerificationNotification"
-        }
-      },
-      "required": [
-        "method",
-        "params"
-      ],
-      "title": "Model/verificationNotification",
       "type": "object"
     },
     {

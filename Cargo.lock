@@ -2319,7 +2319,6 @@ dependencies = [
  "codex-config",
  "codex-core",
  "codex-exec-server",
- "codex-features",
  "codex-feedback",
  "codex-git-utils",
  "codex-history",

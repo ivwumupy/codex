@@ -30,9 +30,6 @@ mod update_thread_metadata;
 #[path = "compression_writer_tests.rs"]
 mod compression_writer_tests;
 #[cfg(test)]
-#[path = "daybreak_metadata_tests.rs"]
-mod daybreak_metadata_tests;
-#[cfg(test)]
 #[path = "pending_thread_metadata_tests.rs"]
 mod pending_thread_metadata_tests;
 #[cfg(test)]
@@ -1165,7 +1162,6 @@ mod tests {
                 comp_hash: None,
                 collaboration_mode: None,
                 multi_agent_version: None,
-                cyber_access_program: None,
                 effort: None,
                 summary: Some(ReasoningSummary::Auto),
             })

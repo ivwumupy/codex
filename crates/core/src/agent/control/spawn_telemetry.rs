@@ -5,7 +5,6 @@
 
 use crate::agent::types::SpawnAgentForkMode;
 use codex_otel::SessionTelemetry;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadHistoryMode;
 use std::time::Duration;
 
@@ -22,7 +21,6 @@ pub(super) struct SpawnMeasurements {
 pub(super) fn record_spawn_success(
     telemetry: &SessionTelemetry,
     fork_mode: Option<&SpawnAgentForkMode>,
-    multi_agent_version: MultiAgentVersion,
     measurements: SpawnMeasurements,
 ) {
     let fork_mode = match fork_mode {
@@ -33,19 +31,8 @@ pub(super) fn record_spawn_success(
         ThreadHistoryMode::Legacy => "legacy",
         ThreadHistoryMode::Paginated => "paginated",
     };
-    let multi_agent_version = match multi_agent_version {
-        MultiAgentVersion::Disabled => "disabled",
-        MultiAgentVersion::V1 => "v1",
-        MultiAgentVersion::V2 => "v2",
-    };
     let record_phase = |phase, duration| {
-        telemetry.record_multi_agent_spawn_phase(
-            phase,
-            duration,
-            fork_mode,
-            history_mode,
-            multi_agent_version,
-        );
+        telemetry.record_multi_agent_spawn_phase(phase, duration, fork_mode, history_mode, "v2");
     };
     if let Some(duration) = measurements.residency_reservation {
         record_phase("residency_reservation", duration);

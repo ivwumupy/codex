@@ -98,10 +98,6 @@ impl Session {
         if !matches!(scope, RuntimeConfigRefresh::UserFiles) {
             for (feature, description) in [
                 (Feature::Mcp20260728, "MCP protocol"),
-                (
-                    Feature::DaybreakProgramPropagation,
-                    "Daybreak helper propagation",
-                ),
                 (Feature::CodexAppsMcp20260728, "Codex Apps MCP protocol"),
             ] {
                 if let Err(err) = config

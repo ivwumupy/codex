@@ -578,7 +578,6 @@ async fn managed_shutdown_records_interrupted_turn(outcome: &str) -> Result<()> 
                 turn_id: turn["turn"]["id"].as_str().context("turn ID")?.to_string(),
                 output_schema: Some(schema.clone()),
                 service_tier: Some("default".into()),
-                cyber_access_program: None,
                 local_environment,
             },
         )]

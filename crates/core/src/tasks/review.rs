@@ -111,6 +111,7 @@ async fn start_review_conversation(
     {
         panic!("by construction Constrained<WebSearchMode> must always support Disabled: {err}");
     }
+    sub_agent_config.multi_agent_v2.disable_native_tools = true;
     let _ = sub_agent_config.features.disable(Feature::MultiAgentV2);
 
     // Set explicit review rubric for the sub-agent

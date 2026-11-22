@@ -589,10 +589,6 @@ async fn handle_approved_mcp_tool_call(
                             "x-codex-root-turn-id".into(),
                             serde_json::json!(turn_context.turn_metadata_state.root_turn_id()),
                         );
-                        meta.insert(
-                            "x-codex-cyber-access-program".into(),
-                            serde_json::json!(turn_context.cyber_access_program),
-                        );
                     }
                     let request_meta = if let Some(crate::model_search::ModelSearch::Hosted {
                         binding,
@@ -1560,10 +1556,7 @@ struct McpToolApproval {
 enum McpToolApprovalRequirement {
     NotRequired,
     Remembered,
-    Required {
-        action: Box<ApprovalAction>,
-        strict_auto_review: bool,
-    },
+    Required { action: Box<ApprovalAction> },
 }
 
 #[expect(clippy::too_many_arguments)]
@@ -1580,7 +1573,6 @@ async fn prepare_mcp_tool_approval(
     policy: McpToolApprovalPolicy,
 ) -> McpToolApprovalRequirement {
     let turn_context = &step_context.turn;
-    let strict_auto_review = turn_context.strict_auto_review_enabled();
     let approvals_reviewer = connectors::mcp_approvals_reviewer_from_layers(
         &config.config_layer_stack,
         step_context
@@ -1592,20 +1584,18 @@ async fn prepare_mcp_tool_approval(
         metadata.connector_id.as_deref(),
         metadata.link_id.as_deref(),
     );
-    if !strict_auto_review
-        && mcp_permission_prompt_is_auto_approved(
-            config.approval_policy.value(),
-            permission_source.profile(),
-            McpPermissionPromptAutoApproveContext {
-                tool_approval_mode: Some(policy.mode),
-            },
-        )
-    {
+    if mcp_permission_prompt_is_auto_approved(
+        config.approval_policy.value(),
+        permission_source.profile(),
+        McpPermissionPromptAutoApproveContext {
+            tool_approval_mode: Some(policy.mode),
+        },
+    ) {
         return McpToolApprovalRequirement::NotRequired;
     }
 
     let annotations = metadata.annotations.as_ref();
-    if !strict_auto_review && !requires_mcp_tool_approval_for_mode(annotations, policy.mode) {
+    if !requires_mcp_tool_approval_for_mode(annotations, policy.mode) {
         return McpToolApprovalRequirement::NotRequired;
     }
 
@@ -1616,8 +1606,7 @@ async fn prepare_mcp_tool_approval(
     } else {
         None
     };
-    if !strict_auto_review
-        && let Some(key) = session_approval_key.as_ref()
+    if let Some(key) = session_approval_key.as_ref()
         && mcp_tool_approval_is_remembered(sess, key).await
     {
         return McpToolApprovalRequirement::Remembered;
@@ -1655,7 +1644,6 @@ async fn prepare_mcp_tool_approval(
     };
     McpToolApprovalRequirement::Required {
         action: Box::new(action),
-        strict_auto_review,
     }
 }
 
@@ -1674,7 +1662,7 @@ async fn maybe_request_mcp_tool_approval(
     environment_id: &str,
     policy: McpToolApprovalPolicy,
 ) -> Option<McpToolApproval> {
-    let (action, strict_auto_review) = match prepare_mcp_tool_approval(
+    let action = match prepare_mcp_tool_approval(
         sess,
         step_context,
         call_id,
@@ -1696,10 +1684,7 @@ async fn maybe_request_mcp_tool_approval(
                 cancellation_reason: None,
             });
         }
-        McpToolApprovalRequirement::Required {
-            action,
-            strict_auto_review,
-        } => (*action, strict_auto_review),
+        McpToolApprovalRequirement::Required { action } => *action,
     };
     let approval_context = ApprovalContext {
         exec_requirement: None,
@@ -1707,7 +1692,6 @@ async fn maybe_request_mcp_tool_approval(
         cancellation_token: Some(cancellation_token.clone()),
         call_id: call_id.to_string(),
         tool_name: invocation_tool_name.clone(),
-        strict_auto_review,
         approval_reason: None,
         retry_reason: None,
         network_approval_context: None,

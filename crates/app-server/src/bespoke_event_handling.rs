@@ -41,7 +41,6 @@ use codex_app_server_protocol::McpServerStartupState;
 use codex_app_server_protocol::McpServerStatusUpdatedNotification;
 use codex_app_server_protocol::ModelReroutedNotification;
 use codex_app_server_protocol::ModelSafetyBufferingUpdatedNotification;
-use codex_app_server_protocol::ModelVerificationNotification;
 use codex_app_server_protocol::NetworkApprovalContext as V2NetworkApprovalContext;
 use codex_app_server_protocol::NetworkPolicyAmendment as V2NetworkPolicyAmendment;
 use codex_app_server_protocol::NetworkPolicyRuleAction as V2NetworkPolicyRuleAction;
@@ -395,16 +394,6 @@ pub(crate) async fn apply_bespoke_event_handling(
             };
             outgoing
                 .send_server_notification(ServerNotification::ModelRerouted(notification))
-                .await;
-        }
-        EventMsg::ModelVerification(event) => {
-            let notification = ModelVerificationNotification {
-                thread_id: conversation_id.to_string(),
-                turn_id: event_turn_id.clone(),
-                verifications: event.verifications.into_iter().map(Into::into).collect(),
-            };
-            outgoing
-                .send_server_notification(ServerNotification::ModelVerification(notification))
                 .await;
         }
         EventMsg::TurnModerationMetadata(event) => {

@@ -5725,7 +5725,7 @@ async fn select_uncached_agent_thread_still_refreshes_liveness() -> Result<()> {
 }
 
 #[tokio::test]
-async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
+async fn open_agent_picker_shows_visible_threads_when_legacy_flag_is_disabled() -> Result<()> {
     let (mut app, _app_event_rx, _op_rx) = Box::pin(make_test_app_with_channels()).await;
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
         app.chat_widget.config_ref(),
@@ -5749,17 +5749,12 @@ async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
     app.set_agent_picker_thread_visibility(archived_thread_id, AgentPickerThreadVisibility::Hidden);
 
     Box::pin(app.open_agent_picker(&mut app_server)).await;
-    assert_snapshot!(render_bottom_popup(&app.chat_widget, /*width*/ 80), @r###"
-          Enable subagents?
-    › As  Subagents are disabled in this TUI session.
-
-      gp
-        › 1. Yes, enable  Save on the server for new threads without changing
-                          this thread
-          2. Not now      Keep subagents disabled
-
-          enter select · esc back
-    "###);
+    assert_eq!(
+        app.chat_widget
+            .selected_index_for_present_view(agent_picker::AGENT_PICKER_VIEW_ID),
+        Some(0)
+    );
+    assert_eq!(app.agent_navigation.picker_row_ids, vec![primary_thread_id]);
     Ok(())
 }
 
@@ -7347,7 +7342,6 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
     let primary_cwd = test_path_buf("/tmp/main").abs();
     let shared_root = test_path_buf("/tmp/shared").abs();
     let primary_session = ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: WindowsSandboxHost::Local,
         approval_policy: AskForApproval::OnRequest,
         permission_profile: PermissionProfile::workspace_write(),
@@ -7389,7 +7383,6 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
                 section: None,
                 section_entered_at: None,
                 project_id: None,
-                daybreak_enabled: Some(true),
                 history_mode: Default::default(),
                 model_provider: "agent-provider".to_string(),
                 model: Some("gpt-agent".to_string()),
@@ -7425,7 +7418,6 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
     drop(store);
 
     assert_eq!(session.thread_id, agent_thread_id);
-    assert!(session.daybreak_enabled);
     assert_eq!(session.windows_sandbox_host, WindowsSandboxHost::Remote);
     assert_eq!(session.thread_name, Some("agent thread".to_string()));
     assert_eq!(session.model, "gpt-agent");
@@ -7496,7 +7488,6 @@ async fn inactive_thread_started_notification_preserves_primary_model_when_path_
                 section: None,
                 section_entered_at: None,
                 project_id: None,
-                daybreak_enabled: None,
                 history_mode: Default::default(),
                 model_provider: "agent-provider".to_string(),
                 model: None,
@@ -7568,7 +7559,6 @@ async fn thread_read_session_state_does_not_reuse_primary_permission_profile() {
         section: None,
         section_entered_at: None,
         project_id: None,
-        daybreak_enabled: None,
         history_mode: Default::default(),
         model_provider: "read-provider".to_string(),
         model: Some("server-reported-model".to_string()),
@@ -8033,7 +8023,6 @@ async fn side_thread_snapshot_hides_forked_parent_transcript() {
     let side_thread_id = ThreadId::new();
     let mut store = ThreadEventStore::new(/*capacity*/ 4);
     let session = ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         forked_from_id: Some(parent_thread_id),
         fork_parent_title: None,
@@ -8100,7 +8089,6 @@ async fn side_thread_snapshot_skips_session_header_preamble() {
 
     let snapshot = ThreadEventSnapshot {
         session: Some(ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             forked_from_id: Some(parent_thread_id),
             fork_parent_title: None,
@@ -8695,7 +8683,6 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
     };
     let make_header = |is_first| -> Arc<dyn HistoryCell> {
         let session = ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
             forked_from_id: None,
@@ -9387,7 +9374,6 @@ async fn replace_goal_confirmation_snapshot() {
 
 pub(super) fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -10700,7 +10686,6 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
 
     let make_header = |is_first| {
         let session = ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
             forked_from_id: None,
@@ -10772,7 +10757,6 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     let base_id = ThreadId::new();
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: base_id,
             forked_from_id: None,
@@ -12121,7 +12105,6 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
 
         let thread_id = ThreadId::new();
         let event = crate::session_state::ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,
@@ -12896,7 +12879,6 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     let thread_id = ThreadId::new();
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,

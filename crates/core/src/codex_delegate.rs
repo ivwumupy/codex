@@ -36,7 +36,6 @@ use codex_history::InitialHistory;
 use codex_login::AuthManager;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::error::CodexErr;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::turn_input::TurnInputMode;
 use codex_protocol::turn_input::TurnInputRequest;
 use codex_protocol::turn_input::TurnInputSubmission;
@@ -167,7 +166,6 @@ pub(crate) async fn run_codex_thread_interactive(
         thread_store: Arc::clone(&parent_session.services.thread_store),
         attestation_provider: parent_session.services.attestation_provider.clone(),
         external_time_provider: Some(Arc::clone(&parent_session.services.time_provider)),
-        inherited_multi_agent_version: Some(MultiAgentVersion::Disabled),
         git_enrichment_policy,
         windows_sandbox_proxy_settings_mode,
     })

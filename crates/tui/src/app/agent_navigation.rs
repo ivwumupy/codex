@@ -290,18 +290,6 @@ impl AgentNavigationState {
         self.picker_excluded_threads.remove(&thread_id);
     }
 
-    /// Returns whether there is at least one tracked thread other than the primary one.
-    ///
-    /// `App` uses this to decide whether the picker should be available even when the collaboration
-    /// feature flag is currently disabled, because already-existing sub-agent threads should remain
-    /// inspectable.
-    pub(crate) fn has_non_primary_thread(&self, primary_thread_id: Option<ThreadId>) -> bool {
-        self.threads.keys().any(|thread_id| {
-            Some(*thread_id) != primary_thread_id
-                && !self.picker_excluded_threads.contains(thread_id)
-        })
-    }
-
     /// Returns live picker rows in the same order users cycle through them.
     ///
     /// The `order` vector is intentionally historical and may briefly contain thread ids that no

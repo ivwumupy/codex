@@ -248,9 +248,6 @@ impl ChatWidget {
                 self.refresh_skills_for_current_cwd(/*force_reload*/ true);
             }
             ServerNotification::ModelRerouted(_) => {}
-            ServerNotification::ModelVerification(notification) => {
-                self.on_app_server_model_verification(&notification.verifications)
-            }
             ServerNotification::ModelSafetyBufferingUpdated(notification) => {
                 self.on_model_safety_buffering_updated(notification, replay_kind)
             }

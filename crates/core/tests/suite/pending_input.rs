@@ -37,7 +37,6 @@ use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
-use codex_protocol::turn_input::CyberAccessProgram;
 use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -562,7 +561,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
                 turn_trigger: trigger.map(str::to_owned),
                 parent_turn_id: parent.map(str::to_owned),
                 root_turn_id: parent.map(|_| "original-root".to_string()),
-                cyber_access_program: Some(CyberAccessProgram::Standard),
                 ..Default::default()
             }),
         )
@@ -613,18 +611,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
         vec![(trigger, parent, Some(root)); 2],
     );
     assert_ne!(metadata[0]["turn_id"], metadata[1]["turn_id"]);
-    // Live wake keeps the existing execution-setting behavior. Attribution after
-    // reload must use the automatic turn, not the earlier human context baseline.
-    if !reload {
-        assert_eq!(
-            captured
-                .iter()
-                .skip(1)
-                .map(|request| request.body_json()["access_programs"].clone())
-                .collect::<Vec<_>>(),
-            vec![json!({"cyber": "standard"}); 2],
-        );
-    }
     let history = test
         .codex
         .load_history(/*include_archived*/ true)
@@ -863,10 +849,7 @@ async fn plugin_wait_wakes_on_turn_input(
             matches!(event, EventMsg::DynamicToolCallRequest(request) if request.call_id == call_id)
         })
         .await;
-        assert_eq!(
-            thread.multi_agent_version(),
-            Some(MultiAgentVersion::Disabled)
-        );
+        assert_eq!(thread.multi_agent_version(), Some(MultiAgentVersion::V2));
         let response = if injected_input.is_some() {
             responses::sse(vec![
                 ev_response_created("after-injection"),

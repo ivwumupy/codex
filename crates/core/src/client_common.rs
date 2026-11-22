@@ -39,8 +39,6 @@ pub struct Prompt {
     pub output_schema_strict: bool,
 
     pub(crate) prompt_cache_ttl: Option<crate::PromptCacheTtl>,
-
-    pub(crate) cyber_access_program: Option<codex_protocol::turn_input::CyberAccessProgram>,
 }
 
 impl Default for Prompt {
@@ -53,7 +51,6 @@ impl Default for Prompt {
             output_schema: None,
             output_schema_strict: true,
             prompt_cache_ttl: None,
-            cyber_access_program: None,
         }
     }
 }

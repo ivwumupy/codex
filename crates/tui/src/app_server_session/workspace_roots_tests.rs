@@ -109,7 +109,6 @@ stream_max_retries = 0
                         /*service_tier*/ None,
                         /*collaboration_mode*/ None,
                         /*output_schema*/ None,
-                        /*cyber_access_program*/ None,
                         /*cloud_selection*/ None,
                     )
                     .await?;

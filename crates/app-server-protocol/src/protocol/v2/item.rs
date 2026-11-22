@@ -176,7 +176,6 @@ pub struct AgentMessageDisplay {
     /// Unknown actions must be left for the producing client to handle.
     pub action: String,
     pub block_type: Option<String>,
-    pub cyber_trusted_access: Option<bool>,
     pub check_trusted_contacts: Option<bool>,
 }
 
@@ -185,7 +184,6 @@ impl From<CoreAgentMessageDisplay> for AgentMessageDisplay {
         Self {
             action: value.action,
             block_type: value.block_type,
-            cyber_trusted_access: value.cyber_trusted_access,
             check_trusted_contacts: value.check_trusted_contacts,
         }
     }

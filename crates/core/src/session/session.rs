@@ -96,7 +96,6 @@ pub(crate) struct Session {
     pub(crate) tool_policy: Arc<codex_extension_api::ToolPolicy>,
     pub(crate) windows_sandbox_proxy_settings_mode:
         codex_sandboxing::WindowsSandboxProxySettingsMode,
-    pub(super) multi_agent_version: OnceLock<MultiAgentVersion>,
     /// Owns invalidation and serializes refreshes without blocking captured calls.
     pub(super) mcp_refresh: McpRefresh,
     /// Non-owning lookup for approval data retained by running MCP invocations.
@@ -923,7 +922,6 @@ impl Session {
         parent_rollout_thread_trace: ThreadTraceContext,
         attestation_provider: Option<Arc<dyn AttestationProvider>>,
         external_time_provider: Option<Arc<dyn TimeProvider>>,
-        multi_agent_version: Option<MultiAgentVersion>,
         git_enrichment_policy: GitEnrichmentPolicy,
         windows_sandbox_proxy_settings_mode: codex_sandboxing::WindowsSandboxProxySettingsMode,
     ) -> anyhow::Result<Arc<Self>> {
@@ -1004,9 +1002,6 @@ impl Session {
                 }
             }
         }
-        let multi_agent_version = multi_agent_version.map(OnceLock::from).unwrap_or_default();
-        let initial_multi_agent_version = multi_agent_version.get().copied();
-
         let thread_id = match (&initial_history, reserved_thread_id) {
             (
                 InitialHistory::New | InitialHistory::Cleared | InitialHistory::Forked(_),
@@ -1022,8 +1017,6 @@ impl Session {
                 ));
             }
         };
-        let required_cyber_access_programs =
-            thread_extension_init.get::<crate::cyber_access_program::RequiredCyberAccessPrograms>();
         let inherited_session_id = thread_extension_init
             .remove::<InheritedSessionId>()
             .map(|inherited| inherited.0);
@@ -1106,10 +1099,8 @@ impl Session {
             matches!(&agent_control, AgentControlInit::Provided { .. });
         let (agent_control, local_agent_runtime): (Arc<dyn AgentControl>, _) = match agent_control {
             AgentControlInit::Local(control) => {
-                let control = control.with_session_id(
-                    session_id,
-                    config.max_spawned_agent_threads(),
-                );
+                let control =
+                    control.with_session_id(session_id, config.max_spawned_agent_threads());
                 if parent_thread_id.is_none() {
                     control.propagate_config_update(AgentConfigUpdate::ServiceTier(
                         session_configuration
@@ -1162,23 +1153,6 @@ impl Session {
             thread_id.to_string(),
             thread_extension_init,
         );
-        if let Some(required) = &required_cyber_access_programs {
-            thread_extension_data.insert(
-                crate::cyber_access_program::RequiredCyberAccessProgramsSnapshot(Arc::clone(
-                    required,
-                )),
-            );
-        }
-        // Native children receive their enrollment at spawn. A cold resume or durable fork
-        // has no live attachment, even when the rollout is enabled at startup.
-        if matches!(
-            &initial_history,
-            InitialHistory::New | InitialHistory::Cleared
-        ) && !session_source.is_non_root_agent()
-            && config.features.enabled(Feature::DaybreakProgramPropagation)
-        {
-            thread_extension_data.insert(crate::agent::helper_daybreak::Enrollment::Root);
-        }
         thread_extension_data.insert(crate::context::GuardianReviewEvidence::default());
         crate::model_search::SearchOwner::restore(&thread_extension_data, &initial_history);
         // Kick off independent async setup tasks in parallel to reduce startup latency.
@@ -1220,7 +1194,7 @@ impl Session {
                             },
                             dynamic_tools: session_configuration.dynamic_tools.to_vec(),
                             selected_capability_roots: selected_capability_roots.clone(),
-                            multi_agent_version: initial_multi_agent_version,
+                            multi_agent_version: Some(MultiAgentVersion::V2),
                             history_mode: session_configuration.history_mode,
                             history_base: match &fork_persistence {
                                 ForkPersistence::Copied | ForkPersistence::CopiedDeferred => None,
@@ -1888,8 +1862,6 @@ impl Session {
                 .or(fork_cache_key),
                 tx_event.clone(),
                 codex_responses_headers,
-                crate::cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&config),
-                required_cyber_access_programs,
             );
             // Once tracing starts, startup cleanup must own the session before the next await.
             let rollout_thread_trace = if matches!(
@@ -2006,7 +1978,6 @@ impl Session {
                 isolation,
                 tool_policy,
                 windows_sandbox_proxy_settings_mode,
-                multi_agent_version,
                 mcp_refresh: McpRefresh::new(),
                 mcp_tool_approval_metadata: Default::default(),
                 mcp_elicitation_reviewer_handle: OnceLock::new(),

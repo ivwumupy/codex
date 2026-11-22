@@ -83,8 +83,6 @@ pub(crate) enum TerminalTitleItem {
     SessionId,
     /// Effective processing tier for the current model.
     FastMode,
-    /// Whether Daybreak is enabled for this thread.
-    Daybreak,
     /// Current model name.
     #[strum(to_string = "model", serialize = "model-name")]
     Model,
@@ -137,7 +135,6 @@ impl TerminalTitleItem {
                 "Current thread identifier (omitted until thread starts)"
             }
             TerminalTitleItem::FastMode => "Effective processing tier for the current model",
-            TerminalTitleItem::Daybreak => "Whether Daybreak is enabled for this thread",
             TerminalTitleItem::Model => "Current model name",
             TerminalTitleItem::ModelWithReasoning => "Current model name with reasoning level",
             TerminalTitleItem::Reasoning => "Current reasoning level",
@@ -173,7 +170,6 @@ impl TerminalTitleItem {
             }
             TerminalTitleItem::SessionId => Some(StatusSurfacePreviewItem::SessionId),
             TerminalTitleItem::FastMode => Some(StatusSurfacePreviewItem::FastMode),
-            TerminalTitleItem::Daybreak => Some(StatusSurfacePreviewItem::Daybreak),
             TerminalTitleItem::Model => Some(StatusSurfacePreviewItem::Model),
             TerminalTitleItem::ModelWithReasoning => {
                 Some(StatusSurfacePreviewItem::ModelWithReasoning)

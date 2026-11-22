@@ -188,8 +188,6 @@ pub struct ThreadMetadata {
     pub section_entered_at: Option<DateTime<Utc>>,
     /// Canonical project assignment owned by app-server, if any.
     pub project_id: Option<String>,
-    /// User-selected Daybreak preference, absent until explicitly set.
-    pub daybreak_enabled: Option<bool>,
     /// The git commit SHA, if known.
     pub git_sha: Option<String>,
     /// The git branch name, if known.
@@ -330,9 +328,6 @@ impl ThreadMetadata {
         if self.project_id != other.project_id {
             diffs.push("project_id");
         }
-        if self.daybreak_enabled != other.daybreak_enabled {
-            diffs.push("daybreak_enabled");
-        }
         if self.git_sha != other.git_sha {
             diffs.push("git_sha");
         }
@@ -386,7 +381,6 @@ pub(crate) struct ThreadRow {
     section_position: Option<i64>,
     section_entered_at_ms: Option<i64>,
     project_id: Option<String>,
-    daybreak_enabled: Option<bool>,
     git_sha: Option<String>,
     git_branch: Option<String>,
     git_origin_url: Option<String>,
@@ -429,7 +423,6 @@ impl ThreadRow {
             section_position: row.try_get("section_position")?,
             section_entered_at_ms: row.try_get("section_entered_at_ms")?,
             project_id: row.try_get("project_id")?,
-            daybreak_enabled: row.try_get("daybreak_enabled")?,
             git_sha: row.try_get("git_sha")?,
             git_branch: row.try_get("git_branch")?,
             git_origin_url: row.try_get("git_origin_url")?,
@@ -476,7 +469,6 @@ impl TryFrom<ThreadRow> for ThreadMetadata {
             section_position,
             section_entered_at_ms,
             project_id,
-            daybreak_enabled,
             git_sha,
             git_branch,
             git_origin_url,
@@ -540,7 +532,6 @@ impl TryFrom<ThreadRow> for ThreadMetadata {
                 .map(epoch_millis_to_datetime)
                 .transpose()?,
             project_id,
-            daybreak_enabled,
             git_sha,
             git_branch,
             git_origin_url: git_origin_url
@@ -648,7 +639,6 @@ mod tests {
             section_position: None,
             section_entered_at_ms: None,
             project_id: None,
-            daybreak_enabled: None,
             git_sha: None,
             git_branch: None,
             git_origin_url: None,
@@ -690,7 +680,6 @@ mod tests {
             section_position: None,
             section_entered_at: None,
             project_id: None,
-            daybreak_enabled: None,
             git_sha: None,
             git_branch: None,
             git_origin_url: None,

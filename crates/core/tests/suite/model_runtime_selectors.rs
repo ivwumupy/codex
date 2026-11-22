@@ -356,7 +356,7 @@ async fn unsupported_code_mode_warning_is_emitted_each_turn() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Result<()> {
+async fn root_agent_tools_use_v2_across_config_and_model_versions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let mut v2_model = remote_model("test-multi-agent-v2");
@@ -368,14 +368,10 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
             .expect("test config should allow feature update");
     })
     .await?;
+    assert!(tool_names(&disabled_body).contains(&MULTI_AGENT_V2_NAMESPACE.to_string()));
     assert!(tool_names(&disabled_body).iter().all(|name| !matches!(
         name.as_str(),
-        "multi_agent_v1"
-            | MULTI_AGENT_V2_NAMESPACE
-            | "spawn_agent"
-            | "send_message"
-            | "wait_agent"
-            | "list_agents"
+        "multi_agent_v1" | "spawn_agent" | "send_message" | "wait_agent" | "list_agents"
     )));
 
     let mut v1_model = remote_model("test-multi-agent-v1");
@@ -404,16 +400,14 @@ async fn multi_agent_config_precedence_overrides_remote_model_selector() -> Resu
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
+async fn project_agent_settings_preserve_v2_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let home = TempDir::new()?;
     let project = TempDir::new()?;
     let project_key = toml::Value::String(project_trust_key(project.path()));
     std::fs::write(
         home.path().join(CONFIG_TOML_FILE),
-        format!(
-            "[projects.{project_key}]\ntrust_level = 'trusted'"
-        ),
+        format!("[projects.{project_key}]\ntrust_level = 'trusted'"),
     )?;
     let project_dir = project.path().join(".codex");
     std::fs::create_dir(&project_dir)?;
@@ -426,22 +420,13 @@ async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
                 ..Default::default()
             })
     };
-    for (project_settings, model_version, expected_namespace) in [
-        ("", None, None),
-        (
-            "",
-            Some(MultiAgentVersion::V1),
-            None,
-        ),
-        (
-            "",
-            Some(MultiAgentVersion::V2),
-            Some(MULTI_AGENT_V2_NAMESPACE),
-        ),
+    for (project_settings, model_version) in [
+        ("", None),
+        ("", Some(MultiAgentVersion::V1)),
+        ("", Some(MultiAgentVersion::V2)),
         (
             "[features]\nmulti_agent_v2.enabled = false",
             Some(MultiAgentVersion::V2),
-            None,
         ),
     ] {
         std::fs::write(project_dir.join(CONFIG_TOML_FILE), project_settings)?;
@@ -467,7 +452,7 @@ async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
             .collect();
         assert_eq!(
             agent_tools,
-            expected_namespace.into_iter().collect::<Vec<_>>(),
+            [MULTI_AGENT_V2_NAMESPACE],
             "project config: {project_settings:?}, model: {model_version:?}"
         );
     }
@@ -475,7 +460,7 @@ async fn project_agent_settings_select_only_supported_versions() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> Result<()> {
+async fn multi_agent_version_is_v2_before_and_after_changing_models() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = wiremock::MockServer::start().await;
@@ -511,7 +496,7 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
             models_mock.requests().len(),
             test.codex.multi_agent_version(),
         ),
-        (1, None)
+        (1, Some(MultiAgentVersion::V2))
     );
 
     submit_thread_settings(
@@ -522,7 +507,10 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
         },
     )
     .await?;
-    assert_eq!(test.codex.multi_agent_version(), None);
+    assert_eq!(
+        test.codex.multi_agent_version(),
+        Some(MultiAgentVersion::V2)
+    );
 
     test.codex
         .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {

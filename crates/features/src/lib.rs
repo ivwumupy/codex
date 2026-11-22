@@ -46,7 +46,8 @@ pub use runtime_auth::RuntimeAuthMode;
 
 /// High-level lifecycle stage for a feature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stage {    /// Features that are still under development, not ready for external use
+pub enum Stage {
+    /// Features that are still under development, not ready for external use
     UnderDevelopment,
     /// Experimental features made available to users through the `/experimental` menu
     Experimental {
@@ -88,16 +89,11 @@ impl Stage {
 
 /// Unique features toggled via configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Feature {    /// Preview consumer five-hour and weekly allowance history.
+pub enum Feature {
+    /// Preview consumer five-hour and weekly allowance history.
     AnalyticsPlanHistory,
     /// Discover model catalogs for OpenAI API-key authentication.
     ApiKeyModelDiscovery,
-    /// Forward explicit programs with builtin OpenAI API keys.
-    ApiKeyCyberAccessPrograms,
-    /// Enable Daybreak controls and automatic access-program selection in CLI clients.
-    CliDaybreak,
-    /// Capture the saved Daybreak choice for a native helper and its turns.
-    DaybreakProgramPropagation,
     /// Restrict CLI resume of attributed local threads to their creator.
     CliResumeAccountCheck,
     // Stable.
@@ -447,8 +443,6 @@ impl Feature {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Features {
     enabled: BTreeSet<Feature>,
-    /// An explicit opt-out takes precedence over the model catalog's agent selection.
-    multi_agent_v2_disabled: bool,
 }
 
 impl Features {
@@ -460,10 +454,7 @@ impl Features {
                 set.insert(spec.id);
             }
         }
-        Self {
-            enabled: set,
-            ..Default::default()
-        }
+        Self { enabled: set }
     }
 
     pub fn enabled(&self, f: Feature) -> bool {
@@ -500,17 +491,11 @@ impl Features {
     }
 
     pub fn enable(&mut self, f: Feature) -> &mut Self {
-        if f == Feature::MultiAgentV2 {
-            self.multi_agent_v2_disabled = false;
-        }
         self.enabled.insert(f);
         self
     }
 
     pub fn disable(&mut self, f: Feature) -> &mut Self {
-        if f == Feature::MultiAgentV2 {
-            self.multi_agent_v2_disabled = true;
-        }
         self.enabled.remove(&f);
         self
     }
@@ -521,10 +506,6 @@ impl Features {
         } else {
             self.disable(f)
         }
-    }
-
-    pub fn multi_agent_v2_disabled(&self) -> bool {
-        self.multi_agent_v2_disabled
     }
 
     pub fn apply_map(&mut self, entries: &BTreeMap<String, bool>) {
@@ -955,24 +936,6 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "api_key_model_discovery",
         stage: Stage::Stable,
         default_enabled: true,
-    },
-    FeatureSpec {
-        id: Feature::CliDaybreak,
-        key: "cli_daybreak",
-        stage: Stage::Stable,
-        default_enabled: true,
-    },
-    FeatureSpec {
-        id: Feature::ApiKeyCyberAccessPrograms,
-        key: "api_key_cyber_access_programs",
-        stage: Stage::Stable,
-        default_enabled: true,
-    },
-    FeatureSpec {
-        id: Feature::DaybreakProgramPropagation,
-        key: "daybreak_program_propagation",
-        stage: Stage::UnderDevelopment,
-        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::EnableRequestCompression,

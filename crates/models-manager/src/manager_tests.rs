@@ -17,10 +17,8 @@ use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::error::CodexErr;
-use codex_protocol::openai_models::ModelAccessPrograms;
 use codex_protocol::openai_models::ModelOrigin;
 use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::turn_input::CyberAccessProgram;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -371,15 +369,11 @@ async fn file_cache_implements_models_cache_contract() {
         fetched_at: Utc::now(),
         etag: Some("file-etag".to_string()),
         client_version: Some(client_version.clone()),
-        models: vec![ModelInfo {
-            available_access_programs: Some(ModelAccessPrograms {
-                cyber: vec![
-                    CyberAccessProgram::Standard,
-                    CyberAccessProgram::DaybreakBlue,
-                ],
-            }),
-            ..remote_model("file-cached", "File Cached", /*priority*/ 0)
-        }],
+        models: vec![remote_model(
+            "file-cached",
+            "File Cached",
+            /*priority*/ 0,
+        )],
     };
 
     cache.store(&entry).await.expect("cache store succeeds");
@@ -1411,22 +1405,14 @@ async fn refresh_available_models_uses_cache_when_fresh() {
 }
 
 #[tokio::test]
-async fn online_refresh_updates_access_programs_with_unchanged_etag() {
+async fn online_refresh_updates_model_metadata_with_unchanged_etag() {
     let codex_home = tempdir().expect("temp dir");
-    let granted_model = ModelInfo {
-        available_access_programs: Some(ModelAccessPrograms {
-            cyber: vec![
-                CyberAccessProgram::Standard,
-                CyberAccessProgram::DaybreakBlue,
-            ],
-        }),
-        ..remote_model("access-programs", "Access Programs", /*priority*/ 0)
+    let initial_model = remote_model("sample", "Initial", /*priority*/ 0);
+    let updated_model = ModelInfo {
+        display_name: "Updated".into(),
+        ..initial_model.clone()
     };
-    let revoked_model = ModelInfo {
-        available_access_programs: Some(ModelAccessPrograms { cyber: Vec::new() }),
-        ..granted_model.clone()
-    };
-    let responses = vec![vec![granted_model.clone()], vec![revoked_model.clone()]];
+    let responses = vec![vec![initial_model.clone()], vec![updated_model.clone()]];
     let endpoint = Arc::new(TestModelsEndpoint {
         uses_codex_backend: true,
         responses: Mutex::new(responses.into_iter().map(Ok).collect()),
@@ -1435,8 +1421,7 @@ async fn online_refresh_updates_access_programs_with_unchanged_etag() {
     });
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
-    // Caller-specific access can change without changing the catalog ETag.
-    for model in [granted_model, revoked_model] {
+    for model in [initial_model, updated_model] {
         let mut expected = ModelPreset::from(model.clone());
         expected.is_default = true;
         assert_eq!(
@@ -1451,7 +1436,7 @@ async fn online_refresh_updates_access_programs_with_unchanged_etag() {
             Some("stable-catalog-etag")
         );
 
-        // A new manager must read the latest access metadata from the disk cache.
+        // A new manager must read the latest model metadata from the disk cache.
         let cache_endpoint = TestModelsEndpoint::new(Vec::new());
         let cache_manager =
             openai_manager_for_tests(codex_home.path().to_path_buf(), cache_endpoint.clone());

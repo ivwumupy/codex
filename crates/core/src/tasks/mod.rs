@@ -27,7 +27,6 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
-use crate::agent::helper_daybreak::turn::HelperTurnAdmission;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
@@ -53,7 +52,6 @@ use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
@@ -81,22 +79,15 @@ pub(crate) type SessionTaskResult = CodexResult<Option<regular::RegularTaskOutpu
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InterruptedTurnHistoryMarker {
     Disabled,
-    ContextualUser,
     Developer,
 }
 
 impl InterruptedTurnHistoryMarker {
-    pub(crate) fn from_config_and_version(
-        config: &Config,
-        multi_agent_version: MultiAgentVersion,
-    ) -> Self {
-        if !config.agent_interrupt_message_enabled {
-            return Self::Disabled;
-        }
-        if multi_agent_version == MultiAgentVersion::V2 {
+    pub(crate) fn from_config(config: &Config) -> Self {
+        if config.agent_interrupt_message_enabled {
             Self::Developer
         } else {
-            Self::ContextualUser
+            Self::Disabled
         }
     }
 }
@@ -108,9 +99,6 @@ pub(crate) fn interrupted_turn_history_marker(
 ) -> Option<ResponseItem> {
     match marker {
         InterruptedTurnHistoryMarker::Disabled => None,
-        InterruptedTurnHistoryMarker::ContextualUser => Some(ContextualUserFragment::into(
-            crate::context::TurnAborted::new(crate::context::TurnAborted::INTERRUPTED_GUIDANCE),
-        )),
         InterruptedTurnHistoryMarker::Developer => {
             let marker = crate::context::TurnAborted::new(
                 crate::context::TurnAborted::INTERRUPTED_DEVELOPER_GUIDANCE,
@@ -377,10 +365,9 @@ impl Session {
         let (agent_execution_guard, task_input, pending_initial_input) = match &host_admission {
             Some(_) => (None, Vec::new(), Some(input)),
             None => (
-                self.services.agent_control.admit_turn(
-                    turn_context.multi_agent_version,
-                    &turn_context.session_source,
-                ),
+                self.services
+                    .agent_control
+                    .admit_turn(&turn_context.session_source),
                 input,
                 None,
             ),
@@ -534,7 +521,6 @@ impl Session {
             return;
         };
 
-        let helper_admission = HelperTurnAdmission::capture(self);
         self.services
             .models_manager
             .refresh_after_auth_change(self.get_config().await.http_client_factory())
@@ -565,17 +551,11 @@ impl Session {
         if !triggered {
             // Queue-only wakes retain the previous turn context without selecting a new task.
             start_options = previous_options;
-            start_options.cyber_access_program = self
-                .reference_context_item()
-                .await
-                .and_then(|context| context.cyber_access_program);
         }
         let options = NewTurnContextOptions {
             direct_only_tool_namespaces: start_options.direct_only_tool_namespaces,
             final_output_json_schema: start_options.final_output_json_schema,
             prompt_cache_ttl: start_options.prompt_cache_ttl,
-            cyber_access_program: start_options.cyber_access_program,
-            helper_admission: triggered.then_some(helper_admission).flatten(),
         };
         let turn_context = match session_configuration {
             Some(configuration) => {
@@ -1107,10 +1087,7 @@ impl Session {
 
         if reason == TurnAbortReason::Interrupted
             && let Some(marker) = interrupted_turn_history_marker(
-                InterruptedTurnHistoryMarker::from_config_and_version(
-                    task.turn_context.config.as_ref(),
-                    task.turn_context.multi_agent_version,
-                ),
+                InterruptedTurnHistoryMarker::from_config(task.turn_context.config.as_ref()),
             )
         {
             self.record_conversation_items(

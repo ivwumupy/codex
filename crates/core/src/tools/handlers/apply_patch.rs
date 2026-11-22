@@ -25,7 +25,7 @@ use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
-use crate::tools::handlers::apply_granted_turn_permissions;
+use crate::tools::handlers::apply_granted_session_permissions;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_freeform_tool;
 use crate::tools::handlers::file_system_sandbox_policy_context_for_cwd;
 use crate::tools::handlers::resolve_tool_environment;
@@ -557,7 +557,7 @@ fn prepare_verified_patch(
         write_permissions_for_paths(&file_paths, &matching).map_err(|error| {
             FunctionCallError::RespondToModel(format!("failed to check patch permissions: {error}"))
         })?;
-    let effective_additional_permissions = apply_granted_turn_permissions(
+    let effective_additional_permissions = apply_granted_session_permissions(
         step_context,
         &turn_environment,
         &cwd,

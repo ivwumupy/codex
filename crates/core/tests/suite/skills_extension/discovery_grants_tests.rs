@@ -24,12 +24,12 @@ enum Discovery {
 #[test_case(Discovery::ExecutorV1, PermissionGrantScope::Turn; "executor v1 turn grant")]
 #[test_case(Discovery::ExecutorV2, PermissionGrantScope::Session; "executor v2 session grant")]
 #[test_case(Discovery::ExecutorV2, PermissionGrantScope::Turn; "executor v2 turn grant")]
-#[test_case(Discovery::DisabledExecutorV1Plugin, PermissionGrantScope::Turn; "turn grant respects plugin disablement")]
-#[test_case(Discovery::DisabledExecutorV1UnreadablePlugin, PermissionGrantScope::Turn; "turn grant cannot bypass unreadable disabled plugin manifest")]
-#[test_case(Discovery::DisabledExecutorV1UnreadablePluginDirectory, PermissionGrantScope::Turn; "turn grant cannot bypass unreadable disabled plugin directory")]
-#[test_case(Discovery::DisabledExecutorV1UnreadableAncestorPlugin, PermissionGrantScope::Turn; "turn grant cannot bypass unreadable disabled ancestor plugin manifest")]
-#[test_case(Discovery::DisabledExecutorV1UnreadableAncestorPluginDirectory, PermissionGrantScope::Turn; "turn grant cannot bypass unreadable disabled ancestor plugin directory")]
-#[test_case(Discovery::StandaloneExecutorV1WithDisabledId, PermissionGrantScope::Turn; "explicit plugin deny preserves a standalone root")]
+#[test_case(Discovery::DisabledExecutorV1Plugin, PermissionGrantScope::Session; "session grant respects plugin disablement")]
+#[test_case(Discovery::DisabledExecutorV1UnreadablePlugin, PermissionGrantScope::Session; "session grant cannot bypass unreadable disabled plugin manifest")]
+#[test_case(Discovery::DisabledExecutorV1UnreadablePluginDirectory, PermissionGrantScope::Session; "session grant cannot bypass unreadable disabled plugin directory")]
+#[test_case(Discovery::DisabledExecutorV1UnreadableAncestorPlugin, PermissionGrantScope::Session; "session grant cannot bypass unreadable disabled ancestor plugin manifest")]
+#[test_case(Discovery::DisabledExecutorV1UnreadableAncestorPluginDirectory, PermissionGrantScope::Session; "session grant cannot bypass unreadable disabled ancestor plugin directory")]
+#[test_case(Discovery::StandaloneExecutorV1WithDisabledId, PermissionGrantScope::Session; "explicit plugin deny preserves a standalone root")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn executor_discovery_uses_current_environment_grants(
     discovery: Discovery,
@@ -49,6 +49,8 @@ async fn executor_discovery_uses_current_environment_grants(
             | Discovery::DisabledExecutorV1UnreadableAncestorPlugin
             | Discovery::DisabledExecutorV1UnreadableAncestorPluginDirectory
     );
+    let publishes_mcp =
+        matches!(discovery, Discovery::ExecutorV1) && scope == PermissionGrantScope::Session;
     let plugin_mcp_server = "approved_plugin_mcp";
     let environment = if v2 {
         None
@@ -443,10 +445,7 @@ async fn executor_discovery_uses_current_environment_grants(
             panic!("expected the sibling permission request: {event:?}");
         };
         assert_eq!(request.call_id, "request-sibling");
-        assert_eq!(
-            plugin_is_published().await?,
-            scope == PermissionGrantScope::Session
-        );
+        assert_eq!(plugin_is_published().await?, publishes_mcp);
         thread
             .submit(Op::RequestPermissionsResponse {
                 id: request.call_id,
@@ -460,10 +459,7 @@ async fn executor_discovery_uses_current_environment_grants(
     }
     wait_for_event(&thread, |event| matches!(event, EventMsg::TurnComplete(_))).await;
     if !v2 {
-        assert_eq!(
-            plugin_is_published().await?,
-            scope == PermissionGrantScope::Session
-        );
+        assert_eq!(plugin_is_published().await?, publishes_mcp);
     }
     thread
         .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
@@ -486,13 +482,10 @@ async fn executor_discovery_uses_current_environment_grants(
                 .is_some_and(|text| text.contains("approved-skill"))
         })
         .collect::<Vec<_>>();
+    let visible_after_approval = plugin_enabled && scope == PermissionGrantScope::Session;
     assert_eq!(
         visible,
-        vec![
-            false,
-            plugin_enabled,
-            plugin_enabled && scope == PermissionGrantScope::Session
-        ]
+        vec![false, visible_after_approval, visible_after_approval]
     );
     let readable = [
         (1, "read-before-approval"),
@@ -509,11 +502,7 @@ async fn executor_discovery_uses_current_environment_grants(
     .collect::<Vec<_>>();
     assert_eq!(
         readable,
-        vec![
-            false,
-            plugin_enabled,
-            plugin_enabled && scope == PermissionGrantScope::Session
-        ]
+        vec![false, visible_after_approval, visible_after_approval]
     );
     Ok(())
 }

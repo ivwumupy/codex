@@ -1828,7 +1828,6 @@ fn fill_missing_thread_item_metadata_preserves_identity_and_prefers_state_git_fi
         first_user_message: Some("filesystem message".to_string()),
         preview: Some("filesystem preview".to_string()),
         project_id: None,
-        daybreak_enabled: None,
         section: None,
         cwd: None,
         git_branch: Some("filesystem-branch".to_string()),
@@ -1858,7 +1857,6 @@ fn fill_missing_thread_item_metadata_preserves_identity_and_prefers_state_git_fi
         first_user_message: Some("state message".to_string()),
         preview: Some("state preview".to_string()),
         project_id: None,
-        daybreak_enabled: Some(true),
         section: Some(codex_state::ThreadSection {
             id: codex_state::PINNED_THREAD_SECTION_ID.to_string(),
             name: codex_state::PINNED_THREAD_SECTION_NAME.to_string(),
@@ -1890,7 +1888,6 @@ fn fill_missing_thread_item_metadata_preserves_identity_and_prefers_state_git_fi
 
     assert_eq!(item.path, filesystem_path);
     assert_eq!(item.thread_id, Some(filesystem_thread_id));
-    assert_eq!(item.daybreak_enabled, Some(true));
     assert_eq!(
         item.section,
         Some(codex_state::ThreadSection {
@@ -2040,7 +2037,6 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
             comp_hash: None,
             collaboration_mode: None,
             multi_agent_version: None,
-            cyber_access_program: None,
             effort: None,
             summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
         }),

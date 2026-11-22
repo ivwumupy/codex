@@ -32,8 +32,7 @@ pub static CODEX_ALIASES_TEMP_DIR: Option<TestBinaryDispatchGuard> = {
 mod abort_lifecycle;
 #[cfg(not(target_os = "windows"))]
 mod abort_tasks;
-#[path = "actor_access_program_tests.rs"]
-mod actor_access_program;
+mod actor_auth_headers;
 mod additional_context;
 #[path = "agent_control_tests.rs"]
 mod agent_control;
@@ -70,9 +69,7 @@ mod compact_remote;
 mod compact_resume_fork;
 mod context_annotations;
 mod current_time_reminder;
-mod cyber_access_program;
 mod cyber_exec_policy;
-mod daybreak_access;
 mod direct_tool_metadata;
 mod dynamic_tool_cancellation;
 mod exec;
@@ -88,6 +85,7 @@ mod guardian_authorization_refresh;
 mod guardian_cached_score;
 #[path = "guardian_checkpoint_migration_tests.rs"]
 mod guardian_checkpoint_migration;
+mod recover_turn_start_options;
 // Uses the same command-approval harness as guardian_review below.
 mod builtin_model_catalog;
 mod critical_path_runtime;
@@ -95,8 +93,6 @@ mod gateway_auth;
 mod guardian_connector_trust;
 #[cfg(not(target_os = "windows"))]
 mod guardian_context_budget;
-#[path = "guardian_cyber_access_program_tests.rs"]
-mod guardian_cyber_access_program;
 mod guardian_history;
 mod guardian_mcp_elicitation;
 #[cfg(not(target_os = "windows"))]
@@ -180,8 +176,6 @@ mod request_permissions_tool;
 mod request_plugin_install;
 mod request_user_input;
 mod request_user_input_async;
-#[path = "required_access_program_tests.rs"]
-mod required_access_program;
 mod responses_api_proxy_headers;
 mod responses_lite;
 #[cfg(target_os = "linux")]

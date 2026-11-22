@@ -42,6 +42,7 @@ pub(super) async fn spawn_review_thread(
     // Preserve configured overrides without carrying over the parent model's defaults.
     per_turn_config.token_budget = config.token_budget.clone();
     per_turn_config.features = review_features.clone();
+    per_turn_config.multi_agent_v2.disable_native_tools = true;
     if let Some(current_effort) = reasoning_effort.as_ref()
         && review_model_info.slug != parent_turn_context.model_info().slug
         && review_model_info.origin != ModelOrigin::Synthetic
@@ -99,20 +100,11 @@ pub(super) async fn spawn_review_thread(
     per_turn_config.service_tier = step_settings.service_tier.clone();
     let per_turn_config = Arc::new(per_turn_config);
     let review_turn_id = sub_id.to_string();
-    #[allow(deprecated)]
     let windows_sandbox_selection = parent_turn_context
         .initial_environments
         .primary()
         .map(TurnEnvironment::windows_sandbox_selection_for_turn_metadata)
-        .unwrap_or_else(|| {
-            crate::tools::sandboxing::configured_windows_sandbox_selection(
-                parent_turn_context
-                    .config
-                    .effective_local_windows_sandbox_type(),
-                parent_turn_context.windows_sandbox_level,
-                &codex_utils_path_uri::PathUri::from_abs_path(&parent_turn_context.cwd),
-            )
-        });
+        .unwrap_or_default();
     let turn_metadata_state = Arc::new(TurnMetadataState::new(
         sess.session_id().to_string(),
         sess.thread_id().to_string(),

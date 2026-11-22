@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
-use codex_model_provider_info::ModelProviderCapabilities;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -194,12 +193,7 @@ fn model_provider_from_proto(
         requires_openai_auth: provider.requires_openai_auth,
         supports_websockets: provider.supports_websockets,
         supports_standalone_web_search: provider.supports_standalone_web_search,
-        capabilities: provider
-            .capabilities
-            .map(|capabilities| ModelProviderCapabilities {
-                cyber_access_programs: capabilities.cyber_access_programs,
-                ..Default::default()
-            }),
+        capabilities: None,
         include_internal_metadata: false,
     };
     Ok((id, info))
@@ -231,7 +225,7 @@ fn model_provider_to_proto(
         supports_websockets,
         supports_standalone_web_search,
         include_internal_metadata: _,
-        capabilities,
+        capabilities: _,
     } = provider;
 
     proto::ModelProvider {
@@ -243,9 +237,6 @@ fn model_provider_to_proto(
         env_key_instructions,
         experimental_bearer_token: experimental_bearer_token.map(RedactedString::into_inner),
         auth: auth.map(model_provider_auth_to_proto),
-        capabilities: capabilities.map(|capabilities| proto::ModelProviderCapabilities {
-            cyber_access_programs: capabilities.cyber_access_programs,
-        }),
         wire_api: proto_wire_api(wire_api).into(),
         query_params: query_params.map(proto_string_map),
         http_headers: http_headers.map(proto_string_map),
@@ -338,7 +329,6 @@ mod tests {
     use std::collections::HashMap;
     use std::num::NonZeroU64;
 
-    use codex_model_provider_info::ModelProviderCapabilities;
     use codex_model_provider_info::ModelProviderInfo;
     use codex_model_provider_info::WireApi;
     use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -455,25 +445,11 @@ mod tests {
         let mut expected = expected_provider();
         expected.auth = None;
         expected.experimental_bearer_token = Some("synthetic-provider-token".into());
-        for capabilities in [
-            None,
-            Some(ModelProviderCapabilities::default()),
-            Some(ModelProviderCapabilities {
-                cyber_access_programs: Some(false),
-                ..Default::default()
-            }),
-            Some(ModelProviderCapabilities {
-                cyber_access_programs: Some(true),
-                ..Default::default()
-            }),
-        ] {
-            expected.capabilities = capabilities;
-            let proto = model_provider_to_proto("local", expected.clone());
-            assert!(proto.supports_standalone_web_search);
-            let (id, actual) = model_provider_from_proto(proto).expect("model provider from proto");
-            assert_eq!(id, "local");
-            assert_eq!(actual, expected);
-        }
+        let proto = model_provider_to_proto("local", expected.clone());
+        assert!(proto.supports_standalone_web_search);
+        let (id, actual) = model_provider_from_proto(proto).expect("model provider from proto");
+        assert_eq!(id, "local");
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -504,9 +480,6 @@ mod tests {
                             model_catalog_url: Some(
                                 "http://127.0.0.1:8061/api/codex/models".to_string(),
                             ),
-                            capabilities: Some(proto::ModelProviderCapabilities {
-                                cyber_access_programs: Some(true),
-                            }),
                             env_key: None,
                             env_key_instructions: None,
                             experimental_bearer_token: None,
@@ -606,10 +579,7 @@ mod tests {
             supports_websockets: true,
             supports_standalone_web_search: true,
             gateway_oauth: None,
-            capabilities: Some(ModelProviderCapabilities {
-                cyber_access_programs: Some(true),
-                ..Default::default()
-            }),
+            capabilities: None,
             include_internal_metadata: false,
         }
     }

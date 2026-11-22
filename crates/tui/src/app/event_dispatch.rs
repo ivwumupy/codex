@@ -17,7 +17,6 @@ use crate::config_update::format_config_error;
 use crate::external_agent_config_migration::flow::ExternalAgentConfigMigrationFlowOutcome;
 use crate::pager_overlay::TranscriptHistoryState;
 use crate::session_resume::cwds_differ;
-use crate::status::StatusAccountDisplay;
 use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_app_server_protocol::ThreadStatus;
@@ -640,7 +639,6 @@ impl App {
                     self.refresh_in_memory_config_from_disk_best_effort("forking the thread")
                         .await;
                     let mut fork_config = self.config.clone();
-                    fork_config.daybreak_enabled = self.chat_widget.daybreak_enabled;
                     if app_server.uses_remote_workspace() {
                         fork_config.workspace_roots.clone_from(
                             &self.chat_widget.config_ref().workspace_roots,
@@ -2118,23 +2116,7 @@ impl App {
                     app_server.fetch_models(request_id, self.app_event_tx.clone());
                 }
             }
-            AppEvent::ModelsLoaded { request_id, result: Ok(models) }
-                if self.chat_widget.model_popup_request_is_current(request_id)
-                    && self.chat_widget.status_account_display() == Some(&StatusAccountDisplay::ApiKey) =>
-            {
-                let checked = app_server.constrain_api_key_models(
-                    self.chat_widget.config_ref(),
-                    self.chat_widget.thread_id(),
-                    /*requirements*/ None,
-                    models,
-                );
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    tx.send(AppEvent::ApiKeyCompatModelsLoaded { request_id, result: Ok(checked.await) });
-                });
-            }
-            AppEvent::ModelsLoaded { request_id, result }
-            | AppEvent::ApiKeyCompatModelsLoaded { request_id, result } => {
+            AppEvent::ModelsLoaded { request_id, result } => {
                 self.chat_widget.on_models_loaded(request_id, result);
                 let catalog = self.chat_widget.model_catalog();
                 if !Arc::ptr_eq(&self.model_catalog, &catalog) {
@@ -2431,20 +2413,6 @@ impl App {
             AppEvent::PersistModelSelection { model, effort } => {
                 self.persist_default_model_selection(app_server.request_handle(), model, effort)
                     .await;
-            }
-            AppEvent::PersistDaybreakSelection { thread_id, enabled } => {
-                Box::pin(self.persist_daybreak_selection(app_server, thread_id, enabled)).await;
-            }
-            AppEvent::DisableUnavailableDaybreak { thread_id, model } => {
-                if self.chat_widget.current_model() == model
-                    && self.chat_widget.should_disable_daybreak(&model)
-                    && Box::pin(self.persist_daybreak_selection(app_server, thread_id, /*enabled*/ false)).await
-                {
-                    self.chat_widget.add_info_message(
-                        format!("Daybreak has been turned off for new turns because it is not available for {model} with your current account and server. Prior cybersecurity context in this thread may cause a refusal. You can switch back to a model where you have Daybreak access and use /daybreak to re-enable it."),
-                        /*hint*/ None,
-                    );
-                }
             }
             AppEvent::SelectSessionModel { model, effort, service_tier } => {
                 self.app_event_tx.send(AppEvent::FollowTranscript);

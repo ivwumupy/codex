@@ -56,9 +56,6 @@ impl ChatWidget {
         let connector_scope_changed = previous_thread_id != Some(session.thread_id)
             || self.config.cwd.as_path() != session.cwd.as_path();
         self.thread_id = Some(session.thread_id);
-        self.daybreak_enabled = self.config.features.enabled(Feature::CliDaybreak)
-            && session.daybreak_enabled
-            && !matches!(display, SessionConfiguredDisplay::SideConversation);
         #[cfg(target_os = "windows")]
         if self.windows_sandbox_local_server
             && matches!(self.codex_op_target, CodexOpTarget::AppEvent)
@@ -103,7 +100,6 @@ impl ChatWidget {
         {
             self.app_event_tx.send(AppEvent::Provider(event));
         }
-        self.set_daybreak_enabled(self.daybreak_enabled);
         if connector_scope_changed {
             self.invalidate_connector_scope();
         }
@@ -219,9 +215,6 @@ impl ChatWidget {
             self.bump_active_cell_revision();
         }
         // Emit notices after replacing or removing the placeholder header.
-        if self.daybreak_enabled && previous_thread_id != self.thread_id {
-            self.add_info_message("Daybreak is on for new turns.".into(), /*hint*/ None);
-        }
         self.transcript.saw_copy_source_this_turn = false;
         self.refresh_skills_for_current_cwd(/*force_reload*/ true);
         self.refresh_connector_mentions(/*force_refresh*/ false);

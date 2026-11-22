@@ -19,7 +19,6 @@ use codex_otel::MetricsConfig;
 use codex_protocol::approvals::GuardianAssessmentStatus;
 use codex_protocol::approvals::GuardianReviewReason;
 use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::models::NetworkPermissions;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
@@ -295,15 +294,10 @@ async fn delayed_score_only_covers_the_tool_call_it_classified() -> Result<()> {
         ],
     );
     let request = final_response.single_request();
-    for (call_id, network) in [
-        ("before-publication", None),
-        ("stale-publication", None),
-        (
-            "fresh-publication",
-            Some(NetworkPermissions {
-                enabled: Some(true),
-            }),
-        ),
+    for call_id in [
+        "before-publication",
+        "stale-publication",
+        "fresh-publication",
     ] {
         let output = request
             .function_call_output_text(call_id)
@@ -311,10 +305,7 @@ async fn delayed_score_only_covers_the_tool_call_it_classified() -> Result<()> {
         assert_eq!(
             serde_json::from_str::<RequestPermissionsResponse>(&output)?,
             RequestPermissionsResponse {
-                permissions: RequestPermissionProfile {
-                    network,
-                    file_system: None
-                },
+                permissions: RequestPermissionProfile::default(),
                 scope: PermissionGrantScope::Turn,
                 strict_auto_review: false,
             },

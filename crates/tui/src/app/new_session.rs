@@ -51,13 +51,6 @@ pub(super) fn overlay_new_session_defaults(
                 .unwrap_or_else(|| service_tier.to_string())
         });
     }
-    if !has_launch_setting(config, cli_kv_overrides, "daybreak") {
-        config.daybreak_enabled = defaults
-            .additional
-            .get("daybreak")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-    }
 }
 
 impl App {

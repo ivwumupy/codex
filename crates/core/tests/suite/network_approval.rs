@@ -305,165 +305,6 @@ async fn guardian_network_approval_preserves_action_and_outcome_routing(
     not(target_os = "linux"),
     ignore = "requires the trusted Linux proxy bridge"
 )]
-async fn strict_auto_review_routes_network_approval_to_guardian_when_user_reviewer_is_selected()
--> Result<()> {
-    skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
-    skip_if_host_windows!(Ok(()));
-    skip_if_no_network!(Ok(()));
-    skip_if_sandbox!(Ok(()));
-
-    let server = start_mock_server().await;
-    let test = managed_network_unified_exec_test_with_features(
-        &server,
-        &[Feature::RequestPermissionsTool],
-    )
-    .await?;
-    let permission_call_id = "strict-network-permissions";
-    let network_call_id = "strict-network-access";
-    let requested_permissions = RequestPermissionProfile {
-        network: Some(NetworkPermissions {
-            enabled: Some(true),
-        }),
-        ..Default::default()
-    };
-    // Guardian and parent requests can arrive in either order after the command yields.
-    // Only Guardian requests may consume these decisions.
-    let mut guardian_responses = Vec::new();
-    for response_id in ["strict-command-guardian", "strict-network-guardian"] {
-        guardian_responses.push(
-            mount_sse_once_match(
-                &server,
-                is_guardian_request,
-                sse(vec![
-                    ev_response_created(response_id),
-                    ev_assistant_message(
-                        response_id,
-                        r#"{"risk_level":"low","user_authorization":"high","outcome":"allow","rationale":"The strict-review request is safe."}"#,
-                    ),
-                    ev_completed(response_id),
-                ]),
-            )
-            .await,
-        );
-    }
-    let _parent = wiremock::Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/v1/responses"))
-        .and(|request: &wiremock::Request| !is_guardian_request(request))
-        .respond_with(move |request: &wiremock::Request| {
-            let body: Value = serde_json::from_slice(
-                &decoded_request_body(request).expect("decode parent request"),
-            )
-            .expect("parse parent request");
-            let input = body["input"].as_array().expect("parent input");
-            let output = input
-                .iter()
-                .rev()
-                .find(|item| item["type"] == "function_call_output");
-            let response_id = format!("strict-parent-{}", input.len());
-            let event = match output {
-                None => ev_function_call(
-                    permission_call_id,
-                    "request_permissions",
-                    &json!({
-                        "reason": "Require automatic review for the rest of this turn",
-                        "permissions": requested_permissions,
-                    })
-                    .to_string(),
-                ),
-                Some(output) if output["call_id"] == permission_call_id => ev_function_call(
-                    network_call_id,
-                    "exec_command",
-                    &network_fetch_args(LOCAL_ENVIRONMENT_ID).to_string(),
-                ),
-                Some(output) => {
-                    let output = output["output"].as_str().expect("process output");
-                    if let Some(session_id) = output
-                        .lines()
-                        .find_map(|line| line.strip_prefix("Process running with session ID "))
-                    {
-                        ev_function_call(
-                            &response_id,
-                            "write_stdin",
-                            &json!({
-                                "session_id": session_id.parse::<i32>().expect("session id"),
-                                "chars": "",
-                                "yield_time_ms": 1_000,
-                            })
-                            .to_string(),
-                        )
-                    } else {
-                        assert!(output.contains("Process exited with code"), "{output}");
-                        ev_assistant_message("strict-parent-complete", "reviewed")
-                    }
-                }
-            };
-            sse_response(sse(vec![event, ev_completed(&response_id)]))
-        })
-        .mount_as_scoped(&server)
-        .await;
-
-    submit_managed_network_turn(
-        &test,
-        "grant turn permissions, then automatically review network access",
-        vec![local(test.config.cwd.clone())],
-        ApprovalsReviewer::User,
-        AskForApproval::OnRequest,
-    )
-    .await?;
-    let EventMsg::RequestPermissions(request) = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::RequestPermissions(_))
-    })
-    .await
-    else {
-        unreachable!("matched request permissions event")
-    };
-    assert_eq!(request.call_id, permission_call_id);
-    test.codex
-        .submit(Op::RequestPermissionsResponse {
-            id: permission_call_id.to_string(),
-            response: RequestPermissionsResponse {
-                permissions: request.permissions,
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: true,
-            },
-        })
-        .await?;
-    wait_for_completion_without_network_prompt(&test).await;
-
-    assert_eq!(
-        guardian_responses
-            .iter()
-            .flat_map(ResponseMock::requests)
-            .filter(|request| {
-                request.body_json()["client_metadata"]["x-openai-subagent"] == "guardian"
-            })
-            .count(),
-        2,
-        "the command and network request must each receive Guardian review",
-    );
-    let actions = guardian_responses
-        .iter()
-        .map(guardian_network_actions)
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-    assert_eq!(actions.len(), 1);
-    assert_eq!(
-        actions[0]
-            .pointer("/trigger/callId")
-            .and_then(Value::as_str),
-        Some(network_call_id)
-    );
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg_attr(
-    not(target_os = "linux"),
-    ignore = "requires the trusted Linux proxy bridge"
-)]
 async fn cancelled_guardian_network_review_fails_closed_without_rewriting_turn_state() -> Result<()>
 {
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
@@ -890,7 +731,7 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
                 permission_call_id,
                 "request_permissions",
                 &serde_json::to_string(&json!({
-                    "reason": "Automatically review the existing terminal's network access",
+                    "reason": "Request network access for the existing terminal",
                     "permissions": requested_permissions,
                 }))?,
             ),
@@ -908,15 +749,6 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
                 }))?,
             ),
             ev_completed("resp-cross-turn-network-stdin"),
-        ]),
-        // Strict review approves terminal input before the process can request network access.
-        sse(vec![
-            ev_response_created("resp-cross-turn-stdin-guardian"),
-            ev_assistant_message(
-                "msg-cross-turn-stdin-guardian",
-                r#"{"risk_level":"low","user_authorization":"high","outcome":"allow","rationale":"Continue the existing terminal."}"#,
-            ),
-            ev_completed("resp-cross-turn-stdin-guardian"),
         ]),
         sse(vec![
             ev_response_created("resp-network-guardian-environment"),
@@ -1015,12 +847,13 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
         unreachable!("matched request permissions event")
     };
     assert_eq!(request.call_id, permission_call_id);
-    if same_turn {
+    {
         let (reply, outcome) = tokio::sync::oneshot::channel();
         test.codex
             .submit(Op::TurnSettings {
                 turn_id: active_turn_id.clone(),
                 update: codex_protocol::protocol::TurnSettingsUpdate {
+                    approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
                     model: Some("guardian-parent-b".to_string()),
                     effort: Some(Some(codex_protocol::openai_models::ReasoningEffort::Medium)),
                     ..Default::default()
@@ -1037,9 +870,9 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
         .submit(Op::RequestPermissionsResponse {
             id: permission_call_id.to_string(),
             response: RequestPermissionsResponse {
-                permissions: request.permissions,
+                permissions: RequestPermissionProfile::default(),
                 scope: PermissionGrantScope::Turn,
-                strict_auto_review: true,
+                strict_auto_review: false,
             },
         })
         .await?;
@@ -1083,7 +916,7 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
         .iter()
         .filter(|request| request.body_json()["client_metadata"]["x-openai-subagent"] == "guardian")
         .collect::<Vec<_>>();
-    assert_eq!(reviews.len(), 3);
+    assert_eq!(reviews.len(), 2);
     for review in &reviews {
         assert_eq!(review.body_json()["model"], "guardian-parent-b");
         assert_eq!(review.body_json()["reasoning"]["effort"], "medium");
@@ -1102,9 +935,8 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
             .as_str()
             .context("Responses turn metadata")?,
     )?;
-    // Strict review does not change this field's policy-routing meaning.
-    assert_eq!(metadata["auto_review_enabled"], false);
-    let pwd_output = reviews[2]
+    assert_eq!(metadata["auto_review_enabled"], true);
+    let pwd_output = reviews[1]
         .function_call_output_text("guardian-pwd")
         .context("Guardian pwd output")?;
     let original_cwd = test

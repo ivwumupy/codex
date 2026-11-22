@@ -520,7 +520,7 @@ async fn thread_resume_with_empty_path_uses_running_thread_id() -> Result<()> {
 
     let start_id = mcp
         .send_thread_start_request_with_auto_env(ThreadStartParams {
-            model: Some("gpt-daybreak-blue-latest".to_string()),
+            model: Some("gpt-5.4".to_string()),
             service_tier: Some(Some("priority".to_string())),
             ..Default::default()
         })
@@ -4412,8 +4412,7 @@ async fn thread_resume_token_usage_replay_can_belong_to_interrupted_turn() -> Re
 async fn thread_resume_prefers_persisted_git_metadata_for_local_threads() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    mock_responses_config(&server.uri())
-        .write(codex_home.path())?;
+    mock_responses_config(&server.uri()).write(codex_home.path())?;
 
     let repo_path = codex_home.path().join("repo");
     std::fs::create_dir_all(&repo_path)?;
@@ -4560,7 +4559,6 @@ async fn thread_resume_prefers_persisted_git_metadata_for_local_threads() -> Res
         .send_thread_metadata_update_request(ThreadMetadataUpdateParams {
             thread_id: thread_id.clone(),
             project_id: None,
-            daybreak_enabled: None,
             git_info: Some(ThreadMetadataGitInfoUpdateParams {
                 sha: None,
                 branch: Some(Some("feature/pr-branch".to_string())),

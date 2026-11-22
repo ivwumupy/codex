@@ -47,7 +47,6 @@ fn thread_settings_for_test(
 
 fn configured_thread_session(thread_id: ThreadId) -> crate::session_state::ThreadSessionState {
     crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -110,10 +109,6 @@ async fn session_and_settings_sync_server_provider_id() {
     chat.config.model_provider.base_url = Some("https://local-provider.example/v1".to_string());
     chat.has_chatgpt_account = true;
     chat.config
-        .features
-        .enable(Feature::CliDaybreak)
-        .expect("enable Daybreak");
-    chat.config
         .model_providers
         .insert("server-bedrock".into(), chat.config.model_provider.clone());
     chat.local_settings.tui.status_line = Some(vec!["profile".into(), "provider".into()]);
@@ -142,15 +137,10 @@ async fn session_and_settings_sync_server_provider_id() {
     });
     let mut provider = chat.config.model_provider.clone();
     provider.env_key = Some("CUSTOM_API_KEY".to_string());
-    provider.capabilities = Some(codex_model_provider_info::ModelProviderCapabilities {
-        cyber_access_programs: Some(true),
-        ..Default::default()
-    });
     chat.config
         .model_providers
         .insert(first.model_provider_id.clone(), provider);
     chat.handle_thread_session(first.clone());
-    assert!(chat.daybreak_account_eligible());
     let displayed = status(&mut chat);
     assert!(displayed.contains("Model provider:") && displayed.contains("server-ollama"));
     assert!(!displayed.contains("local-provider.example"));
@@ -163,17 +153,12 @@ async fn session_and_settings_sync_server_provider_id() {
     let mut other = configured_thread_session(ThreadId::new());
     other.model_provider_id = "server-bedrock".to_string();
     chat.handle_thread_session_quiet(other);
-    assert!(!chat.daybreak_account_eligible());
     let displayed = status(&mut chat);
     assert!(displayed.contains("server-bedrock"));
     assert!(!displayed.contains("server-ollama"));
 
     chat.handle_thread_session_quiet(first);
     assert_eq!(chat.config.model_provider_id, "server-ollama");
-    assert!(chat.daybreak_account_eligible());
-    chat.bottom_pane
-        .set_composer_text("/daybreak".to_string(), Vec::new(), Vec::new());
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("broader access"));
 
     chat.config.config_layer_stack = chat
         .config
@@ -191,14 +176,10 @@ async fn session_and_settings_sync_server_provider_id() {
         /*replay_kind*/ None,
     );
     assert!(status(&mut chat).contains("server-updated"));
-    assert!(!chat.daybreak_account_eligible());
     insta::assert_snapshot!(
         status_line_text(&chat).unwrap(),
         @"profile: work · provider: server-updated"
     );
-    let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(!popup.contains("broader access"));
-    assert_chatwidget_snapshot!("daybreak_hidden_after_provider_settings_change", popup);
 
     let mut restored = thread_settings_for_test("gpt-5.4", first_id);
     restored.thread_settings.model_provider = "server-ollama".to_string();
@@ -206,8 +187,6 @@ async fn session_and_settings_sync_server_provider_id() {
         ServerNotification::ThreadSettingsUpdated(restored),
         /*replay_kind*/ None,
     );
-    assert!(chat.daybreak_account_eligible());
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("broader access"));
 }
 
 fn start_safety_buffering_test_turn(
@@ -2297,28 +2276,6 @@ async fn app_server_safety_access_errors_render_dedicated_notice() {
         "app_server_bio_policy_error_renders_dedicated_notice",
         rendered_cases.last().unwrap().1.as_str()
     );
-}
-
-#[tokio::test]
-async fn live_app_server_model_verification_renders_warning() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.handle_server_notification(
-        ServerNotification::ModelVerification(ModelVerificationNotification {
-            thread_id: "thread-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            verifications: vec![AppServerModelVerification::TrustedAccessForCyber],
-        }),
-        /*replay_kind*/ None,
-    );
-
-    let cells = drain_insert_history_transcript(&mut rx);
-    assert_eq!(cells.len(), 1);
-    let rendered = lines_to_single_string(&cells[0]);
-    assert!(rendered.contains("multiple flags for possible cybersecurity risk"));
-    assert!(rendered.contains("extra safety checks are on"));
-    assert!(rendered.contains("Trusted Access for Cyber"));
-    assert!(rendered.contains("https://chatgpt.com/cyber"));
 }
 
 #[tokio::test]

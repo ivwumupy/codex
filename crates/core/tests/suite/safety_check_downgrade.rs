@@ -3,19 +3,15 @@ use codex_core::TurnInputRequest;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
-use codex_protocol::models::ContentItem;
 use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ModelRerouteReason;
-use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_function_call;
-use core_test_support::responses::ev_model_verification_metadata;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_once;
 use core_test_support::responses::mount_response_sequence;
@@ -34,7 +30,6 @@ use wiremock::ResponseTemplate;
 
 const SERVER_MODEL: &str = "gpt-5.2";
 const REQUESTED_MODEL: &str = "gpt-5.3-codex";
-const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
 
 const CYBER_POLICY_MESSAGE: &str =
     "This request has been flagged for potentially high-risk cyber activity.";
@@ -321,122 +316,6 @@ async fn openai_model_header_casing_only_mismatch_does_not_warn() -> Result<()> 
 
     assert_eq!(reroute_count, 0);
     assert_eq!(warning_count, 0);
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn model_verification_emits_structured_event_without_reroute_or_warning() -> Result<()> {
-    skip_if_no_network!(Ok(()));
-
-    let server = start_mock_server().await;
-    let response = sse_response(sse(vec![
-        ev_response_created("resp-1"),
-        ev_model_verification_metadata("resp-1", vec![TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]),
-        core_test_support::responses::ev_completed("resp-1"),
-    ]));
-    let _mock = mount_response_once(&server, response).await;
-
-    let mut builder = test_codex().with_model("gpt-5.5");
-    let test = builder.build(&server).await?;
-
-    test.codex
-        .start_or_steer_turn(disabled_text_turn(&test, "trigger model verification"))
-        .await?;
-
-    let mut verification_count = 0;
-    let mut reroute_count = 0;
-    let mut warning_count = 0;
-    let mut warning_item_count = 0;
-    loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
-        match event {
-            EventMsg::ModelVerification(event) => {
-                assert_eq!(
-                    event.verifications,
-                    vec![ModelVerification::TrustedAccessForCyber]
-                );
-                verification_count += 1;
-            }
-            EventMsg::Warning(_) => warning_count += 1,
-            EventMsg::ModelReroute(_) => reroute_count += 1,
-            EventMsg::RawResponseItem(raw)
-                if matches!(
-                    &raw.item,
-                    ResponseItem::Message { content, .. }
-                        if content.iter().any(|item| matches!(
-                            item,
-                            ContentItem::InputText { text } if text.starts_with("Warning: ")
-                        ))
-                ) =>
-            {
-                warning_item_count += 1;
-            }
-            EventMsg::TurnComplete(_) => break,
-            _ => {}
-        }
-    }
-
-    assert_eq!(verification_count, 1);
-    assert_eq!(reroute_count, 0);
-    assert_eq!(warning_count, 0);
-    assert_eq!(warning_item_count, 0);
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn model_verification_only_emits_once_per_turn() -> Result<()> {
-    skip_if_no_network!(Ok(()));
-
-    let server = start_mock_server().await;
-    let tool_args = serde_json::json!({
-        "cmd": "echo hello",
-        "yield_time_ms": 1_000
-    });
-
-    let first_response = sse_response(sse(vec![
-        ev_response_created("resp-1"),
-        ev_function_call(
-            "call-1",
-            "exec_command",
-            &serde_json::to_string(&tool_args)?,
-        ),
-        ev_model_verification_metadata("resp-1", vec![TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]),
-        core_test_support::responses::ev_completed("resp-1"),
-    ]));
-    let second_response = sse_response(sse(vec![
-        ev_response_created("resp-2"),
-        ev_model_verification_metadata("resp-2", vec![TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]),
-        ev_assistant_message("msg-1", "done"),
-        core_test_support::responses::ev_completed("resp-2"),
-    ]));
-    let _mock = mount_response_sequence(&server, vec![first_response, second_response]).await;
-
-    let mut builder = test_codex().with_model(SERVER_MODEL);
-    let test = builder.build(&server).await?;
-
-    test.codex
-        .start_or_steer_turn(disabled_text_turn(
-            &test,
-            "trigger follow-up model verification",
-        ))
-        .await?;
-
-    let mut verification_count = 0;
-    loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
-        match event {
-            EventMsg::ModelVerification(_) => verification_count += 1,
-            EventMsg::Warning(warning) if warning.message.contains("high-risk cyber activity") => {
-                panic!("model verification should not emit a warning event");
-            }
-            EventMsg::TurnComplete(_) => break,
-            _ => {}
-        }
-    }
-
-    assert_eq!(verification_count, 1);
 
     Ok(())
 }

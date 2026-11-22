@@ -26,7 +26,6 @@ use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
 use codex_app_server_protocol::CommandExecutionStatus;
-use codex_app_server_protocol::CyberAccessProgram;
 use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::FileChangePatchUpdatedNotification;
 use codex_app_server_protocol::FileChangeRequestApprovalResponse;
@@ -51,8 +50,6 @@ use codex_app_server_protocol::ThreadInjectItemsParams;
 use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::ThreadLoadedListParams;
 use codex_app_server_protocol::ThreadLoadedListResponse;
-use codex_app_server_protocol::ThreadMetadataUpdateParams;
-use codex_app_server_protocol::ThreadMetadataUpdateResponse;
 use codex_app_server_protocol::ThreadSettingsUpdateParams;
 use codex_app_server_protocol::ThreadSettingsUpdatedNotification;
 use codex_app_server_protocol::ThreadShellCommandParams;
@@ -693,7 +690,6 @@ async fn turn_start_steers_active_turn_and_returns_active_turn_id() -> Result<()
                 turn_trigger: Some("goal".to_string()),
                 parent_turn_id: Some("initiating-turn".to_string()),
                 root_turn_id: Some("causal-root".to_string()),
-                cyber_access_program: Some(CyberAccessProgram::DaybreakBlue),
                 ..Default::default()
             },
         })
@@ -708,22 +704,6 @@ async fn turn_start_steers_active_turn_and_returns_active_turn_id() -> Result<()
     )
     .await?;
 
-    let updated: ThreadMetadataUpdateResponse = mcp
-        .request(|request_id| ClientRequest::ThreadMetadataUpdate {
-            request_id,
-            params: ThreadMetadataUpdateParams {
-                thread_id: thread.id.clone(),
-                project_id: None,
-                git_info: None,
-                daybreak_enabled: Some(false),
-            },
-        })
-        .await?;
-    assert_eq!(
-        (updated.thread.id, updated.thread.daybreak_enabled),
-        (thread.id.clone(), Some(false))
-    );
-
     let TurnStartResponse { turn: steered_turn } = mcp
         .request(|request_id| ClientRequest::TurnStart {
             request_id,
@@ -737,7 +717,6 @@ async fn turn_start_steers_active_turn_and_returns_active_turn_id() -> Result<()
                 turn_trigger: Some("user".to_string()),
                 parent_turn_id: Some("steering-turn".to_string()),
                 root_turn_id: Some("steering-root".to_string()),
-                cyber_access_program: Some(CyberAccessProgram::Standard),
                 ..Default::default()
             },
         })
@@ -759,7 +738,6 @@ async fn turn_start_steers_active_turn_and_returns_active_turn_id() -> Result<()
     assert_eq!(requests.len(), 2);
     for request in requests {
         let body: Value = serde_json::from_slice(&request)?;
-        assert_eq!(body["access_programs"], json!({"cyber": "daybreak_blue"}));
         let turn_metadata: Value = serde_json::from_str(
             body["client_metadata"]["x-codex-turn-metadata"]
                 .as_str()
@@ -3208,7 +3186,6 @@ async fn turn_start_explicit_local_environment_updates_legacy_cwd_between_turns(
                 output_schema: None,
                 collaboration_mode: None,
                 multi_agent_mode: None,
-                cyber_access_program: None,
             },
         })
         .await?;
@@ -3259,7 +3236,6 @@ async fn turn_start_explicit_local_environment_updates_legacy_cwd_between_turns(
                 output_schema: None,
                 collaboration_mode: None,
                 multi_agent_mode: None,
-                cyber_access_program: None,
             },
         })
         .await?;

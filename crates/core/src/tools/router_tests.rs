@@ -49,7 +49,6 @@ async fn build_tool_call_retains_native_evidence_only_for_reviewed_mav2_tools() 
     for review_enabled in [false, true] {
         for namespace in [None, Some("team")] {
             let (_, mut turn) = make_session_and_context().await;
-            turn.multi_agent_version = codex_protocol::protocol::MultiAgentVersion::V2;
             let config = Arc::make_mut(&mut turn.config);
             config.multi_agent_v2.tool_namespace = namespace.map(str::to_owned);
             if review_enabled {

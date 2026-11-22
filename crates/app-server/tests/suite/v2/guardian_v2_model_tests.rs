@@ -1,4 +1,4 @@
-//! Verifies that Guardian model and Cyber selections follow the current parent turn.
+//! Verifies that Guardian uses the model configured for the current turn.
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -10,7 +10,6 @@ use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_models_cache_with_models;
-use axum::Json;
 use axum::Router;
 use axum::extract::State;
 use axum::extract::ws::WebSocketUpgrade;
@@ -19,7 +18,6 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use codex_app_server_protocol::ApprovalsReviewer;
-use codex_app_server_protocol::CyberAccessProgram;
 use codex_app_server_protocol::ItemGuardianApprovalReviewCompletedNotification;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
@@ -33,8 +31,6 @@ use codex_login::AuthCredentialsStoreMode;
 use core_test_support::load_default_config_for_test;
 use core_test_support::skip_if_no_network;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
 use tempfile::TempDir;
 use test_case::test_case;
 use tokio::net::TcpListener;
@@ -156,9 +152,7 @@ async fn computer_use_scoring_follows_model_review_requirement(
 #[test_case(0.0; "low risk")]
 #[test_case(1.0; "high risk")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn guardian_programs_follow_each_turn_without_changing_parent_selection(
-    luna_score: f64,
-) -> Result<()> {
+async fn guardian_reuses_reviewer_across_turns(luna_score: f64) -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let state = Arc::new(MockResponsesState {
@@ -167,7 +161,6 @@ async fn guardian_programs_follow_each_turn_without_changing_parent_selection(
         luna_score,
         ..Default::default()
     });
-    let parent_requests = Arc::new(Mutex::new(Vec::<Value>::new()));
     let router = Router::new()
         .route(
             "/backend-api/codex/responses",
@@ -186,21 +179,7 @@ async fn guardian_programs_follow_each_turn_without_changing_parent_selection(
                     }
                 },
             )
-            .post({
-                let parent_requests = Arc::clone(&parent_requests);
-                move |State(state): State<Arc<MockResponsesState>>, Json(request): Json<Value>| {
-                    let parent_requests = Arc::clone(&parent_requests);
-                    async move {
-                        if request["model"] == MODEL {
-                            parent_requests
-                                .lock()
-                                .expect("parent request lock")
-                                .push(request.clone());
-                        }
-                        parent_response(State(state), Json(request)).await
-                    }
-                }
-            }),
+            .post(parent_response),
         )
         .with_state(Arc::clone(&state));
     let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -271,34 +250,15 @@ computer_use_only = false
         .start_thread(ThreadStartParams::default())
         .await?
         .thread;
-    let cases = [
-        (
-            Some(CyberAccessProgram::DaybreakBlue),
-            Some("daybreak_blue"),
-            Some("daybreak_blue"),
-        ),
-        (
-            Some(CyberAccessProgram::DaybreakRed),
-            Some("daybreak_red"),
-            Some("daybreak_blue"),
-        ),
-        (
-            Some(CyberAccessProgram::Standard),
-            Some("standard"),
-            Some("standard"),
-        ),
-        (None, None, None),
-    ];
-    let mut classifier_requests = Vec::new();
-    for (index, (program, _, _)) in cases.iter().enumerate() {
+    const TURN_COUNT: usize = 2;
+    for index in 0..TURN_COUNT {
         state.parent_requests.store(0, Ordering::SeqCst);
         app_server.clear_message_buffer();
         let request_id = app_server
             .send_turn_start_request(TurnStartParams {
                 thread_id: thread.id.clone(),
-                cyber_access_program: *program,
                 input: vec![UserInput::Text {
-                    text: format!("{USER_CONTEXT} This is program turn {index}."),
+                    text: format!("{USER_CONTEXT} This is turn {index}."),
                     text_elements: Vec::new(),
                 }],
                 ..Default::default()
@@ -309,15 +269,13 @@ computer_use_only = false
         assert!(
             classifier_request
                 .to_string()
-                .contains(&format!("program turn {index}"))
+                .contains(&format!("turn {index}"))
         );
         assert!(
-            classifier_request.to_string().contains("program turn 0"),
-            "prior turn evidence remains available after changing programs"
+            classifier_request.to_string().contains("turn 0"),
+            "prior turn evidence remains available"
         );
-        classifier_requests.push(classifier_request);
-        // Complete the review before a low score can cancel it: this test checks
-        // that program changes alone preserve reviewer session reuse.
+        assert_eq!(classifier_request["model"], "gpt-5.6-luna");
         wait_for_guardian_reviews(&state, index + 1).await?;
         state.allow_guardian_review.notify_one();
         let _: ItemGuardianApprovalReviewCompletedNotification = timeout(
@@ -331,55 +289,15 @@ computer_use_only = false
         assert_eq!(completed.turn.status, TurnStatus::Completed);
     }
 
-    let expected_guardian_programs = cases
-        .iter()
-        .map(|(_, _, name)| name.map(|name| json!({"cyber": name})))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        classifier_requests
-            .iter()
-            .map(|request| (
-                request["model"].clone(),
-                request.get("access_programs").cloned()
-            ))
-            .collect::<Vec<_>>(),
-        expected_guardian_programs
-            .iter()
-            .map(|program| (json!("gpt-5.6-luna"), program.clone()))
-            .collect::<Vec<_>>()
-    );
     let guardian_requests = state
         .guardian_requests
         .lock()
         .expect("Guardian request lock")
         .clone();
-    assert_eq!(
+    assert!(
         guardian_requests
             .iter()
-            .map(|request| (
-                request["model"].clone(),
-                request.get("access_programs").cloned()
-            ))
-            .collect::<Vec<_>>(),
-        expected_guardian_programs
-            .iter()
-            .map(|program| (json!("gpt-6.1-sol"), program.clone()))
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(
-        parent_requests
-            .lock()
-            .expect("parent request lock")
-            .iter()
-            .map(|request| request.get("access_programs").cloned())
-            .collect::<Vec<_>>(),
-        cases
-            .iter()
-            .flat_map(|(_, name, _)| std::iter::repeat_n(
-                name.map(|name| json!({"cyber": name})),
-                2
-            ))
-            .collect::<Vec<_>>()
+            .all(|request| request["model"] == "gpt-6.1-sol")
     );
     let reviewer_thread_ids = guardian_requests
         .iter()
@@ -388,8 +306,8 @@ computer_use_only = false
     assert!(reviewer_thread_ids[0].is_string());
     assert_eq!(
         reviewer_thread_ids,
-        vec![reviewer_thread_ids[0].clone(); cases.len()],
-        "program changes should reuse the reviewer session"
+        vec![reviewer_thread_ids[0].clone(); TURN_COUNT],
+        "turns should reuse the reviewer session"
     );
 
     app_server.shutdown_gracefully().await?;

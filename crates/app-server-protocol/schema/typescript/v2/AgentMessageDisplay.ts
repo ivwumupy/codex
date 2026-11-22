@@ -9,4 +9,4 @@ export type AgentMessageDisplay = {
 /**
  * Unknown actions must be left for the producing client to handle.
  */
-action: string, blockType: string | null, cyberTrustedAccess: boolean | null, checkTrustedContacts: boolean | null, };
+action: string, blockType: string | null, checkTrustedContacts: boolean | null, };

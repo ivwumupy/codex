@@ -35,7 +35,6 @@ pub(in crate::app) fn user_cell(message: &str) -> Arc<dyn HistoryCell> {
 
 pub(in crate::app) fn attach_thread(app: &mut App, thread_id: ThreadId) {
     app.chat_widget.handle_thread_session(ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -473,7 +472,8 @@ async fn owned_drag_stops_when_focus_or_input_ownership_is_lost() -> Result<()> 
                 TuiEvent::Draw
             }
             "popup" => {
-                app.chat_widget.open_feature_enable_prompt(Feature::MultiAgentV2);
+                app.chat_widget
+                    .open_feature_enable_prompt(Feature::MultiAgentV2);
                 TuiEvent::Draw
             }
             _ => unreachable!(),

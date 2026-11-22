@@ -4,7 +4,6 @@ use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_client::TypedRequestError;
-use codex_app_server_protocol::Account;
 use codex_app_server_protocol::AudioReference;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::DynamicToolCallOutputContentItem;
@@ -15,11 +14,7 @@ use codex_app_server_protocol::DynamicToolNamespaceSpec;
 use codex_app_server_protocol::DynamicToolNamespaceTool;
 use codex_app_server_protocol::DynamicToolSpec;
 use codex_app_server_protocol::GeneratedImageRef;
-use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::ImageReference;
-use codex_app_server_protocol::ModelListParams;
-use codex_app_server_protocol::ModelListResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SandboxMode;
 use codex_app_server_protocol::SandboxPolicy;
@@ -56,8 +51,6 @@ use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnToolOutput;
 use codex_app_server_protocol::UserInput;
-use codex_features::Feature;
-use codex_features::Features;
 use codex_protocol::ThreadId;
 use codex_protocol::models::FunctionCallOutputBody;
 use serde::Deserialize;
@@ -294,7 +287,6 @@ pub(crate) async fn execute(
     request_handle: AppServerRequestHandle,
     params: DynamicToolCallParams,
     thread_start_params: ThreadStartParams,
-    features: Features,
     status_updates: broadcast::Receiver<ThreadStatusChangedNotification>,
     app_event_tx: Option<&AppEventSender>,
 ) -> DynamicToolCallResponse {
@@ -302,7 +294,6 @@ pub(crate) async fn execute(
         request_handle,
         params,
         thread_start_params,
-        features,
         status_updates,
         app_event_tx,
     )
@@ -326,7 +317,6 @@ async fn execute_inner(
     handle: AppServerRequestHandle,
     params: DynamicToolCallParams,
     mut thread_start_params: ThreadStartParams,
-    features: Features,
     mut status_updates: broadcast::Receiver<ThreadStatusChangedNotification>,
     app_event_tx: Option<&AppEventSender>,
 ) -> Result<Value, String> {
@@ -496,23 +486,6 @@ async fn execute_inner(
             thread_start_params.cwd = Some(source_thread.cwd.to_string_lossy().into_owned());
             thread_start_params.project_id = source_thread.project_id.clone();
             thread_start_params.ephemeral = Some(source_thread.ephemeral);
-            if features.enabled(Feature::CliDaybreak)
-                && thread_start_params.daybreak_enabled.is_none()
-            {
-                let defaults = crate::config_update::read_effective_config_if_supported(
-                    handle.clone(),
-                    source_thread.cwd.as_path(),
-                )
-                .await
-                .map_err(|error| error.to_string())?;
-                thread_start_params.daybreak_enabled = defaults.and_then(|defaults| {
-                    defaults
-                        .config
-                        .additional
-                        .get("daybreak")
-                        .and_then(Value::as_bool)
-                });
-            }
             thread_start_params.history_mode = (source_thread.history_mode
                 == ThreadHistoryMode::Paginated)
                 .then_some(ThreadHistoryMode::Paginated);
@@ -566,17 +539,7 @@ async fn execute_inner(
                 .await
                 .map_err(|error| error.to_string())?;
             let thread_id = started.thread.id.clone();
-            let daybreak_enabled = started.thread.daybreak_enabled.unwrap_or(false);
             register_background_thread(app_event_tx, started.thread, task_tools_available).await?;
-            let cyber_access_program = background_turn_program(
-                &features,
-                &handle,
-                &thread_id,
-                &started.model,
-                &started.model_provider,
-                daybreak_enabled,
-            )
-            .await?;
             if let Some(title) = arguments.title
                 && let Err(error) = request::<ThreadSetNameResponse>(&handle, |request_id| {
                     ClientRequest::ThreadSetName {
@@ -598,7 +561,6 @@ async fn execute_inner(
                 prompt,
                 /*model*/ None,
                 sandbox_policy,
-                cyber_access_program,
             )
             .await?;
             Ok(json!({"threadId": thread_id}))
@@ -713,20 +675,10 @@ async fn execute_inner(
                 },
             )
             .await?;
-            let daybreak_enabled = thread.daybreak_enabled.unwrap_or(false);
             register_background_thread(
                 app_event_tx,
                 resumed.thread,
                 /*task_tools_available*/ false,
-            )
-            .await?;
-            let cyber_access_program = background_turn_program(
-                &features,
-                &handle,
-                &arguments.thread_id,
-                arguments.model.as_deref().unwrap_or(&resumed.model),
-                &resumed.model_provider,
-                daybreak_enabled,
             )
             .await?;
             start_turn(
@@ -736,7 +688,6 @@ async fn execute_inner(
                 prompt,
                 arguments.model,
                 /*sandbox_policy*/ None,
-                cyber_access_program,
             )
             .await?;
             Ok(json!({"threadId": arguments.thread_id}))
@@ -1244,7 +1195,6 @@ async fn start_turn(
     prompt: String,
     model: Option<String>,
     sandbox_policy: Option<SandboxPolicy>,
-    cyber_access_program: Option<codex_app_server_protocol::CyberAccessProgram>,
 ) -> Result<TurnStartResponse, String> {
     request(handle, |request_id| ClientRequest::TurnStart {
         request_id,
@@ -1261,86 +1211,10 @@ async fn start_turn(
             })),
             model,
             sandbox_policy,
-            cyber_access_program,
             ..TurnStartParams::default()
         },
     })
     .await
-}
-
-async fn background_turn_program(
-    features: &Features,
-    handle: &AppServerRequestHandle,
-    thread_id: &str,
-    model: &str,
-    provider: &str,
-    enabled: bool,
-) -> Result<Option<codex_app_server_protocol::CyberAccessProgram>, String> {
-    if !features.enabled(Feature::CliDaybreak) {
-        return Ok(None);
-    }
-    let (account, models) = tokio::join!(
-        request::<GetAccountResponse>(handle, |request_id| ClientRequest::GetAccount {
-            request_id,
-            params: GetAccountParams {
-                refresh_token: false
-            },
-        }),
-        request::<ModelListResponse>(handle, |request_id| ClientRequest::ModelList {
-            request_id,
-            params: ModelListParams {
-                cursor: None,
-                limit: None,
-                include_hidden: Some(true),
-                model_provider: None,
-            },
-        }),
-    );
-    let account = match account {
-        Ok(response) => response.account,
-        Err(error) if enabled && provider == "openai" => {
-            return Err(format!(
-                "Could not determine Daybreak account eligibility: {error}"
-            ));
-        }
-        Err(_) => None,
-    };
-    let eligible = provider == "openai"
-        && match account {
-            Some(Account::ApiKey { .. }) => {
-                // Only the target thread can establish its forwarding policy, including
-                // project opt-outs. Older servers that cannot report it keep omission.
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                crate::experimental_features::fetch(
-                    handle.clone(),
-                    Some(ThreadId::from_string(thread_id).map_err(|error| error.to_string())?),
-                    format!("tui-dynamic-{}", Uuid::new_v4()),
-                    tx,
-                );
-                if !rx.await.ok().and_then(Result::ok).is_some_and(|features| {
-                    features.into_iter().any(|feature| {
-                        feature.name == Feature::ApiKeyCyberAccessPrograms.key() && feature.enabled
-                    })
-                }) {
-                    return Ok(None);
-                }
-                true
-            }
-            None => false,
-        };
-    // Retain saved metadata while suppressing it for accounts that cannot use Daybreak.
-    let enabled = enabled && eligible;
-    let models = models
-        .map(|response| {
-            response
-                .data
-                .into_iter()
-                .map(crate::app_server_session::model_preset_from_api_model)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    crate::daybreak::program_for_turn(&models, model, eligible, enabled)
-        .map(|program| program.map(Into::into))
 }
 
 fn thread_summary(thread: &Thread) -> Value {

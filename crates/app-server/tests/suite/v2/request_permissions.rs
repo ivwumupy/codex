@@ -26,7 +26,6 @@ use codex_app_server_protocol::UserInput as V2UserInput;
 use codex_exec_server::ReadFileOptions;
 use codex_features::Feature;
 use codex_models_manager::model_info::model_info_from_slug;
-use codex_protocol::models::FileSystemPermissions;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
 use codex_protocol::request_permissions::RequestPermissionProfile;
@@ -37,21 +36,13 @@ use core_test_support::responses;
 use core_test_support::skip_if_wine_exec;
 use pretty_assertions::assert_eq;
 use serde_json::json;
-use test_case::test_case;
 use tokio::time::timeout;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// An awaited permission approval applies to the next command in the same code-mode cell.
-/// Strict review must also apply immediately, even to a command needing no additional access.
-#[test_case(PermissionGrantScope::Turn, false; "turn")]
-#[test_case(PermissionGrantScope::Session, false; "session")]
-#[test_case(PermissionGrantScope::Turn, true; "strict_review")]
+/// An awaited session grant applies to the next command in the same code-mode cell.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn code_mode_uses_permissions_approved_in_the_same_cell(
-    scope: PermissionGrantScope,
-    strict_auto_review: bool,
-) -> Result<()> {
+async fn code_mode_uses_permissions_approved_in_the_same_cell() -> Result<()> {
     skip_if_wine_exec!(
         Ok(()),
         "Wine does not emulate Windows restricted-token and ACL sandbox semantics"
@@ -65,7 +56,6 @@ async fn code_mode_uses_permissions_approved_in_the_same_cell(
         .with_root_config(r#"approvals_reviewer = "user""#)
         .enable_feature(Feature::RequestPermissionsTool)
         .enable_feature(Feature::CodeModeOnly)
-        .enable_feature(Feature::GuardianApproval)
         .write(codex_home.path())?;
     write_models_cache_with_models(codex_home.path(), vec![model_info_from_slug("gpt-5.4")])
         .await?;
@@ -77,11 +67,7 @@ async fn code_mode_uses_permissions_approved_in_the_same_cell(
     let fs = app.auto_env()?.environment().get_filesystem();
     let ThreadStartResponse { thread, .. } = app.start_thread(ThreadStartParams::default()).await?;
 
-    let command = if strict_auto_review {
-        "echo same-cell-review"
-    } else {
-        "echo same-cell-grant > granted.txt"
-    };
+    let command = "echo same-cell-grant > granted.txt";
     let mut events = vec![responses::sse(vec![
         responses::ev_response_created("same-cell"),
         responses::ev_custom_tool_call(
@@ -95,16 +81,6 @@ text(await tools.exec_command({{cmd: "{command}"}}));"#,
         ),
         responses::ev_completed("same-cell"),
     ])];
-    if strict_auto_review {
-        events.push(responses::sse(vec![
-            responses::ev_response_created("guardian-review"),
-            responses::ev_assistant_message(
-                "guardian-review",
-                r#"{"outcome":"deny","rationale":"same-cell command requires review"}"#,
-            ),
-            responses::ev_completed("guardian-review"),
-        ]));
-    }
     events.push(create_final_assistant_message_sse_response("done")?);
     let mock = responses::mount_sse_sequence(&server, events).await;
     let TurnStartResponse { turn } = app
@@ -133,17 +109,14 @@ text(await tools.exec_command({{cmd: "{command}"}}));"#,
         request_id,
         json!({
             "permissions": params.permissions,
-            "scope": scope,
-            "strictAutoReview": strict_auto_review,
+            "scope": PermissionGrantScope::Session,
         }),
     )
     .await?;
     let mut command_approved = false;
     loop {
         match timeout(DEFAULT_READ_TIMEOUT, app.read_next_message()).await?? {
-            JSONRPCMessage::Request(request)
-                if cfg!(windows) && !strict_auto_review && !command_approved =>
-            {
+            JSONRPCMessage::Request(request) if cfg!(windows) && !command_approved => {
                 // Without a Windows sandbox backend, command approval is still required.
                 // Check the grant before approving so stale same-cell permissions still fail.
                 let ServerRequest::CommandExecutionRequestApproval {
@@ -210,46 +183,23 @@ text(await tools.exec_command({{cmd: "{command}"}}));"#,
         .last()
         .expect("model continuation")
         .custom_tool_call_output("same-cell");
-    if strict_auto_review {
-        assert_eq!(
-            requests
-                .iter()
-                .filter(|request| {
-                    request.body_json()["client_metadata"]["x-openai-subagent"] == "guardian"
-                })
-                .count(),
-            1,
-            "strict review must apply to the next command in the same cell; output: {output}",
-        );
-        assert!(
-            output
-                .to_string()
-                .contains("same-cell command requires review")
-        );
-    } else {
-        let contents = fs
-            .read_file(
-                &cwd.join("granted.txt")?,
-                ReadFileOptions::default(),
-                /*sandbox*/ None,
-            )
-            .await
-            .with_context(|| {
-                format!("the approved same-cell command must write the file; output: {output}")
-            })?;
-        assert_eq!(String::from_utf8(contents)?.trim(), "same-cell-grant");
-    }
+    let contents = fs
+        .read_file(
+            &cwd.join("granted.txt")?,
+            ReadFileOptions::default(),
+            /*sandbox*/ None,
+        )
+        .await
+        .with_context(|| {
+            format!("the approved same-cell command must write the file; output: {output}")
+        })?;
+    assert_eq!(String::from_utf8(contents)?.trim(), "same-cell-grant");
     Ok(())
 }
 
-/// A step captures earlier RPC grants and keeps them after the active turn changes.
-/// The new turn inherits session grants but must request approval for turn-scoped grants.
-#[test_case(PermissionGrantScope::Turn; "turn")]
-#[test_case(PermissionGrantScope::Session; "session")]
+/// A step captures session grants and keeps them after the active turn changes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn steps_capture_permission_grants_and_preserve_their_scope(
-    scope: PermissionGrantScope,
-) -> Result<()> {
+async fn steps_capture_session_permission_grants() -> Result<()> {
     skip_if_wine_exec!(
         Ok(()),
         "Wine does not emulate Windows restricted-token and ACL sandbox semantics"
@@ -370,24 +320,7 @@ text(await tools.apply_patch("*** Begin Patch\n*** Add File: next.txt\n+next tur
                             );
                             app.send_response(
                                 request_id,
-                                json!({"permissions": params.permissions, "scope": scope}),
-                            )
-                            .await?;
-                        }
-                        ServerRequest::FileChangeRequestApproval { request_id, params } => {
-                            assert_eq!(
-                                (turn_index, scope, saw_approval),
-                                (1, PermissionGrantScope::Turn, false)
-                            );
-                            assert_eq!(
-                                (&params.thread_id, &params.turn_id),
-                                (&thread.id, &turn.id)
-                            );
-                            app.send_response(
-                                request_id,
-                                serde_json::to_value(FileChangeRequestApprovalResponse {
-                                    decision: FileChangeApprovalDecision::Decline,
-                                })?,
+                                json!({"permissions": params.permissions, "scope": PermissionGrantScope::Session}),
                             )
                             .await?;
                         }
@@ -414,10 +347,7 @@ text(await tools.apply_patch("*** Begin Patch\n*** Add File: next.txt\n+next tur
                 _ => {}
             }
         }
-        assert_eq!(
-            saw_approval,
-            turn_index == 0 || scope == PermissionGrantScope::Turn
-        );
+        assert_eq!(saw_approval, turn_index == 0);
         if turn_index == 0 {
             assert_eq!(
                 fs.read_file(
@@ -462,43 +392,21 @@ text(await tools.apply_patch("*** Begin Patch\n*** Add File: next.txt\n+next tur
         .await?,
         b"original turn\n"
     );
-    match scope {
-        PermissionGrantScope::Session => {
-            assert_eq!(
-                fs.read_file(
-                    &cwd.join("next.txt")?,
-                    ReadFileOptions::default(),
-                    /*sandbox*/ None
-                )
-                .await?,
-                b"next turn\n"
-            );
-        }
-        PermissionGrantScope::Turn => {
-            assert_eq!(
-                fs.read_file(
-                    &cwd.join("next.txt")?,
-                    ReadFileOptions::default(),
-                    /*sandbox*/ None
-                )
-                .await
-                .expect_err("the declined write must not create a file")
-                .kind(),
-                std::io::ErrorKind::NotFound,
-            );
-        }
-    }
+    assert_eq!(
+        fs.read_file(
+            &cwd.join("next.txt")?,
+            ReadFileOptions::default(),
+            /*sandbox*/ None
+        )
+        .await?,
+        b"next turn\n"
+    );
     Ok(())
 }
 
-/// Permission requests from a background cell still belong to its original turn.
-/// Its next operation must observe both the approved access and any strict-review requirement.
-#[test_case(false; "turn_grant")]
-#[test_case(true; "strict_review")]
+/// A background cell still receives its session grant when a later turn is active.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn background_cell_uses_permissions_requested_after_next_turn_starts(
-    strict_auto_review: bool,
-) -> Result<()> {
+async fn background_cell_uses_permissions_requested_after_next_turn_starts() -> Result<()> {
     skip_if_wine_exec!(
         Ok(()),
         "Wine does not emulate Windows restricted-token and ACL sandbox semantics"
@@ -512,7 +420,6 @@ async fn background_cell_uses_permissions_requested_after_next_turn_starts(
         .with_root_config(r#"approvals_reviewer = "user""#)
         .enable_feature(Feature::RequestPermissionsTool)
         .enable_feature(Feature::CodeModeOnly)
-        .enable_feature(Feature::GuardianApproval)
         .write(codex_home.path())?;
     let mut model = model_info_from_slug("gpt-5.4");
     model.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
@@ -525,11 +432,7 @@ async fn background_cell_uses_permissions_requested_after_next_turn_starts(
     let cwd = app.auto_env()?.selection().cwd.clone();
     let fs = app.auto_env()?.environment().get_filesystem();
     let ThreadStartResponse { thread, .. } = app.start_thread(ThreadStartParams::default()).await?;
-    let operation = if strict_auto_review {
-        r#"text(await tools.exec_command({cmd: "echo background-cell-review"}));"#
-    } else {
-        r#"text(await tools.apply_patch("*** Begin Patch\n*** Add File: granted.txt\n+background-cell-grant\n*** End Patch"));"#
-    };
+    let operation = r#"text(await tools.apply_patch("*** Begin Patch\n*** Add File: granted.txt\n+background-cell-grant\n*** End Patch"));"#;
     let started = r#"await tools.test_sync_tool({barrier: {
         id: "next-turn-started", participants: 2, timeout_ms: 60000
     }});"#;
@@ -587,22 +490,6 @@ await tools.request_permissions({{permissions: {{file_system: {{write: ["."]}}}}
         .and_then(|rest| rest.lines().next())
         .with_context(|| format!("background cell must yield: {output}"))?;
 
-    // Guardian and the parent may sample concurrently after the barrier releases.
-    let guardian_mock = responses::mount_sse_once_match(
-        &server,
-        wiremock::matchers::body_partial_json(json!({
-            "client_metadata": {"x-openai-subagent": "guardian"},
-        })),
-        responses::sse(vec![
-            responses::ev_response_created("guardian-review"),
-            responses::ev_assistant_message(
-                "guardian-review",
-                r#"{"outcome":"deny","rationale":"background command requires review"}"#,
-            ),
-            responses::ev_completed("guardian-review"),
-        ]),
-    )
-    .await;
     let mut events = vec![responses::sse(vec![
         responses::ev_response_created("next-turn"),
         responses::ev_custom_tool_call(
@@ -624,7 +511,7 @@ await tools.request_permissions({{permissions: {{file_system: {{write: ["."]}}}}
     events.push(create_final_assistant_message_sse_response(
         "next turn done",
     )?);
-    let mock = responses::mount_sse_sequence(&server, events).await;
+    let _mock = responses::mount_sse_sequence(&server, events).await;
     let TurnStartResponse { turn } = app
         .request(|request_id| ClientRequest::TurnStart {
             request_id,
@@ -653,8 +540,7 @@ await tools.request_permissions({{permissions: {{file_system: {{write: ["."]}}}}
                         request_id,
                         json!({
                             "permissions": params.permissions,
-                            "scope": PermissionGrantScope::Turn,
-                            "strictAutoReview": strict_auto_review,
+                            "scope": PermissionGrantScope::Session,
                         }),
                     )
                     .await?;
@@ -696,40 +582,15 @@ await tools.request_permissions({{permissions: {{file_system: {{write: ["."]}}}}
         Vec::<String>::new(),
         "A's approved write must not need a second approval after B starts"
     );
-    let requests = mock.requests();
-    if strict_auto_review {
-        assert_eq!(
-            guardian_mock
-                .requests()
-                .iter()
-                .filter(
-                    |request| request.body_json()["client_metadata"]["x-openai-subagent"]
-                        == "guardian"
-                )
-                .count(),
-            1,
-            "strict review must apply to A's next command after B starts"
-        );
-        let output = requests
-            .last()
-            .expect("next turn continuation")
-            .function_call_output("wait-background");
-        assert!(
-            output
-                .to_string()
-                .contains("background command requires review")
-        );
-    } else {
-        assert_eq!(
-            fs.read_file(
-                &cwd.join("granted.txt")?,
-                ReadFileOptions::default(),
-                /*sandbox*/ None
-            )
-            .await?,
-            b"background-cell-grant\n"
-        );
-    }
+    assert_eq!(
+        fs.read_file(
+            &cwd.join("granted.txt")?,
+            ReadFileOptions::default(),
+            /*sandbox*/ None
+        )
+        .await?,
+        b"background-cell-grant\n"
+    );
     Ok(())
 }
 
@@ -920,13 +781,7 @@ async fn request_permissions_round_trip() -> Result<()> {
     assert_eq!(
         response,
         RequestPermissionsResponse {
-            permissions: RequestPermissionProfile {
-                file_system: Some(FileSystemPermissions::from_read_write_path_uris(
-                    /*read*/ None,
-                    Some(vec![workspace_root.join("output")?]),
-                )),
-                ..Default::default()
-            },
+            permissions: RequestPermissionProfile::default(),
             scope: CorePermissionGrantScope::Turn,
             strict_auto_review: false,
         }

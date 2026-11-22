@@ -74,7 +74,6 @@ impl ModelResponseInterceptor for Permit {
                 let mut output_items = 0;
                 while let Some(event) = stream.next().await {
                     let metadata_event_type = match &event {
-                        Ok(ResponseEvent::ModelVerifications(_)) => Some("verification"),
                         Ok(ResponseEvent::TurnModerationMetadata(_)) => Some("moderation"),
                         Ok(ResponseEvent::SafetyBuffering(_)) => Some("buffering"),
                         Ok(ResponseEvent::GuardianAssessment(_)) => Some("guardian"),
@@ -322,7 +321,6 @@ async fn model_request_gates_websocket_output_but_not_warmup() -> Result<()> {
                 "type": "response.metadata", "response_id": "response",
                 "metadata": {
                     "guardian": {"item_id": "message", "requires_review": true},
-                    "openai_verification_recommendation": ["trusted_access_for_cyber"],
                     "openai_chatgpt_moderation_metadata": {"presentation": "inline"},
                     "type": "safety_buffering", "use_cases": ["cyber"],
                     "reasons": ["user_risk"], "future_metadata": true
@@ -332,7 +330,6 @@ async fn model_request_gates_websocket_output_but_not_warmup() -> Result<()> {
                 "type": "response.metadata", "response_id": "response",
                 "metadata": {
                     "guardian": {"item_id": "other", "requires_review": "false"},
-                    "openai_verification_recommendation": ["trusted_access_for_cyber"],
                     "openai_chatgpt_moderation_metadata": {"presentation": "inline"},
                     "type": "safety_buffering", "use_cases": ["cyber"],
                     "reasons": ["user_risk"]
@@ -388,11 +385,9 @@ async fn model_request_gates_websocket_output_but_not_warmup() -> Result<()> {
             .lock()
             .expect("metadata events mutex is not poisoned"),
         vec![
-            "verification",
             "moderation",
             "buffering",
             "guardian",
-            "verification",
             "moderation",
             "buffering",
         ]

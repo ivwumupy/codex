@@ -25,7 +25,6 @@ use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_rollout_trace::ThreadTraceContext;
@@ -196,22 +195,10 @@ impl AgentControl for LocalAgentControl {
         })
     }
 
-    fn interrupt(
-        &self,
-        caller: ThreadId,
-        target: AgentTarget,
-        version: MultiAgentVersion,
-    ) -> BoxFuture<'_, Result<AgentInfo>> {
+    fn interrupt(&self, caller: ThreadId, target: AgentTarget) -> BoxFuture<'_, Result<AgentInfo>> {
         Box::pin(async move {
             let target = self.resolve_target(caller, &target)?;
-            match version {
-                MultiAgentVersion::Disabled | MultiAgentVersion::V1 => {
-                    let snapshot = self.inspect_agent(target).await?;
-                    self.interrupt_agent(target).await?;
-                    Ok(snapshot)
-                }
-                MultiAgentVersion::V2 => self.interrupt_spawned_agent(caller, target).await,
-            }
+            self.interrupt_spawned_agent(caller, target).await
         })
     }
 
@@ -266,20 +253,12 @@ impl AgentControl for LocalAgentControl {
         })
     }
 
-    fn check_turn_admission(
-        &self,
-        version: MultiAgentVersion,
-        source: &SessionSource,
-    ) -> Result<()> {
-        self.ensure_execution_capacity(version, source)
+    fn check_turn_admission(&self, source: &SessionSource) -> Result<()> {
+        self.ensure_execution_capacity(source)
     }
 
-    fn admit_turn(
-        &self,
-        version: MultiAgentVersion,
-        source: &SessionSource,
-    ) -> Option<AgentExecutionGuard> {
-        self.execution_guard(version, source)
+    fn admit_turn(&self, source: &SessionSource) -> Option<AgentExecutionGuard> {
+        self.execution_guard(source)
     }
 
     fn record_usage(&self, usage: TokenUsage) -> BoxFuture<'_, Result<()>> {

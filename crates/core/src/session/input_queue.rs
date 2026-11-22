@@ -845,29 +845,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn input_queue_uses_latest_followup_choice_and_ignores_queue_only_mail() {
-        use codex_protocol::turn_input::CyberAccessProgram;
-
-        for latest in [Some(CyberAccessProgram::Standard), None] {
+    async fn input_queue_uses_latest_followup_options_and_ignores_queue_only_mail() {
+        for latest in [Some(vec!["tools".to_owned()]), None] {
             let input_queue = InputQueue::new();
-            for (trigger_turn, program) in [
-                (true, Some(CyberAccessProgram::DaybreakBlue)),
-                (true, latest),
-                (false, Some(CyberAccessProgram::DaybreakRed)),
+            for (trigger_turn, namespaces) in [
+                (true, Some(vec!["first".to_owned()])),
+                (true, latest.clone()),
+                (false, Some(vec!["queued".to_owned()])),
             ] {
                 input_queue
                     .enqueue_mailbox_communication(
                         make_mail(AgentPath::root(), AgentPath::root(), "task", trigger_turn)
                             .into(),
                         TurnStartOptions {
-                            cyber_access_program: program,
+                            direct_only_tool_namespaces: namespaces,
                             ..Default::default()
                         },
                     )
                     .await;
             }
             let (_, start_options) = input_queue.drain_mailbox_input_items().await;
-            assert_eq!(start_options.cyber_access_program, latest);
+            assert_eq!(start_options.direct_only_tool_namespaces, latest);
         }
     }
 

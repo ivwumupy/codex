@@ -15,7 +15,6 @@ use crate::thread_spawn::ThreadSpawnResult;
 use crate::tools::context::ToolInvocation;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::MultiAgentVersion;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::future::Future;
@@ -110,12 +109,11 @@ impl InvocationReservation {
         turn: &TurnContext,
         call_id: &str,
     ) -> Result<(), FunctionCallError> {
-        if turn.multi_agent_version != MultiAgentVersion::V2
-            || session
-                .services
-                .thread_extension_data
-                .get::<HostToolInvocationLookup>()
-                .is_none()
+        if session
+            .services
+            .thread_extension_data
+            .get::<HostToolInvocationLookup>()
+            .is_none()
         {
             return Ok(());
         }
@@ -213,8 +211,7 @@ pub(crate) async fn prepare(
 ) -> Result<PreparedChildContext, ThreadSpawnError> {
     with_live_invocation(thread, invocation, |step| async move {
         let turn = &step.turn;
-        let dynamic_tools =
-            inherited_dynamic_tools(thread, &turn.config, turn.multi_agent_version).await;
+        let dynamic_tools = inherited_dynamic_tools(thread, &turn.config).await;
         let state = thread.session.services.local_agent_runtime.upgrade()?;
         if !std::ptr::eq(
             state.get_thread(thread.session.thread_id).await?.as_ref(),

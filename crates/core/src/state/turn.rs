@@ -148,8 +148,6 @@ pub(crate) struct PendingRequestPermissions {
     pub(crate) tx_response: oneshot::Sender<RequestPermissionsResponse>,
     pub(crate) requested_permissions: RequestPermissionProfile,
     pub(crate) environment: TurnEnvironment,
-    /// Background cells can request permissions after a different turn becomes active.
-    pub(crate) turn_context: Arc<TurnContext>,
 }
 
 type PendingApprovals = SyncMutex<HashMap<String, PendingApproval>>;

@@ -82,12 +82,10 @@ impl App {
                 // `thread/read` does not include all thread settings, so do not carry
                 // thread-scoped state from the currently active session.
                 session.collaboration_mode = None;
-                session.daybreak_enabled = false;
             }
             session
         } else {
             ThreadSessionState {
-                daybreak_enabled: false,
                 windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
                 thread_id,
                 forked_from_id: None,
@@ -115,7 +113,6 @@ impl App {
         session.windows_sandbox_host =
             crate::windows_sandbox::host_from_environments(thread.environments.as_deref());
         session.thread_id = thread_id;
-        session.daybreak_enabled = thread.daybreak_enabled.unwrap_or(false);
         session.thread_name = thread.name.clone();
         session.model_provider_id = thread.model_provider.clone();
         session.set_cwd_retargeting_implicit_runtime_workspace_root(thread.cwd.clone());
@@ -173,7 +170,6 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
-            daybreak_enabled: false,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,
@@ -425,7 +421,6 @@ mod tests {
             section: None,
             section_entered_at: None,
             project_id: None,
-            daybreak_enabled: None,
             history_mode: Default::default(),
             model_provider: "read-provider".to_string(),
             model: None,

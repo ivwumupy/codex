@@ -58,7 +58,7 @@ fn render_agents_config_lines(config: &Config) -> Vec<Line<'static>> {
     vec![
         "".into(),
         "[features.multi_agent_v2]:".bold().into(),
-        format!("  - enabled = {}", config.features.enabled(codex_features::Feature::MultiAgentV2)).into(),
+        format!("  - disable_native_tools = {}", config.multi_agent_v2.disable_native_tools).into(),
         format!(
             "  - max_concurrent_threads_per_session = {}",
             config.multi_agent_v2.max_concurrent_threads_per_session

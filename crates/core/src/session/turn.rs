@@ -16,7 +16,6 @@ use crate::compact_remote_v2::run_inline_remote_auto_compact_task as run_inline_
 use crate::connectors;
 use crate::context::ContextualUserFragment;
 use crate::context_manager::rejected_audio;
-use crate::cyber_access_program;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::feedback_tags;
 use crate::hook_runtime::drain_async_hook_results;
@@ -482,7 +481,6 @@ pub(crate) async fn run_turn(
         .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: turn_context.model_info().slug.clone(),
-        cyber_access_program: turn_context.cyber_access_program,
         comp_hash: turn_context.model_info().comp_hash.clone(),
     }))
     .await;
@@ -1480,18 +1478,11 @@ async fn maybe_run_previous_model_inline_compact(
     if !should_compact_for_comp_hash_change && previous_model == turn_context.model_info().slug {
         return Ok(());
     }
-    let mut previous_model_turn_context = turn_context
-        .with_model(previous_model.clone(), &sess.services.models_manager)
-        .await;
-    // `with_model` preserves the current turn's access program. Restore the previous
-    // turn's program so compaction uses the same model/cyber_access_program pair as that turn.
-    // Combining the previous model with the current turn's program can produce a pair
-    // that the server rejects.
-    previous_model_turn_context.cyber_access_program = cyber_access_program::for_provider(
-        &previous_model_turn_context.config,
-        previous_turn_settings.cyber_access_program,
+    let previous_model_turn_context = Arc::new(
+        turn_context
+            .with_model(previous_model.clone(), &sess.services.models_manager)
+            .await,
     );
-    let previous_model_turn_context = Arc::new(previous_model_turn_context);
 
     let reason = if should_compact_for_comp_hash_change {
         CompactionReason::CompHashChanged
@@ -1748,7 +1739,6 @@ pub(crate) fn build_prompt(
             &turn_context.session_source,
         ),
         prompt_cache_ttl: turn_context.prompt_cache_ttl,
-        cyber_access_program: turn_context.cyber_access_program,
     }
 }
 
@@ -3159,15 +3149,6 @@ async fn try_run_sampling_request(
                     turn_context
                         .server_model_warning_emitted
                         .store(true, Ordering::Relaxed);
-                }
-            }
-            ResponseEvent::ModelVerifications(verifications) => {
-                if !turn_context
-                    .model_verification_emitted
-                    .swap(true, Ordering::Relaxed)
-                {
-                    sess.emit_model_verification(&turn_context, verifications)
-                        .await;
                 }
             }
             ResponseEvent::TurnModerationMetadata(metadata) => {

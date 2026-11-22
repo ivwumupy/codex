@@ -8,7 +8,6 @@ use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::tools::handlers::multi_agents_v2::message_tool::message_content;
 use codex_protocol::ThreadId;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::ToolSpec;
 use std::num::NonZeroUsize;
 
@@ -105,7 +104,6 @@ async fn handle_spawn_agent(
                 &call_id,
                 &turn.sub_id,
                 fork_mode.as_ref(),
-                MultiAgentVersion::V2,
             );
             collab_spawn_error(err)
         }

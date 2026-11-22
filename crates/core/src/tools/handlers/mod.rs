@@ -316,7 +316,7 @@ pub(super) fn implicit_granted_permissions(
     }
 }
 
-pub(super) fn apply_granted_turn_permissions(
+pub(super) fn apply_granted_session_permissions(
     step_context: &StepContext,
     environment: &TurnEnvironment,
     cwd: &PathUri,

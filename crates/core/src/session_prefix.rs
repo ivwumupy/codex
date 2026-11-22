@@ -57,13 +57,3 @@ pub(crate) fn format_guardian_interruption_message(
 #[cfg(test)]
 #[path = "session_prefix_tests.rs"]
 mod tests;
-
-pub(crate) fn format_subagent_context_line(
-    agent_reference: &str,
-    agent_nickname: Option<&str>,
-) -> String {
-    match agent_nickname.filter(|nickname| !nickname.is_empty()) {
-        Some(agent_nickname) => format!("- {agent_reference}: {agent_nickname}"),
-        None => format!("- {agent_reference}"),
-    }
-}

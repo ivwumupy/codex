@@ -6,7 +6,6 @@
 mod account;
 pub(crate) use account::SessionAccount;
 mod cloud_project;
-mod daybreak_api_key_compat;
 mod events;
 mod external_agent_config;
 pub(crate) mod fs;
@@ -413,7 +412,6 @@ pub(crate) struct AppServerSession {
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     prefetched_model_list: Option<RemoteHandle<Result<Vec<ModelPreset>>>>,
-    daybreak_api_key_compat: Arc<tokio::sync::Semaphore>,
     managed_new_thread_defaults: Option<NewThreadModelDefaults>,
     external_agent_config_import_id: Mutex<Option<String>>,
     dynamic_tool_mcp: Option<Arc<DynamicToolMcpServer>>,
@@ -633,7 +631,6 @@ impl AppServerSession {
             default_model: None,
             available_models: Vec::new(),
             prefetched_model_list: None,
-            daybreak_api_key_compat: Arc::new(tokio::sync::Semaphore::new(/*permits*/ 1)),
             managed_new_thread_defaults: None,
             external_agent_config_import_id: Mutex::default(),
             dynamic_tool_mcp: None,
@@ -759,33 +756,16 @@ impl AppServerSession {
         } else {
             None
         };
-        let mut thread_start_params = thread_start_params_from_config(
+        let thread_start_params = thread_start_params_from_config(
             &config,
             self.thread_params_mode(),
             self.remote_cwd_override(),
             /*session_start_source*/ None,
         );
-        let daybreak_launch_override = config
-            .config_layer_stack
-            .layers_high_to_low()
-            .find(|layer| layer.config.get("daybreak").is_some())
-            .is_some_and(|layer| {
-                matches!(
-                    layer.name,
-                    codex_config::ConfigLayerSource::SessionFlags
-                        | codex_config::ConfigLayerSource::User {
-                            profile: Some(_),
-                            ..
-                        }
-                )
-            });
-        thread_start_params.daybreak_enabled =
-            daybreak_launch_override.then_some(config.daybreak_enabled);
         let server = Arc::new(
             DynamicToolMcpServer::start(
                 self.request_handle(),
                 thread_start_params,
-                config.features.get().clone(),
                 app_event_tx,
                 status_updates,
                 worktrees,
@@ -987,18 +967,6 @@ impl AppServerSession {
                 requirements,
             );
         }
-        if matches!(account.account, Some(Account::ApiKey {})) {
-            available_models = self
-                .constrain_api_key_models(
-                    config,
-                    /*thread_id*/ None,
-                    requirements
-                        .as_ref()
-                        .and_then(|response| response.requirements.as_ref()),
-                    available_models,
-                )
-                .await;
-        }
         let allowed_approval_policies = requirements
             .as_ref()
             .and_then(|response| response.requirements.as_ref())
@@ -1132,8 +1100,6 @@ impl AppServerSession {
                 .model_provider_override
                 .clone()
                 .or(params.model_provider);
-            params.daybreak_enabled =
-                (config.daybreak_enabled && !config.ephemeral).then_some(true);
         }
         if let Some(selected_profile) = selected_profile {
             params.runtime_workspace_roots = None;
@@ -1566,9 +1532,6 @@ impl AppServerSession {
         if let Some(permissions) = selected_permissions {
             started.session.permission_profile = permissions;
         }
-        if presentation != ForkPresentation::Regular {
-            started.session.daybreak_enabled = false;
-        }
         started.session.fork_parent_title = fork_parent.and_then(|thread| thread.name);
         if self.task_tools_available(thread_id) {
             started.task_tools_available = true;
@@ -1762,7 +1725,6 @@ impl AppServerSession {
                 params: ThreadMetadataUpdateParams {
                     thread_id: thread_id.to_string(),
                     project_id: None,
-                    daybreak_enabled: None,
                     git_info: Some(ThreadMetadataGitInfoUpdateParams {
                         sha: None,
                         branch: Some(Some(branch)),
@@ -1860,7 +1822,6 @@ impl AppServerSession {
         service_tier: Option<Option<String>>,
         collaboration_mode: Option<codex_protocol::config_types::CollaborationMode>,
         output_schema: Option<serde_json::Value>,
-        cyber_access_program: Option<codex_app_server_protocol::CyberAccessProgram>,
         cloud_selection: Option<&user_message_submission::CloudModelSelection>,
     ) -> Result<TurnStartResponse> {
         let mut params = TurnStartParams {
@@ -1869,7 +1830,6 @@ impl AppServerSession {
             client_user_message_id: Some(client_user_message_id),
             input: items,
             output_schema,
-            cyber_access_program,
             ..TurnStartParams::default()
         };
         if self.thread_params_mode.settings_owner() == ThreadSettingsOwner::Client {
@@ -2322,7 +2282,6 @@ pub(crate) async fn start_thread_with_request_handle(
             .check_namespace(&request_handle, &config.cwd)
             .await?;
         launch_choices.configure(&mut params);
-        params.daybreak_enabled = (config.daybreak_enabled && !config.ephemeral).then_some(true);
         thread_tool_transport.configure(&mut params);
     }
     let (response, _history_support, task_tools_available) =
@@ -2407,7 +2366,6 @@ pub(crate) fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
             })
             .collect(),
         default_service_tier: model.default_service_tier,
-        available_access_programs: model.available_access_programs.map(Into::into),
         is_default: model.is_default,
         upgrade,
         show_in_picker: !model.hidden,
@@ -2924,7 +2882,7 @@ async fn thread_session_state_from_thread_start_response(
         config,
         thread_params_mode,
     );
-    let mut session = thread_session_state_from_thread_response(
+    thread_session_state_from_thread_response(
         &response.thread.id,
         crate::windows_sandbox::host_from_environments(response.thread.environments.as_deref()),
         response.thread.forked_from_id.clone(),
@@ -2943,12 +2901,7 @@ async fn thread_session_state_from_thread_start_response(
         response.reasoning_effort.clone(),
         local_settings,
     )
-    .await?;
-    session.daybreak_enabled = response
-        .thread
-        .daybreak_enabled
-        .unwrap_or(response.thread.ephemeral && config.daybreak_enabled);
-    Ok(session)
+    .await
 }
 
 async fn thread_session_state_from_thread_resume_response(
@@ -2983,7 +2936,6 @@ async fn thread_session_state_from_thread_resume_response(
     )
     .await?;
     session.collaboration_mode = response.collaboration_mode.clone().map(Box::new);
-    session.daybreak_enabled = response.thread.daybreak_enabled.unwrap_or(false);
     Ok(session)
 }
 
@@ -2999,7 +2951,7 @@ async fn thread_session_state_from_thread_fork_response(
         config,
         thread_params_mode,
     );
-    let mut session = thread_session_state_from_thread_response(
+    thread_session_state_from_thread_response(
         &response.thread.id,
         crate::windows_sandbox::host_from_environments(response.thread.environments.as_deref()),
         response.thread.forked_from_id.clone(),
@@ -3018,9 +2970,7 @@ async fn thread_session_state_from_thread_fork_response(
         response.reasoning_effort.clone(),
         local_settings,
     )
-    .await?;
-    session.daybreak_enabled = response.thread.daybreak_enabled.unwrap_or(false);
-    Ok(session)
+    .await
 }
 
 fn display_permission_profile_from_thread_response(
@@ -3084,7 +3034,6 @@ async fn thread_session_state_from_thread_response(
     );
     let (log_id, entry_count) = codex_message_history::history_metadata(&history_config).await;
     Ok(ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host,
         thread_id,
         forked_from_id,
@@ -3143,7 +3092,6 @@ mod tests {
     use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
     use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
     use codex_protocol::models::ManagedFileSystemPermissions;
-    use codex_protocol::openai_models::ModelAccessPrograms;
     use codex_protocol::openai_models::ModelServiceTier;
     use codex_protocol::openai_models::ReasoningEffort;
     use codex_protocol::permissions::FileSystemAccessMode;
@@ -3151,7 +3099,6 @@ mod tests {
     use codex_protocol::permissions::FileSystemSandboxEntry;
     use codex_protocol::permissions::FileSystemSpecialPath;
     use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_protocol::turn_input::CyberAccessProgram;
     use codex_utils_absolute_path::test_support::PathBufExt;
     use codex_utils_absolute_path::test_support::test_path_buf;
     use codex_utils_path_uri::LegacyAppPathString;
@@ -3213,17 +3160,7 @@ mod tests {
     #[tokio::test]
     async fn bootstrap_reuses_prefetched_account_without_another_account_read() -> Result<()> {
         let codex_home = tempfile::tempdir()?;
-        let mut config = build_config(&codex_home).await;
-        let mut catalog = codex_models_manager::bundled_models_response()?;
-        for model in &mut catalog.models {
-            model.available_access_programs = Some(ModelAccessPrograms {
-                cyber: vec![
-                    CyberAccessProgram::Standard,
-                    CyberAccessProgram::DaybreakBlue,
-                ],
-            });
-        }
-        config.model_catalog = Some(catalog);
+        let config = build_config(&codex_home).await;
         let mut app_server = crate::start_embedded_app_server_for_picker(&config).await?;
         let next_request_id = app_server.next_request_id;
         let account = GetAccountResponse {
@@ -3253,64 +3190,6 @@ mod tests {
             )
         );
 
-        // Account-specific catalog filtering at startup and before/after thread creation.
-        let models = bootstrap.available_models;
-        assert!(
-            models
-                .iter()
-                .any(|model| model.available_access_programs.is_some())
-        );
-        let client_home = tempfile::tempdir()?;
-        let key = "features.api_key_cyber_access_programs";
-        for (server_enabled, cli_override, forwarding_enabled) in [
-            (false, None, false),
-            (true, None, true),
-            (false, Some(true), true),
-            (true, Some(false), false),
-        ] {
-            std::fs::write(
-                codex_home.path().join("config.toml"),
-                format!("[features]\napi_key_cyber_access_programs = {server_enabled}\n"),
-            )?;
-            let client_config = ConfigBuilder::default()
-                .codex_home(client_home.path().to_path_buf())
-                .cli_overrides(
-                    cli_override
-                        .into_iter()
-                        .map(|value| (key.into(), value.into()))
-                        .collect(),
-                )
-                .build()
-                .await?;
-            let api_key = app_server
-                .bootstrap_with_account(
-                    &client_config,
-                    GetAccountResponse {
-                        user_id: None,
-                        account: Some(Account::ApiKey {}),
-                        requires_openai_auth: true,
-                        workspace_routing: None,
-                    },
-                )
-                .await?;
-            let mut expected = models.clone();
-            if !forwarding_enabled {
-                for model in &mut expected {
-                    model.available_access_programs = None;
-                }
-            }
-            assert_eq!(api_key.available_models, expected);
-            let thread = app_server.start_thread(&client_config).await?;
-            let refreshed = app_server
-                .constrain_api_key_models(
-                    &client_config,
-                    Some(thread.session.thread_id),
-                    /*requirements*/ None,
-                    models.clone(),
-                )
-                .await;
-            assert_eq!(refreshed, expected);
-        }
         app_server.shutdown().await?;
         Ok(())
     }
@@ -3422,7 +3301,6 @@ mod tests {
             additional_speed_tiers: Vec::new(),
             service_tiers: Vec::new(),
             default_service_tier: None,
-            available_access_programs: None,
             is_default: false,
         }
     }
@@ -3570,7 +3448,6 @@ mod tests {
         let mut config = build_config(&temp_dir).await;
         config.base_instructions = Some("local base instructions".to_string());
         config.developer_instructions = Some("local developer instructions".to_string());
-        config.daybreak_enabled = true;
         config.ephemeral = true;
         let thread_id = ThreadId::new();
         let (client, mut commands, _events) =
@@ -3670,7 +3547,6 @@ mod tests {
                     },
                 }),
                 Some(output_schema.clone()),
-                Some(CyberAccessProgram::DaybreakBlue.into()),
                 /*cloud_selection*/ None,
             ),
             async {
@@ -3702,7 +3578,6 @@ mod tests {
                 input,
                 turn_trigger: Some("user".to_string()),
                 output_schema: Some(output_schema),
-                cyber_access_program: Some(CyberAccessProgram::DaybreakBlue.into()),
                 ..TurnStartParams::default()
             }
         );
@@ -4365,8 +4240,8 @@ mod tests {
                 })
                 .build()
                 .await?;
-            let overrides = config_request_overrides_from_config(&config)
-                .expect("config overrides");
+            let overrides =
+                config_request_overrides_from_config(&config).expect("config overrides");
             assert_eq!(
                 (
                     ["model_reasoning_summary", "model_verbosity", "web_search"]
@@ -4905,7 +4780,6 @@ mod tests {
                 section: None,
                 section_entered_at: None,
                 project_id: None,
-                daybreak_enabled: None,
                 history_mode: Default::default(),
                 model_provider: "openai".to_string(),
                 model: None,

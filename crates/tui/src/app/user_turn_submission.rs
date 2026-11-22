@@ -46,27 +46,9 @@ pub(super) async fn try_submit_user_turn(
     };
     let original_active = app.active_turn_id_for_thread(thread_id).await;
     let mut active = original_active.clone();
-    let preflight = |model: &str| {
-        let enabled = app.chat_widget.daybreak_enabled
-            && !app.chat_widget.side_conversation_active()
-            && !app.side_threads.contains_key(&thread_id);
-        crate::daybreak::program_for_turn(
-            &app.chat_widget.model_catalog().models,
-            model,
-            app.chat_widget.daybreak_account_eligible(),
-            enabled,
-        )
-    };
     let start_settings = || turn_start_settings(app, thread_id, op);
     let result = app_server
-        .submit_user_message(
-            thread_id,
-            op,
-            intent,
-            &mut active,
-            preflight,
-            start_settings,
-        )
+        .submit_user_message(thread_id, op, intent, &mut active, start_settings)
         .await;
     if active != original_active
         && let Some(channel) = app.thread_event_channels.get(&thread_id)
@@ -104,15 +86,6 @@ pub(super) async fn try_submit_user_turn(
                 app.chat_widget
                     .user_message_admitted(admission, op, client_user_message_id);
             }
-        }
-        Err(UserMessageSubmissionFailure::Preflight(message)) if !ordinary => {
-            if !app.chat_widget.handle_turn_start_rejection(message.clone()) {
-                app.chat_widget.add_error_message(message);
-            }
-        }
-        Err(UserMessageSubmissionFailure::Preflight(message)) => {
-            app.chat_widget
-                .restore_rejected_user_message(client_user_message_id, message);
         }
         Err(UserMessageSubmissionFailure::Rejected(error)) => {
             if error

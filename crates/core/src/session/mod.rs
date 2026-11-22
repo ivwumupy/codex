@@ -375,8 +375,6 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
 use codex_protocol::protocol::ModelRerouteEvent;
 use codex_protocol::protocol::ModelRerouteReason;
-use codex_protocol::protocol::ModelVerification;
-use codex_protocol::protocol::ModelVerificationEvent;
 use codex_protocol::protocol::NetworkApprovalContext;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RateLimitSnapshot;
@@ -538,32 +536,13 @@ pub(crate) struct SessionSpawnArgs {
     pub(crate) thread_store: Arc<dyn ThreadStore>,
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
     pub(crate) external_time_provider: Option<Arc<dyn TimeProvider>>,
-    pub(crate) inherited_multi_agent_version: Option<MultiAgentVersion>,
     pub(crate) git_enrichment_policy: GitEnrichmentPolicy,
     pub(crate) windows_sandbox_proxy_settings_mode:
         codex_sandboxing::WindowsSandboxProxySettingsMode,
 }
 
-pub(crate) fn resolve_multi_agent_version(
-    conversation_history: &InitialHistory,
-    inherited_multi_agent_version: Option<MultiAgentVersion>,
-) -> Option<MultiAgentVersion> {
-    if inherited_multi_agent_version == Some(MultiAgentVersion::Disabled) {
-        return Some(MultiAgentVersion::Disabled);
-    }
-
-    conversation_history
-        .get_multi_agent_version()
-        .or(inherited_multi_agent_version)
-        .map(|version| match version {
-            MultiAgentVersion::V1 => MultiAgentVersion::Disabled,
-            version => version,
-        })
-}
-
 pub(crate) const INITIAL_SUBMIT_ID: &str = "";
 pub(crate) const SUBMISSION_CHANNEL_CAPACITY: usize = 512;
-const CYBER_VERIFY_URL: &str = "https://chatgpt.com/cyber";
 const CYBER_SAFETY_URL: &str = "https://developers.openai.com/codex/concepts/cyber-safety";
 
 pub(crate) fn assign_missing_item_id(
@@ -703,7 +682,6 @@ impl Session {
             thread_store,
             attestation_provider,
             external_time_provider,
-            inherited_multi_agent_version,
             git_enrichment_policy,
             windows_sandbox_proxy_settings_mode,
         } = args;
@@ -840,9 +818,6 @@ impl Session {
             token_budget::apply_model_defaults(Arc::make_mut(&mut config), &model_info);
         }
         let configured_config = Arc::clone(&config);
-        let multi_agent_version = config.multi_agent_version_override().or_else(|| {
-            resolve_multi_agent_version(&conversation_history, inherited_multi_agent_version)
-        });
         let history_mode = conversation_history.get_history_mode(
             requested_history_mode.unwrap_or_else(|| thread_store.default_history_mode()),
         );
@@ -1027,7 +1002,6 @@ impl Session {
             parent_rollout_thread_trace,
             attestation_provider,
             external_time_provider,
-            multi_agent_version,
             git_enrichment_policy,
             windows_sandbox_proxy_settings_mode,
         ))
@@ -1330,7 +1304,8 @@ impl Session {
             FEATURES
                 .iter()
                 .filter(|spec| {
-                    spec.stage.experimental_menu_description().is_some() && config.features.enabled(spec.id)
+                    spec.stage.experimental_menu_description().is_some()
+                        && config.features.enabled(spec.id)
                 })
                 .map(|spec| spec.key)
                 .chain(["remote_compaction_v2"])
@@ -2677,14 +2652,13 @@ impl Session {
             return;
         }
 
-        let notify_native_parent = turn_context.multi_agent_version == MultiAgentVersion::V2
-            && matches!(
-                &turn_context.session_source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                    agent_path: Some(_),
-                    ..
-                })
-            );
+        let notify_native_parent = matches!(
+            &turn_context.session_source,
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_path: Some(_),
+                ..
+            })
+        );
         let reporter = self
             .outcome_reporting
             .as_ref()
@@ -3274,7 +3248,6 @@ impl Session {
                 cancellation_token: Some(cancellation_token.clone()),
                 call_id: call_id.clone(),
                 tool_name: ToolName::plain("request_permissions"),
-                strict_auto_review: false,
                 approval_reason: None,
                 retry_reason: None,
                 network_approval_context: None,
@@ -3326,10 +3299,9 @@ impl Session {
                     response,
                     &context,
                 );
-                self.record_granted_request_permissions_for_turn(
+                self.record_session_permission_grant(
                     &response,
                     &environment.selection.environment_id,
-                    turn_context,
                 );
                 return Some(response);
             }
@@ -3348,7 +3320,6 @@ impl Session {
                             tx_response,
                             requested_permissions: requested_permissions.clone(),
                             environment: environment.clone(),
-                            turn_context: Arc::clone(turn_context),
                         },
                     )
                 }
@@ -3495,10 +3466,9 @@ impl Session {
                     response,
                     &sandbox_context.policy_context(),
                 );
-                self.record_granted_request_permissions_for_turn(
+                self.record_session_permission_grant(
                     &response,
                     &entry.environment.selection.environment_id,
-                    &entry.turn_context,
                 );
                 entry.tx_response.send(response).ok();
             }
@@ -3513,7 +3483,7 @@ impl Session {
         response: RequestPermissionsResponse,
         context: &FileSystemSandboxPolicyContext<'_>,
     ) -> RequestPermissionsResponse {
-        if response.strict_auto_review && matches!(response.scope, PermissionGrantScope::Session) {
+        if response.strict_auto_review || response.scope == PermissionGrantScope::Turn {
             return RequestPermissionsResponse {
                 permissions: RequestPermissionProfile::default(),
                 scope: PermissionGrantScope::Turn,
@@ -3533,54 +3503,36 @@ impl Session {
             )
             .into(),
             scope: response.scope,
-            strict_auto_review: response.strict_auto_review,
+            strict_auto_review: false,
         }
     }
 
-    fn record_granted_request_permissions_for_turn(
+    fn record_session_permission_grant(
         &self,
         response: &RequestPermissionsResponse,
         environment_id: &str,
-        turn_context: &TurnContext,
     ) {
-        if response.permissions.is_empty() {
-            return;
-        }
-        match response.scope {
-            PermissionGrantScope::Turn => {
-                let permissions: AdditionalPermissionProfile = response.permissions.clone().into();
-                turn_context.record_granted_permissions(
-                    environment_id,
-                    permissions,
-                    response.strict_auto_review,
-                );
-            }
-            PermissionGrantScope::Session => {
-                self.services.record_granted_permissions(
-                    environment_id,
-                    response.permissions.clone().into(),
-                );
-                self.mark_mcp_runtime_dirty(McpRefreshReason::SessionPermissionsGranted);
-            }
+        if response.scope == PermissionGrantScope::Session && !response.permissions.is_empty() {
+            self.services
+                .record_granted_permissions(environment_id, response.permissions.clone().into());
+            self.mark_mcp_runtime_dirty(McpRefreshReason::SessionPermissionsGranted);
         }
     }
 
-    pub(crate) async fn active_turn_context_and_strict_auto_review(
+    pub(crate) async fn active_turn_settings_and_environments(
         &self,
     ) -> Option<(
         Arc<TurnContext>,
         Arc<ResolvedStepSettings>,
         TurnEnvironmentSnapshot,
-        bool,
     )> {
         let active = self.active_turn.lock().await;
         let active = active.as_ref()?;
         let task = active.task.as_ref()?;
         let turn_context = Arc::clone(&task.turn_context);
         let settings = turn_context.next_step_settings.load_full();
-        let strict_auto_review = turn_context.strict_auto_review_enabled();
         let environments = self.services.turn_environments.snapshot_now();
-        Some((turn_context, settings, environments, strict_auto_review))
+        Some((turn_context, settings, environments))
     }
 
     #[expect(
@@ -4096,11 +4048,7 @@ impl Session {
             let ready_selected_capability_roots =
                 Self::ready_selected_capability_roots(&selected_capability_roots);
             let (executor_capability_discovery_v2, inventory_changed) = self
-                .executor_capability_discovery_for_step_v2(
-                    &turn_context.config,
-                    &environments,
-                    /*skill_turn*/ None,
-                )
+                .executor_capability_discovery_for_step_v2(&turn_context.config, &environments)
                 .await;
             let v2_snapshots = executor_capability_discovery_v2.as_ref();
             let (executor_capability_discovery, discovery_recovered) = if v2_snapshots.is_some() {
@@ -4111,7 +4059,6 @@ impl Session {
                     &selected_capability_roots,
                     &environments,
                     executor_capability_discovery_v2.as_deref(),
-                    /*skill_turn*/ None,
                 )
                 .await
             };
@@ -4131,37 +4078,6 @@ impl Session {
                 self.host_skills_for_step(&turn_context, &environments)
                     .await,
             );
-            // Only skill discovery may use a turn's temporary file access. Plugin servers and
-            // hooks use the session inventory above because they can outlive the step.
-            let turn_skill_discovery =
-                if let Some(grants) = turn_context.turn_skill_filesystem_grants(&environments) {
-                    if turn_context
-                        .config
-                        .features
-                        .enabled(Feature::SkillCatalogDeltas)
-                    {
-                        extension_data.insert(grants);
-                    }
-                    let (v2, _) = self
-                        .executor_capability_discovery_for_step_v2(
-                            &turn_context.config,
-                            &environments,
-                            Some(&turn_context),
-                        )
-                        .await;
-                    let (v1, _) = self
-                        .executor_capability_discovery_for_step(
-                            &turn_context.config,
-                            &selected_capability_roots,
-                            &environments,
-                            v2.as_deref(),
-                            Some(&turn_context),
-                        )
-                        .await;
-                    Some((v1, v2))
-                } else {
-                    None
-                };
             if let Some(messages) = settings
                 .model_info
                 .model_messages
@@ -4225,49 +4141,28 @@ impl Session {
             };
             extension_data.insert(selected_capability_roots);
             let selected_environments = environments.all_selections();
-            let select_plugins = |discovery, discovery_v2| {
-                self.services.mcp_manager.selected_plugins_for_step(
+            let selected_plugins = self
+                .services
+                .mcp_manager
+                .selected_plugins_for_step(
                     codex_extension_api::McpServerContributionContext::for_step(
                         turn_context.config.as_ref(),
                         &self.services.mcp_thread_init,
                         &self.services.thread_extension_data,
                         &turn_context.originator,
                         &ready_selected_capability_roots,
-                        discovery,
-                        discovery_v2,
+                        executor_capability_discovery.as_deref(),
+                        executor_capability_discovery_v2.as_deref(),
                     )
                     .with_session_source(&turn_context.session_source)
                     .with_selected_environments(&selected_environments),
                     &mcp.config().plugins,
                     &turn_context.disabled_plugin_ids,
                 )
-            };
-            // Resolve skill ownership from the same inventory as skill discovery.
-            let (skill_discovery, skill_discovery_v2) = match &turn_skill_discovery {
-                Some((v1, v2)) => (v1.as_deref(), v2.as_deref()),
-                None => (
-                    executor_capability_discovery.as_deref(),
-                    executor_capability_discovery_v2.as_deref(),
-                ),
-            };
-            let selected_plugins = select_plugins(skill_discovery, skill_discovery_v2).await;
-            // V2 hooks match accepted installations from the session inventory. V1 hooks
-            // only need the explicit disabled IDs, already present in selected_plugins.
-            let session_plugins =
-                if turn_skill_discovery.is_some() && executor_capability_discovery_v2.is_some() {
-                    Some(
-                        select_plugins(
-                            executor_capability_discovery.as_deref(),
-                            executor_capability_discovery_v2.as_deref(),
-                        )
-                        .await,
-                    )
-                } else {
-                    None
-                };
+                .await;
             let executor_hook_sources = crate::hook_runtime::prepare_executor_hook_sources(
                 &mcp,
-                session_plugins.as_ref().unwrap_or(&selected_plugins),
+                &selected_plugins,
                 executor_capability_discovery.as_deref(),
                 executor_capability_discovery_v2.as_deref(),
             );
@@ -4295,8 +4190,9 @@ impl Session {
                     .prepare_for_step(codex_extension_api::StepPreparationInput {
                         turn_id: &turn_context.sub_id,
                         ready_selected_capability_roots: &accessed_roots,
-                        executor_capability_discovery: skill_discovery,
-                        executor_capability_discovery_v2: skill_discovery_v2,
+                        executor_capability_discovery: executor_capability_discovery.as_deref(),
+                        executor_capability_discovery_v2: executor_capability_discovery_v2
+                            .as_deref(),
                         selected_plugins: &selected_plugins,
                         session_store: &self.services.session_extension_data,
                         thread_store: &self.services.thread_extension_data,
@@ -4453,7 +4349,7 @@ impl Session {
         warn!("server reported model {server_model} while requested model was {requested_model}");
 
         let warning_message = format!(
-            "Your account was flagged for potentially high-risk cyber activity and this request was routed to gpt-5.2 as a fallback. To regain access to gpt-5.3-codex, apply for trusted access: {CYBER_VERIFY_URL} or learn more: {CYBER_SAFETY_URL}"
+            "Your account was flagged for potentially high-risk cyber activity and this request was routed to gpt-5.2 as a fallback. Learn more: {CYBER_SAFETY_URL}"
         );
 
         self.send_event(
@@ -4474,18 +4370,6 @@ impl Session {
         )
         .await;
         true
-    }
-
-    pub(crate) async fn emit_model_verification(
-        self: &Arc<Self>,
-        turn_context: &Arc<TurnContext>,
-        verifications: Vec<ModelVerification>,
-    ) {
-        self.send_event(
-            turn_context,
-            EventMsg::ModelVerification(ModelVerificationEvent { verifications }),
-        )
-        .await;
     }
 
     pub(crate) async fn emit_turn_moderation_metadata(
@@ -4674,7 +4558,7 @@ impl Session {
                         thread_id: self.thread_id(),
                         tools: state.persisted_dynamic_tools.to_vec(),
                     })),
-                    multi_agent_version: self.multi_agent_version(),
+                    multi_agent_version: Some(MultiAgentVersion::V2),
                     last_started_turn_id: state.last_started_turn_id.clone(),
                     turn_attribution: state.turn_attribution.clone(),
                     previous_turn_settings: state.previous_turn_settings(),
@@ -4734,31 +4618,6 @@ impl Session {
             .step_settings
             .collaboration_mode
             .clone()
-    }
-
-    pub(crate) fn multi_agent_version(&self) -> Option<MultiAgentVersion> {
-        self.multi_agent_version.get().copied()
-    }
-
-    pub(crate) fn set_multi_agent_version_if_unset(
-        &self,
-        multi_agent_version: MultiAgentVersion,
-    ) -> MultiAgentVersion {
-        *self.multi_agent_version.get_or_init(|| multi_agent_version)
-    }
-
-    pub(crate) fn resolve_multi_agent_version_for_model(
-        &self,
-        model_info: &ModelInfo,
-        config: &Config,
-    ) -> MultiAgentVersion {
-        if let Some(multi_agent_version) = self.multi_agent_version() {
-            return config.multi_agent_version_for_model(Some(multi_agent_version));
-        }
-
-        let selected = config.multi_agent_version_for_model(model_info.multi_agent_version);
-
-        self.set_multi_agent_version_if_unset(selected)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(item_count = items.len()))]

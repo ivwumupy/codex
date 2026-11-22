@@ -55,8 +55,7 @@ use uuid::Uuid;
 async fn projects_list_by_recency_and_preserve_metadata_timestamps() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
@@ -208,8 +207,7 @@ async fn projects_list_by_recency_and_preserve_metadata_timestamps() -> Result<(
 async fn projects_persist_and_assign_threads() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let root = AbsolutePathBuf::from_absolute_path(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -357,7 +355,6 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
             params: ThreadMetadataUpdateParams {
                 thread_id: started.thread.id.clone(),
                 project_id: Some(String::new()),
-                daybreak_enabled: None,
                 git_info: None,
             },
         })
@@ -408,7 +405,6 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
             params: ThreadMetadataUpdateParams {
                 thread_id: started.thread.id.clone(),
                 project_id: Some(created.project.id.clone()),
-                daybreak_enabled: None,
                 git_info: None,
             },
         })
@@ -461,7 +457,6 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
             params: ThreadMetadataUpdateParams {
                 thread_id: started.thread.id.clone(),
                 project_id: Some(created.project.id.clone()),
-                daybreak_enabled: None,
                 git_info: None,
             },
         })
@@ -661,8 +656,7 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
 async fn deleted_project_is_dropped_before_first_durable_thread_persistence() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
@@ -754,8 +748,7 @@ async fn deleted_project_is_dropped_before_first_durable_thread_persistence() ->
 async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
@@ -905,8 +898,7 @@ async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result
 async fn projects_validate_filters_cursors_and_sqlite_less_assignment() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
@@ -959,7 +951,6 @@ async fn projects_validate_filters_cursors_and_sqlite_less_assignment() -> Resul
         .send_thread_metadata_update_request(ThreadMetadataUpdateParams {
             thread_id: started.thread.id.clone(),
             project_id: Some(Uuid::now_v7().to_string()),
-            daybreak_enabled: None,
             git_info: Some(ThreadMetadataGitInfoUpdateParams {
                 sha: Some(Some("abc123".to_string())),
                 branch: None,
@@ -1044,8 +1035,7 @@ async fn projects_validate_filters_cursors_and_sqlite_less_assignment() -> Resul
 async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
-        .write(codex_home.path())?;
+    MockResponsesConfig::new(&responses.uri()).write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()

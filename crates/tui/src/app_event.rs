@@ -1289,27 +1289,11 @@ pub(crate) enum AppEvent {
         service_tier: Option<String>,
     },
 
-    /// Persist the current thread's Daybreak preference and the new-thread default.
-    PersistDaybreakSelection {
-        thread_id: ThreadId,
-        enabled: bool,
-    },
-    /// Disable Daybreak after explicit account-scoped metadata excludes it for the selected model.
-    DisableUnavailableDaybreak {
-        thread_id: ThreadId,
-        model: String,
-    },
-
     /// Fetch the current catalog even when cached models produce no picker.
     FetchModels {
         request_id: uuid::Uuid,
     },
     ModelsLoaded {
-        request_id: uuid::Uuid,
-        result: Result<Vec<ModelPreset>, String>,
-    },
-    /// Finished the API-key compatibility check; do not check the same catalog again.
-    ApiKeyCompatModelsLoaded {
         request_id: uuid::Uuid,
         result: Result<Vec<ModelPreset>, String>,
     },

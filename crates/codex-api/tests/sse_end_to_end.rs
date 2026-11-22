@@ -16,7 +16,6 @@ use codex_client::Response;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::ModelVerification;
 use futures::StreamExt;
 use http::HeaderMap;
 use http::StatusCode;
@@ -366,7 +365,6 @@ async fn responses_stream_dispatches_mixed_metadata_independently() -> Result<()
         json!({
             "type": "response.metadata", "response_id": "resp_1",
             "metadata": {
-                "openai_verification_recommendation": ["trusted_access_for_cyber"],
                 "openai_chatgpt_moderation_metadata": {"presentation": "inline"},
                 "type": "safety_buffering", "use_cases": ["cyber"],
                 "reasons": ["user_risk"], "retry_model": "gpt-fast",
@@ -377,7 +375,6 @@ async fn responses_stream_dispatches_mixed_metadata_independently() -> Result<()
         json!({
             "type": "response.metadata", "response_id": "resp_1",
             "metadata": {
-                "openai_verification_recommendation": ["trusted_access_for_cyber"],
                 "openai_chatgpt_moderation_metadata": {"presentation": "inline"},
                 "type": "safety_buffering", "use_cases": ["cyber"],
                 "reasons": ["user_risk"], "retry_model": "gpt-fast",
@@ -387,7 +384,6 @@ async fn responses_stream_dispatches_mixed_metadata_independently() -> Result<()
         json!({
             "type": "response.metadata", "response_id": "resp_1",
             "metadata": {
-                "openai_verification_recommendation": false,
                 "guardian": {"item_id": "fc_3", "requires_review": true}
             }
         }),
@@ -414,11 +410,9 @@ async fn responses_stream_dispatches_mixed_metadata_independently() -> Result<()
         }
     }
     let [
-        ResponseEvent::ModelVerifications(verifications),
         ResponseEvent::TurnModerationMetadata(moderation),
         ResponseEvent::SafetyBuffering(buffering),
         ResponseEvent::GuardianAssessment(low_risk),
-        ResponseEvent::ModelVerifications(other_verifications),
         ResponseEvent::TurnModerationMetadata(other_moderation),
         ResponseEvent::SafetyBuffering(other_buffering),
         ResponseEvent::GuardianAssessment(review_required),
@@ -427,11 +421,6 @@ async fn responses_stream_dispatches_mixed_metadata_independently() -> Result<()
     else {
         panic!("unexpected metadata delivery: {events:?}");
     };
-    assert_eq!(
-        verifications,
-        &vec![ModelVerification::TrustedAccessForCyber]
-    );
-    assert_eq!(other_verifications, verifications);
     assert_eq!(moderation.metadata, json!({"presentation": "inline"}));
     assert_eq!(other_moderation, moderation);
     assert_eq!(

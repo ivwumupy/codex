@@ -17,12 +17,10 @@ use pretty_assertions::assert_eq;
 #[tokio::test]
 async fn resumed_initial_messages_render_history() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ false);
 
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
-    let mut configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: true,
+    let configured = crate::session_state::ThreadSessionState {
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -45,60 +43,11 @@ async fn resumed_initial_messages_render_history() {
         rollout_path: Some(rollout_file.path().to_path_buf()),
     };
 
-    // The first attachment can change project credentials even with an in-process server.
-    chat.status_account_display = Some(StatusAccountDisplay::ApiKey);
-    let mut model = crate::test_support::TEST_MODEL_PRESETS[0].clone();
-    model.available_access_programs = Some(codex_protocol::openai_models::ModelAccessPrograms {
-        cyber: vec![codex_protocol::turn_input::CyberAccessProgram::Standard],
-    });
-    chat.model_catalog = Arc::new(ModelCatalog::new(vec![model]));
-    chat.handle_thread_session(configured.clone());
-    assert!(
-        chat.model_catalog
-            .models
-            .iter()
-            .all(|model| model.available_access_programs.is_none()),
-        "access from the launch directory must not carry over to the attached project"
-    );
-    assert!(!chat.daybreak_enabled);
-    insta::assert_snapshot!(
-        drain_insert_history(&mut rx).into_iter().flatten()
-            .map(|line| line.to_string())
-            .filter(|line| line.contains("Daybreak"))
-            .collect::<Vec<_>>().join("\n"),
-        @""
-    );
-
-    // A saved On preference cannot bypass the API-key gate.
-    chat.status_account_display = Some(StatusAccountDisplay::ApiKey);
-    chat.set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, /*enabled*/ false);
-    chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ true);
-    configured.thread_id = ThreadId::new();
-    chat.handle_thread_session(configured.clone());
-    assert!(!chat.daybreak_enabled);
-    insta::assert_snapshot!(
-        drain_insert_history(&mut rx).into_iter().flatten()
-            .map(|line| line.to_string())
-            .filter(|line| line.contains("Daybreak"))
-            .collect::<Vec<_>>().join("\n"),
-        @""
-    );
-
-    // Session hydration can precede the account update on ChatGPT sign-in.
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ true);
     chat.show_welcome_banner = false;
     chat.local_settings.tui.show_tooltips = false;
     chat.config.cwd = configured.cwd.clone();
     chat.transcript.active_cell = Some(ChatWidget::placeholder_session_header_cell(&chat.config));
-    configured.thread_id = ThreadId::new();
     chat.handle_thread_session(configured);
-    assert!(chat.daybreak_enabled);
-    chat.update_account_state(
-        /*status_account_display*/ None, /*plan_type*/ None,
-        /*has_chatgpt_account*/ true, /*has_codex_backend_auth*/ true,
-    );
-    assert!(chat.daybreak_enabled);
     replay_user_message_text(
         &mut chat,
         "user-1",
@@ -123,7 +72,7 @@ async fn resumed_initial_messages_render_history() {
             &test_path_display("/home/user/project"),
             "/home/user/project",
         );
-    insta::assert_snapshot!("resumed_daybreak_banner", history);
+    insta::assert_snapshot!("resumed_initial_messages", history);
 }
 
 #[tokio::test]
@@ -183,7 +132,6 @@ async fn restored_conversation_ultra_remains_selected_after_switching_to_plan() 
     chat.set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::High));
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -506,7 +454,6 @@ async fn replayed_user_message_preserves_text_elements_and_local_images() {
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -579,7 +526,6 @@ async fn replayed_user_message_preserves_remote_image_urls() {
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -686,7 +632,6 @@ async fn session_configured_syncs_widget_config_permissions_and_cwd() {
         .expect("permission profile should project to legacy sandbox policy");
     let expected_sandbox = SandboxPolicy::from(expected_core_sandbox);
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -767,7 +712,6 @@ async fn session_configured_preserves_profile_workspace_roots() {
     let session_permission_profile = PermissionProfile::workspace_write()
         .materialize_project_roots_with_workspace_roots(&session_effective_workspace_roots);
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -815,7 +759,6 @@ async fn session_configured_external_sandbox_keeps_external_runtime_policy() {
         network_access: NetworkAccess::Restricted,
     };
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -857,7 +800,6 @@ async fn replayed_user_message_with_only_remote_images_renders_history_cell() {
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -918,7 +860,6 @@ async fn replayed_user_message_with_only_local_images_renders_history_cell() {
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
     let configured = crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -1258,7 +1199,6 @@ async fn replayed_reasoning_item_preserves_summary_parts_and_hides_raw_reasoning
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.show_raw_agent_reasoning = false;
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -1310,7 +1250,6 @@ async fn replayed_reasoning_item_shows_raw_reasoning_when_enabled() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.show_raw_agent_reasoning = true;
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,

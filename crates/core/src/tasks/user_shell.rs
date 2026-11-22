@@ -224,7 +224,7 @@ pub(crate) async fn execute_user_shell_command(
         sandbox: SandboxType::None,
         windows_sandbox_policy_cwd: cwd.clone().into(),
         windows_sandbox_workspace_roots: Vec::new(),
-        windows_sandbox_level: turn_context.windows_sandbox_level,
+        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         permission_profile,
         windows_sandbox_filesystem_overrides: None,
         arg0: None,

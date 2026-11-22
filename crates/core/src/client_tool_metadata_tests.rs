@@ -58,7 +58,6 @@ fn request_with_metadata_and_source(
         prompt_cache_options: None,
         text: None,
         client_metadata: Some(HashMap::from([("padding".to_string(), "x".to_string())])),
-        access_programs: None,
     }
 }
 

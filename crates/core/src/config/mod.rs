@@ -117,7 +117,6 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_rmcp_client::McpOAuthRefreshMode;
 use codex_sandboxing::SandboxType;
@@ -613,9 +612,6 @@ pub struct Config {
 
     /// Optional override of model selection.
     pub model: Option<String>,
-
-    /// Default Daybreak preference for new threads and non-interactive turns.
-    pub daybreak_enabled: bool,
 
     /// Effective service tier request id preference for new turns.
     /// `default` means the user explicitly selected standard routing.
@@ -1637,30 +1633,6 @@ impl Config {
             && self
                 .features
                 .enabled(Feature::GuardianNativeMultiAgentHistory)
-    }
-
-    pub(crate) fn multi_agent_version_override(&self) -> Option<MultiAgentVersion> {
-        if self.features.enabled(Feature::MultiAgentV2) {
-            Some(MultiAgentVersion::V2)
-        } else if self.features.multi_agent_v2_disabled() {
-            Some(MultiAgentVersion::Disabled)
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn multi_agent_version_from_features(&self) -> MultiAgentVersion {
-        self.multi_agent_version_override()
-            .unwrap_or(MultiAgentVersion::Disabled)
-    }
-
-    pub(crate) fn multi_agent_version_for_model(
-        &self,
-        model_multi_agent_version: Option<MultiAgentVersion>,
-    ) -> MultiAgentVersion {
-        self.multi_agent_version_override()
-            .or(model_multi_agent_version.filter(|version| *version == MultiAgentVersion::V2))
-            .unwrap_or_else(|| self.multi_agent_version_from_features())
     }
 
     pub(crate) fn max_spawned_agent_threads(&self) -> usize {
@@ -3763,7 +3735,6 @@ impl Config {
             plugins: cfg.plugins,
             prefer_mxc: false,
             model,
-            daybreak_enabled: cfg.daybreak.unwrap_or(false),
             service_tier,
             review_model,
             model_context_window: cfg.model_context_window,

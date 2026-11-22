@@ -49,11 +49,6 @@ impl ChatWidget {
         if self.model_catalog.provider_may_have_changed() {
             return;
         }
-        if self.status_account_display == Some(StatusAccountDisplay::ApiKey) {
-            for model in &mut Arc::make_mut(&mut self.model_catalog).models {
-                model.available_access_programs = None;
-            }
-        }
         let request_id = uuid::Uuid::new_v4();
         self.model_popup_request_id = Some(request_id);
         self.app_event_tx.send(AppEvent::FetchModels { request_id });
@@ -102,8 +97,6 @@ impl ChatWidget {
             return false;
         }
         Arc::make_mut(&mut self.model_catalog).models = presets;
-        self.set_daybreak_enabled(self.daybreak_enabled);
-        self.queue_unavailable_daybreak_disable(self.current_model());
         self.refresh_effective_service_tier();
         self.refresh_model_dependent_surfaces();
         true

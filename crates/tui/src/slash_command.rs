@@ -14,7 +14,6 @@ pub enum SlashCommand {
     // more frequently used commands should be listed first.
     Model,
     Presets,
-    Daybreak,
     Ide,
     Permissions,
     Keymap,
@@ -133,7 +132,6 @@ impl SlashCommand {
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
             SlashCommand::Presets => "run or save reusable prompts and slash commands",
-            SlashCommand::Daybreak => "turn Daybreak on or off",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -271,7 +269,6 @@ impl SlashCommand {
             | SlashCommand::Resume
             | SlashCommand::Model
             | SlashCommand::Presets
-            | SlashCommand::Daybreak
             | SlashCommand::Permissions
             | SlashCommand::Copy
             | SlashCommand::Raw

@@ -11,7 +11,6 @@ use codex_app_server_protocol::TurnError as AppServerTurnError;
 use codex_app_server_protocol::TurnStartParams;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::turn_input::CyberAccessProgram;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use color_eyre::eyre::Report;
 
@@ -47,7 +46,6 @@ pub(crate) enum UserMessageAdmission {
 
 #[derive(Debug)]
 pub(crate) enum UserMessageSubmissionFailure {
-    Preflight(String),
     Rejected(Report),
     Unconfirmed { error: Report, reconnect: bool },
     Unhandled(Report),
@@ -104,7 +102,6 @@ impl AppServerSession {
         op: &AppCommand,
         intent: CloudSubmissionIntent,
         active_turn: &mut Option<String>,
-        preflight: impl FnOnce(&str) -> Result<Option<CyberAccessProgram>, String>,
         start_settings: impl FnOnce() -> TurnStartSettings<'a>,
     ) -> Result<(UserMessageAdmission, Option<CloudModelSelection>), UserMessageSubmissionFailure>
     {
@@ -178,10 +175,6 @@ impl AppServerSession {
             } else {
                 None
             };
-        let selected_model = selection
-            .as_ref()
-            .map_or(model.as_str(), |selection| selection.model.as_str());
-        let program = preflight(selected_model).map_err(UserMessageSubmissionFailure::Preflight)?;
         let take_selection = |session: &mut Self| {
             selection.as_ref()?;
             session.cloud_model_selections.remove(&thread_id)
@@ -248,7 +241,6 @@ impl AppServerSession {
             service_tier.clone(),
             collaboration_mode.clone(),
             final_output_json_schema.clone(),
-            program.map(Into::into),
             selection.as_ref(),
         )
         .await

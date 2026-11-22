@@ -185,6 +185,7 @@ async fn tool_calls_deliver_only_negotiated_trusted_network_policy() -> anyhow::
         let forged_meta = || {
             Some(json!({
                 "codex/network-policy-meta": {"enabled": true, "forged": true},
+                "openai/entitlementContext": {"forged": true},
                 "keep": "caller metadata",
             }))
         };

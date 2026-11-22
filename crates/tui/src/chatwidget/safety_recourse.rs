@@ -103,23 +103,7 @@ pub(super) fn render_failure(
     }
     let mut cell = match pending.domain {
         Domain::Bio => history_cell::new_safety_access_block_event(),
-        Domain::Cyber => {
-            let notice = chat.cyber_policy_notice();
-            if notice == crate::daybreak::Notice::Disabled {
-                items.push(SelectionItem {
-                    name: "Enable Daybreak".into(),
-                    actions: vec![Box::new(move |tx| {
-                        tx.send(AppEvent::PersistDaybreakSelection {
-                            thread_id,
-                            enabled: true,
-                        })
-                    })],
-                    dismiss_on_select: true,
-                    ..Default::default()
-                });
-            }
-            history_cell::new_cyber_policy_error_event(notice)
-        }
+        Domain::Cyber => history_cell::new_cyber_policy_error_event(),
     };
     if chat.config.feedback_enabled {
         items.push(SelectionItem {
@@ -132,7 +116,7 @@ pub(super) fn render_failure(
             ..Default::default()
         });
     }
-    cell.explanation = Some(result.explanation);
+    cell.explanation = result.explanation;
     chat.input_queue.submit_pending_steers_after_interrupt = false;
     chat.finalize_turn();
     chat.add_to_history(cell);

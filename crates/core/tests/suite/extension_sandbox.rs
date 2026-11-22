@@ -340,8 +340,7 @@ async fn extension_tool_respects_restrictions(deny_network: bool) -> Result<()> 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn extension_tool_uses_granted_turn_permissions_without_host_local_persistence() -> Result<()>
-{
+async fn extension_tool_uses_session_grants_without_host_local_persistence() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
 
@@ -482,7 +481,7 @@ async fn extension_tool_uses_granted_turn_permissions_without_host_local_persist
             id: permissions_call_id.to_string(),
             response: RequestPermissionsResponse {
                 permissions: request.permissions,
-                scope: PermissionGrantScope::Turn,
+                scope: PermissionGrantScope::Session,
                 strict_auto_review: false,
             },
         })
@@ -520,8 +519,8 @@ async fn extension_tool_uses_granted_turn_permissions_without_host_local_persist
     Ok(())
 }
 
-/// Rebinding extension access each turn preserves session grants but expires turn-only grants.
-#[test_case(PermissionGrantScope::Turn; "turn grant")]
+/// Extension access honors session grants across turns.
+#[test_case(PermissionGrantScope::Turn; "unsupported turn grant")]
 #[test_case(PermissionGrantScope::Session; "session grant")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn extension_tool_rebinds_granted_permissions_on_each_turn(
@@ -542,7 +541,7 @@ async fn extension_tool_rebinds_granted_permissions_on_each_turn(
             "data": [{"b64_json": TINY_PNG_BASE64}],
         })))
         .expect(match grant_scope {
-            PermissionGrantScope::Turn => 1,
+            PermissionGrantScope::Turn => 0,
             PermissionGrantScope::Session => 2,
         })
         .mount(&server)
@@ -718,14 +717,31 @@ async fn extension_tool_rebinds_granted_permissions_on_each_turn(
     let request = response_mock
         .last_request()
         .context("missing request containing extension output")?;
-    let output = request.function_call_output(image_call_id);
-    assert_eq!(
-        output["output"][0],
-        json!({
-            "type": "input_image",
-            "image_url": TINY_PNG_DATA_URL,
-        })
-    );
+    match grant_scope {
+        PermissionGrantScope::Turn => {
+            let output = request
+                .function_call_output_content_and_success(image_call_id)
+                .and_then(|(content, _)| content)
+                .context("unsupported turn grant should produce an extension error")?;
+            assert!(
+                output.starts_with(&format!(
+                    "unable to read referenced image at `{}`:",
+                    image_path.display()
+                )),
+                "unexpected extension error: {output}"
+            );
+        }
+        PermissionGrantScope::Session => {
+            let output = request.function_call_output(image_call_id);
+            assert_eq!(
+                output["output"][0],
+                json!({
+                    "type": "input_image",
+                    "image_url": TINY_PNG_DATA_URL,
+                })
+            );
+        }
+    }
 
     test.submit_text_turn("edit the same image in a new turn")
         .await?;
@@ -737,7 +753,7 @@ async fn extension_tool_rebinds_granted_permissions_on_each_turn(
             let output = next_request
                 .function_call_output_content_and_success(next_image_call_id)
                 .and_then(|(content, _)| content)
-                .context("expired turn grant should produce an extension error")?;
+                .context("unsupported turn grant should produce an extension error")?;
             assert!(
                 output.starts_with(&format!(
                     "unable to read referenced image at `{}`:",

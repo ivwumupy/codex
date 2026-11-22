@@ -36,8 +36,6 @@ use codex_guardian_reviewer::ReviewSessionResult;
 use codex_guardian_reviewer::SessionDisposition;
 use codex_guardian_reviewer::token_usage_delta;
 use codex_history::InitialHistory;
-#[cfg(test)]
-use codex_history::RolloutItem;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
@@ -586,12 +584,6 @@ async fn run_review_on_session(
         personality: params.personality,
         model: review_model.model.clone(),
         reasoning_effort: review_model.reasoning_effort.clone(),
-        cyber_access_program: parent_turn.cyber_access_program.filter(|_| {
-            crate::RequiredCyberAccessPrograms::for_thread(
-                &params.parent_session.services.thread_extension_data,
-            )
-            .is_none()
-        }),
         parent_response_id: params
             .parent_context
             .parent_response
@@ -884,15 +876,6 @@ impl GuardianReviewSession {
 
 #[cfg(test)]
 impl GuardianReviewSession {
-    pub(crate) async fn committed_fork_rollout_items_for_test(&self) -> Option<Vec<RolloutItem>> {
-        let state = self.state.lock().await;
-        let snapshot = state.conversation.snapshot()?;
-        match &snapshot.history().initial_history {
-            InitialHistory::Forked(items) => Some(items.clone()),
-            InitialHistory::New | InitialHistory::Cleared | InitialHistory::Resumed(_) => None,
-        }
-    }
-
     pub(crate) async fn send_trunk_event_raw_for_test(&self, event: Event) {
         self.session.send_event_raw(event).await;
     }
