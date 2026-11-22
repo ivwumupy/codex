@@ -13,7 +13,6 @@ use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::ColumnWidthMode;
 use crate::bottom_pane::ListSelectionView;
 use crate::bottom_pane::PickerSurface;
-use crate::bottom_pane::SELECTION_TOGGLE_UNAVAILABLE_PREFIX;
 use crate::bottom_pane::SearchMode;
 use crate::bottom_pane::SelectionDescriptionLayout;
 use crate::bottom_pane::SelectionItem;
@@ -57,63 +56,34 @@ pub(crate) fn effects_with_toggle_states(
                 .map(|hint| (hint.display_label(), label.into()))
         })
         .collect::<Vec<_>>();
-    let settings = [
-        (
-            "Animations",
-            "Animate the welcome screen, working indicator, and transitions",
-            ConfigToggle::Animations,
-        ),
-        (
-            "Composer stars",
-            "Show stars briefly for new Astra tasks",
-            ConfigToggle::ComposerStars,
-        ),
-    ];
-    let animations_enabled = toggle_states
-        .first()
-        .copied()
-        .flatten()
-        .map(|state| state.is_on)
-        .unwrap_or(tui.animations);
+    let toggle_state = toggle_states.first().copied().flatten();
     SelectionViewParams {
         view_id: Some(EFFECTS_VIEW_ID),
         title: Some("Effects".to_string()),
         subtitle: Some("Configure visual effects".to_string()),
         footer_hint: Some(footer_hint_items_line(&footer_hint)),
         allow_input_when_disconnected: true,
-        items: settings
-            .into_iter()
-            .enumerate()
-            .map(|(index, (label, description, setting))| {
-                let toggle_state = toggle_states.get(index).copied().flatten();
-                let enabled = toggle_state
-                    .map(|state| state.is_on)
-                    .unwrap_or_else(|| setting.enabled(tui));
-                let available = setting != ConfigToggle::ComposerStars || animations_enabled;
-                SelectionItem {
-                    name: label.to_string(),
-                    toggle: Some(SelectionToggle {
-                        is_on: enabled,
-                        action: Box::new(move |enabled, tx| {
-                            tx.send(AppEvent::SaveConfigPreference(ConfigPreference::Toggle {
-                                setting,
-                                enabled,
-                            }));
-                        }),
-                    }),
-                    pending_toggle_actions: toggle_state
-                        .map(|state| state.pending_actions)
-                        .unwrap_or_default(),
-                    checkbox_toggle: available,
-                    toggle_placeholder: (!available).then_some(SELECTION_TOGGLE_UNAVAILABLE_PREFIX),
-                    description: available.then(|| description.to_string()),
-                    disabled_reason: (!available)
-                        .then(|| "Turn on Animations to show Astra task stars".to_string()),
-                    dismiss_on_select: false,
-                    ..Default::default()
-                }
-            })
-            .collect(),
+        items: vec![SelectionItem {
+            name: "Animations".to_string(),
+            toggle: Some(SelectionToggle {
+                is_on: toggle_state.map_or(tui.animations, |state| state.is_on),
+                action: Box::new(|enabled, tx| {
+                    tx.send(AppEvent::SaveConfigPreference(ConfigPreference::Toggle {
+                        setting: ConfigToggle::Animations,
+                        enabled,
+                    }));
+                }),
+            }),
+            pending_toggle_actions: toggle_state
+                .map(|state| state.pending_actions)
+                .unwrap_or_default(),
+            checkbox_toggle: true,
+            description: Some(
+                "Animate the welcome screen, working indicator, and transitions".to_string(),
+            ),
+            dismiss_on_select: false,
+            ..Default::default()
+        }],
         ..SelectionViewParams::picker()
     }
 }

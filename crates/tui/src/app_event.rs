@@ -48,7 +48,6 @@ use crate::app_server_session::AppServerStartedThread;
 use crate::bottom_pane::ApprovalRequest;
 use crate::bottom_pane::StatusLineItem;
 use crate::bottom_pane::TerminalTitleItem;
-use crate::chatwidget::AstraModelPickerAction;
 use crate::chatwidget::ConfiguredPetLoadGeneration;
 use crate::chatwidget::ConnectorScopeGeneration;
 #[cfg(test)]
@@ -1242,14 +1241,6 @@ pub(crate) enum AppEvent {
     ApplyModelSelection {
         model: String,
         effort: Option<ReasoningEffort>,
-    },
-
-    /// Apply an explicit Astra selection and offer the flourish only if it changed the model on
-    /// its original task. Automatic model updates do not use this event.
-    AstraSelectedFromModelPicker {
-        thread_id: ThreadId,
-        model: String,
-        action: AstraModelPickerAction,
     },
 
     /// Finish a settings selection after its preceding update events have been applied.

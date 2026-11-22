@@ -5,7 +5,6 @@
 //! In the draft-only handoff, a recent paste prefix can preserve a raw Enter as a newline.
 //! The submit path still requires an established paste before treating Enter as a newline.
 //! Recovery commands must occupy one line and be visible before the submit key expands pastes.
-//! Offline draft edits also consume the Astra sparkle opportunity before rendering.
 
 use super::*;
 
@@ -148,14 +147,10 @@ impl ChatComposer {
 
     fn edit_restricted_draft(&mut self, key: KeyEvent) {
         // Null is sent internally to clean up on disconnect or expand a paste.
-        let before = if key.code == KeyCode::Null {
-            None
-        } else {
+        if key.code != KeyCode::Null {
             self.draft.textarea_state.get_mut().follow_cursor();
-            self.before_sparkle_editor_key(key)
-        };
-        let (result, _) = self.handle_input_basic(key);
-        self.after_sparkle_key(before, &result);
+        }
+        self.handle_input_basic(key);
     }
 }
 

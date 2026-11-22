@@ -213,7 +213,6 @@ impl LocalSettings {
         // both copies when the user changes one.
         settings.tui.animations = self.tui.animations;
         settings.tui.auto_recap = self.tui.auto_recap;
-        settings.tui.effects.starfield = self.tui.effects.starfield;
         settings.tui.disable_paste_burst = self.tui.disable_paste_burst;
         settings.tui.show_tooltips = self.tui.show_tooltips;
         settings

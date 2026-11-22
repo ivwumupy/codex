@@ -17,7 +17,7 @@
 //! repeated Ctrl+R/Up and Ctrl+S/Down move between unique matches, `Enter` accepts the current
 //! preview as an editable draft, and `Esc` or Ctrl+C restores the saved draft, including background
 //! updates since search started. Buffered keys are integrated before that snapshot without reclassifying them as
-//! an explicit paste. Only accepting a nonempty preview dismisses any unused Astra sparkle opportunity.
+//! an explicit paste.
 //! Background draft updates stay hidden during search. Cancellation restores those updates;
 //! accepting a match replaces the saved draft, including any recovered answers.
 //! Explicit fresh draft replacements discard the saved draft and end search.
@@ -216,9 +216,6 @@ impl ChatComposer {
                     .is_some_and(|search| matches!(search.status, HistorySearchStatus::Match))
                 {
                     self.history_search = None;
-                    if !self.is_empty() {
-                        self.dismiss_sparkle();
-                    }
                     self.history.reset_search();
                     self.footer.mode = reset_mode_after_activity(self.footer.mode);
                     self.move_cursor_to_end();
@@ -272,7 +269,7 @@ impl ChatComposer {
             if let Some(search) = self.history_search.as_mut() {
                 search.status = HistorySearchStatus::Idle;
             }
-            self.with_sparkle_history_preview(|composer| composer.restore_draft(original_draft));
+            self.restore_draft(original_draft);
             return InputResult::None;
         }
         let result = self.history.search(
@@ -295,7 +292,7 @@ impl ChatComposer {
         search.status = HistorySearchStatus::Searching;
         let query = search.query.clone();
         let original_draft = search.preview_draft().clone();
-        self.with_sparkle_history_preview(|composer| composer.restore_draft(original_draft));
+        self.restore_draft(original_draft);
         if query.is_empty() {
             self.history.reset_search();
             if let Some(search) = self.history_search.as_mut() {
@@ -324,7 +321,7 @@ impl ChatComposer {
         };
         self.history.reset_navigation();
         self.footer.mode = reset_mode_after_activity(self.footer.mode);
-        self.with_sparkle_history_preview(|composer| composer.restore_draft(search.original_draft));
+        self.restore_draft(search.original_draft);
         self.vim_history = search.original_vim_history;
         self.draft
             .textarea
@@ -346,7 +343,7 @@ impl ChatComposer {
                 if let Some(search) = self.history_search.as_mut() {
                     search.status = HistorySearchStatus::Match;
                 }
-                self.with_sparkle_history_preview(|composer| composer.apply_history_entry(entry));
+                self.apply_history_entry(entry);
             }
             HistorySearchResult::Pending => {
                 if let Some(search) = self.history_search.as_mut() {
@@ -371,19 +368,10 @@ impl ChatComposer {
                     };
                 }
                 if let Some(original_draft) = original_draft {
-                    self.with_sparkle_history_preview(|composer| {
-                        composer.restore_draft(original_draft)
-                    });
+                    self.restore_draft(original_draft);
                 }
             }
         }
-    }
-
-    fn with_sparkle_history_preview(&mut self, preview: impl FnOnce(&mut Self)) {
-        let previous = self.sparkle.history_preview;
-        self.sparkle.history_preview = true;
-        preview(self);
-        self.sparkle.history_preview = previous;
     }
 
     /// Builds the footer line shown while reverse history search is active.

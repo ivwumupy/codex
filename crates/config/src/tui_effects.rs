@@ -9,8 +9,6 @@ use serde::Serialize;
 #[serde(default)]
 #[schemars(deny_unknown_fields)]
 pub struct TuiEffects {
-    /// Animate the composer starfield.
-    pub starfield: bool,
     /// Shimmer status and loading text.
     pub shimmer: bool,
     /// Animate the welcome artwork.
@@ -26,7 +24,6 @@ pub struct TuiEffects {
 impl Default for TuiEffects {
     fn default() -> Self {
         Self {
-            starfield: true,
             shimmer: true,
             welcome: true,
             effort: true,

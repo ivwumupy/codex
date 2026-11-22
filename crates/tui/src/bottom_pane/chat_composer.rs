@@ -114,8 +114,8 @@
 //!
 //! Live terminal turns recover typed, unsubmitted question answers into the main composer.
 //! Each recovered answer follows its original question as a Markdown blockquote, with blank lines
-//! separating questions, answers, and existing text. The append flushes buffered input and dismisses
-//! unused sparkle eligibility. The separator and recovered answer form one Vim edit; large answers
+//! separating questions, answers, and existing text. The append flushes buffered input.
+//! The separator and recovered answer form one Vim edit; large answers
 //! use atomic paste placeholders backed by their original text.
 //! Recovery escapes a shell or slash command prefix before appending answers, keeping the
 //! combined draft editable and its later submission literal. Shell mode's separate `!` becomes
@@ -194,36 +194,6 @@
 //! Repeated selections do not restart either effect, dropping below Max clears them, and
 //! restoration clears any transition queued while replaying the saved session. Rendering advances
 //! active transitions through the frame requester until they finish.
-//!
-//! # Astra Sparkle Eligibility
-//!
-//! A confirmed new task can offer one flourish when it starts with Astra or the user switches to
-//! Astra through `/model` before entering ordinary prompt content. The draft tracks whether it is
-//! untouched, contains a recognized slash command, or is permanently dismissed. An eligible slash
-//! command keeps the opportunity while being typed, dispatched, or erased; a fresh Astra response
-//! can arm the effect while the command is still pending. Stars stay hidden until the composer is
-//! empty. Commands that insert draft content, ordinary typed, pasted, or restored drafts,
-//! attachments, and real work dismiss the opportunity even if that content is later cleared.
-//! Ordinary disconnected edits also dismiss it immediately, even when erased before rendering;
-//! a recognized command typed and erased offline still preserves the opportunity.
-//! Opening history search, typing or pasting its query, and canceling it with `Esc` or `Ctrl+C`
-//! temporarily hide an active field without restarting its deadline. Any buffered keys are
-//! integrated into the original draft without being classified again. A preview does not count
-//! as a draft until the user accepts a nonempty match.
-//! Toggling shortcut help on an empty composer also hides an active field until help closes,
-//! without restarting its deadline, and leaves an unused opportunity intact. A literal `?` is
-//! ordinary prompt content.
-//! Startup draft snapshots carry this distinction so erased ordinary input does not become
-//! untouched on handoff.
-//!
-//! Sparkle key and paste handling runs only for input routed to the composer; ordinary characters
-//! are observed before the paste-burst buffer can hide the first edit. An edit that flushes and
-//! erases a held slash also clears the tracked command. An empty main-composer `Esc`
-//! can stop the active flourish. Once shown, it fades out by 15 seconds; command entry, popups, and
-//! focus loss hide the field without restarting that deadline. Rendering runs after the textarea,
-//! placeholder and effort ignition, and draws only in eligible blank cells without
-//! overwriting the placeholder or normal cursor. Hidden frames do not schedule animation redraws;
-//! motion settings, the starfield preference, and true-color support also gate the effect.
 //!
 //! # Large Paste Placeholders
 //!
@@ -413,7 +383,6 @@ mod reconnect;
 pub(crate) use reconnect::RestrictedInputMode;
 mod native_status;
 mod slash_input;
-mod sparkle;
 mod status_surface;
 mod vim_history;
 mod vim_register;
@@ -638,7 +607,6 @@ pub(crate) struct ChatComposer {
     footer: Box<FooterState>,
     has_focus: bool,
     frame_requester: Option<FrameRequester>,
-    sparkle: sparkle::Sparkle,
     effort_tier: Option<EffortTier>,
     effort_animation_style: Option<IgnitionStyle>,
     effort_ignition: Option<EffortIgnition>,
@@ -722,7 +690,6 @@ pub(crate) struct ComposerDraftSnapshot {
     pub(crate) pending_pastes: Vec<(String, String)>,
     pub(crate) startup_local_history: Vec<HistoryEntry>,
     pub(crate) last_composer_activity_at: Option<Instant>,
-    pub(crate) sparkle_draft: sparkle::SparkleDraft,
 }
 
 impl ChatComposer {
@@ -825,7 +792,6 @@ impl ChatComposer {
             }),
             has_focus: has_input_focus,
             frame_requester: None,
-            sparkle: sparkle::Sparkle::default(),
             effort_tier: None,
             effort_animation_style: None,
             effort_ignition: None,
@@ -1306,7 +1272,6 @@ impl ChatComposer {
     /// are renumbered to `[Image #M+1]..[Image #N]` (where `M` is the number of
     /// remote images). Cursor is placed at the end after rebuilding elements.
     pub(crate) fn apply_external_edit(&mut self, text: String) {
-        self.note_sparkle_replaced_text(&text);
         self.vim_history = VimHistory::default();
         self.draft.pending_pastes.clear();
         let (text, _) = self.imported_text_for_textarea(text, Vec::new());
@@ -1533,9 +1498,6 @@ impl ChatComposer {
     }
 
     pub(crate) fn set_remote_image_urls(&mut self, urls: Vec<String>) {
-        if !self.sparkle.history_preview && !urls.is_empty() {
-            self.dismiss_sparkle();
-        }
         self.attachments
             .set_remote_image_urls(urls, &mut self.draft.textarea);
         self.sync_popups();
@@ -1603,13 +1565,6 @@ impl ChatComposer {
         mention_bindings: Vec<MentionBinding>,
         shell_prefix: ShellPrefixHandling,
     ) {
-        if !self.sparkle.history_preview {
-            if local_image_paths.is_empty() {
-                self.note_sparkle_replaced_text(&text);
-            } else {
-                self.dismiss_sparkle();
-            }
-        }
         // Clear any existing content, placeholders, and attachments first.
         self.footer.flash = None;
         self.vim_history = VimHistory::default();
@@ -1909,7 +1864,6 @@ impl ChatComposer {
 
     /// Insert an attachment placeholder and track it for the next submission.
     pub fn attach_image(&mut self, path: PathBuf) {
-        self.dismiss_sparkle();
         let started_vim_edit = self.begin_direct_vim_edit();
         let elements_before = self.draft.textarea.element_payloads();
         self.attachments
@@ -2041,12 +1995,10 @@ impl ChatComposer {
         }
 
         self.draft.textarea_state.get_mut().follow_cursor();
-        let before = self.before_sparkle_key(key_event);
         let result = self.handle_key_event_inner(key_event);
         if is_char && !self.draft.paste_burst.is_active() {
             self.draft.skill_completion_space = None;
         }
-        self.after_sparkle_key(before, &result.0);
         result
     }
 
@@ -4987,13 +4939,6 @@ impl ChatComposer {
                 frame_requester.schedule_frame_in(IGNITION_FRAME_TICK);
             }
         }
-        drop(state);
-        self.render_sparkle(
-            composer_rect,
-            textarea_rect,
-            self.cursor_pos_with_options(area, options),
-            buf,
-        );
         if options.unfocused {
             buf.set_style(composer_rect, crate::style::quiet_workspace_style());
         } else if options.footer.is_some_and(|footer| footer.is_interactive) {

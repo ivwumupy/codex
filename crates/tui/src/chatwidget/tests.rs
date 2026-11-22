@@ -288,8 +288,6 @@ mod side;
 #[path = "tests/skills_summary_tests.rs"]
 mod skills_summary_tests;
 mod slash_commands;
-#[path = "tests/sparkle_submission_tests.rs"]
-mod sparkle_submission_tests;
 #[path = "tests/startup_submission_tests.rs"]
 mod startup_submission_tests;
 mod status_and_layout;

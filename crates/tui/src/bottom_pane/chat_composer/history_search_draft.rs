@@ -34,7 +34,6 @@ impl ChatComposer {
             pending_pastes: draft.pending_pastes,
             startup_local_history: self.history.startup_local_history().to_vec(),
             last_composer_activity_at: None,
-            sparkle_draft: self.sparkle.draft.get(),
         }
     }
 
@@ -53,7 +52,7 @@ impl ChatComposer {
         self.draft
             .textarea
             .swap_vim_persistent_state(&mut preview_vim_state);
-        self.with_sparkle_history_preview(|composer| composer.restore_draft(search.original_draft));
+        self.restore_draft(search.original_draft);
         self.draft
             .textarea
             .swap_vim_persistent_state(&mut search.original_vim_state);
@@ -65,7 +64,7 @@ impl ChatComposer {
             .textarea
             .swap_vim_persistent_state(&mut search.original_vim_state);
         self.history_search = Some(search);
-        self.with_sparkle_history_preview(|composer| composer.restore_draft(preview));
+        self.restore_draft(preview);
         self.draft
             .textarea
             .swap_vim_persistent_state(&mut preview_vim_state);

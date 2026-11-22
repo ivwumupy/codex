@@ -63,7 +63,7 @@ async fn session_model_selection_accepts_final_choices_without_saving() {
 }
 
 #[tokio::test]
-async fn session_model_selection_notifies_the_original_task_after_each_final_astra_choice() {
+async fn session_model_selection_applies_each_final_astra_choice() {
     for picker in ["model", "reasoning", "advanced"] {
         let (mut chat, mut events, _ops) = make_chatwidget_manual(Some("gpt-5.5")).await;
         let thread_id = ThreadId::new();
@@ -97,11 +97,9 @@ async fn session_model_selection_notifies_the_original_task_after_each_final_ast
         while events.try_recv().is_ok() {}
         chat.handle_key_event(KeyCode::Char('s').into());
 
-        assert_matches!(events.try_recv(), Ok(AppEvent::AstraSelectedFromModelPicker {
-            thread_id: selected_thread,
-            model,
-            action: AstraModelPickerAction::SelectSessionModel { effort: selected_effort, service_tier: None },
-        }) if selected_thread == thread_id && model == "gpt-6-astra" && selected_effort == Some(effort));
+        assert_matches!(events.try_recv(), Ok(AppEvent::SelectSessionModel {
+            model, effort: selected_effort, service_tier: None,
+        }) if model == "gpt-6-astra" && selected_effort == Some(effort));
         assert!(
             std::iter::from_fn(|| events.try_recv().ok()).all(|event| matches!(
                 event,
@@ -132,10 +130,8 @@ async fn model_settings_only_command_accepts_the_current_hidden_model() {
     while events.try_recv().is_ok() {}
     chat.handle_model_command_args("gpt-5.5 --reasoning=high");
     assert!(
-        std::iter::from_fn(|| events.try_recv().ok()).all(|event| !matches!(
-            event,
-            AppEvent::SelectSessionModel { .. } | AppEvent::AstraSelectedFromModelPicker { .. }
-        ))
+        std::iter::from_fn(|| events.try_recv().ok())
+            .all(|event| !matches!(event, AppEvent::SelectSessionModel { .. }))
     );
 }
 
@@ -198,7 +194,6 @@ async fn provider_switch_blocks_cached_choices_in_old_and_new_chats() {
                 AppEvent::FetchModels { .. }
                     | AppEvent::SelectSessionModel { .. }
                     | AppEvent::ScopedModelPicker { .. }
-                    | AppEvent::AstraSelectedFromModelPicker { .. }
             ))
         );
     }

@@ -35,8 +35,6 @@ mod disconnect;
 mod external_writer_fork_tests;
 #[path = "tests/fork_workspace_roots_tests.rs"]
 mod fork_workspace_roots_tests;
-#[path = "tests/fresh_sparkle_tests.rs"]
-mod fresh_sparkle_tests;
 #[path = "tests/home_cleanup_tests.rs"]
 mod home_cleanup_tests;
 #[path = "tests/key_chords.rs"]

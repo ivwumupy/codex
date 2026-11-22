@@ -15,7 +15,6 @@ pub(crate) enum ConfigToggle {
     Animations,
     AutomaticRecaps,
     CollapseTurnDetails,
-    ComposerStars,
     CopyOnSelectClearSelection,
     Notifications,
     PasteDetection,
@@ -92,12 +91,6 @@ impl ConfigPreference {
 impl ConfigToggle {
     pub(crate) fn edit(self, enabled: bool) -> ConfigEdit {
         let (key, value) = match self {
-            Self::ComposerStars => {
-                return ConfigEdit::SetPath {
-                    segments: vec!["tui".into(), "effects".into(), "starfield".into()],
-                    value: toml_edit::value(enabled),
-                };
-            }
             Self::Notifications => {
                 return ConfigEdit::SetTuiNotificationsEnabled { enabled };
             }
@@ -121,7 +114,6 @@ impl ConfigToggle {
             Self::Animations => tui.animations,
             Self::AutomaticRecaps => tui.auto_recap,
             Self::CollapseTurnDetails => tui.collapse_turn_details,
-            Self::ComposerStars => tui.effects.starfield,
             Self::CopyOnSelectClearSelection => tui.copy_on_select_clear_selection,
             Self::Notifications => !matches!(
                 tui.notification_settings.notifications,
@@ -142,7 +134,6 @@ impl ConfigToggle {
             Self::CollapseTurnDetails => {
                 target.collapse_turn_details = source.collapse_turn_details
             }
-            Self::ComposerStars => target.effects.starfield = source.effects.starfield,
             Self::CopyOnSelectClearSelection => {
                 target.copy_on_select_clear_selection = source.copy_on_select_clear_selection;
             }
