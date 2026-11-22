@@ -31,6 +31,56 @@ fn latest_summary_line(text: &str) -> Option<String> {
 }
 
 impl ChatWidget {
+    pub(crate) fn latest_commentary_cell(&self) -> Option<&dyn HistoryCell> {
+        self.transcript
+            .latest_commentary
+            .as_ref()
+            .filter(|cell| cell.copy_source().is_some_and(|text| !text.is_empty()))
+            .map(|cell| cell as &dyn HistoryCell)
+    }
+
+    pub(super) fn clear_commentary(&mut self) {
+        let unfinished = self.transcript.streaming_commentary_item.take().is_some();
+        if let Some(cell) = self.transcript.latest_commentary.take() {
+            if unfinished && cell.copy_source().is_some_and(|text| !text.is_empty()) {
+                self.app_event_tx
+                    .send(AppEvent::InsertHistoryCell(Box::new(cell)));
+            }
+            self.bump_active_cell_revision();
+            self.request_redraw();
+        }
+    }
+
+    fn commentary_cell(&self, text: String) -> history_cell::AgentMarkdownCell {
+        let context = self.thread_id.and_then(|id| {
+            crate::inline_visualization::InlineVisualizationContext::from_config(&self.config, id)
+        });
+        history_cell::AgentMarkdownCell::new_with_inline_visualizations(
+            text,
+            &self.config.cwd,
+            context,
+        )
+        .with_phase(Some(MessagePhase::Commentary))
+    }
+
+    pub(super) fn start_commentary(&mut self, item: (String, String), text: &str) {
+        self.flush_completed_tool_activity();
+        self.transcript.streaming_commentary_item = Some(item);
+        self.transcript.latest_commentary = Some(self.commentary_cell(String::new()));
+        self.append_commentary_delta(text);
+    }
+
+    pub(super) fn append_commentary_delta(&mut self, text: &str) {
+        if !text.is_empty() {
+            self.mark_safety_buffering_agent_message_started();
+            if let Some(cell) = self.transcript.latest_commentary.as_mut() {
+                cell.append_commentary_delta(text);
+            }
+        }
+        self.bump_active_cell_revision();
+        self.request_redraw();
+    }
+
     pub(super) fn on_reasoning_item_started(&mut self, id: String) {
         if self.status_state.reasoning_resume_turn_id.take().is_some()
             && self.status_state.reasoning_item_id.as_ref() != Some(&id)
@@ -115,7 +165,10 @@ impl ChatWidget {
                 // Stream finalization supplies one trailing newline when the last delta omitted it.
                 !streamed_message_matches_completed(streamed, completed)
             });
-            let scrollback_reflow = if needs_scrollback_reflow || completed_message_differs {
+            let scrollback_reflow = if needs_scrollback_reflow
+                || completed_message_differs
+                || phase == Some(MessagePhase::Commentary)
+            {
                 crate::app_event::ConsolidationScrollbackReflow::Required
             } else {
                 crate::app_event::ConsolidationScrollbackReflow::IfResizeReflowRan
@@ -208,7 +261,6 @@ impl ChatWidget {
     /// Capture at handoff, while links and visualization directives still have the outgoing cwd.
     pub(crate) fn take_side_display(
         &mut self,
-        width: u16,
     ) -> (Option<CapturedSideStream>, CapturedSideDisplay) {
         self.flush_completed_tool_activity();
         let visualizations = self.thread_id.and_then(|id| {
@@ -252,11 +304,11 @@ impl ChatWidget {
             });
         let display = CapturedSideDisplay {
             rendered_completion_turn_ids: self.turn_lifecycle.rendered_completion_turn_ids.clone(),
+            commentary: self.transcript.latest_commentary.take(),
+            commentary_item: self.transcript.streaming_commentary_item.take(),
+            running_tools: std::mem::take(&mut self.transcript.running_tools),
             active,
             last_completed_agent_message: self.transcript.last_completed_agent_message.clone(),
-            auxiliary: self
-                .active_cell_transcript_hyperlink_lines(width)
-                .unwrap_or_default(),
             draft: {
                 let snapshot = self.bottom_pane.composer_recovery_snapshot();
                 let mut draft = Box::new(crate::bottom_pane::TextArea::new());
@@ -298,6 +350,9 @@ impl ChatWidget {
     }
 
     pub(super) fn on_agent_message_delta(&mut self, delta: String) {
+        if !delta.is_empty() {
+            self.clear_commentary();
+        }
         self.handle_streaming_delta(delta);
     }
 
@@ -543,6 +598,15 @@ impl ChatWidget {
         }
         let parsed = parse_assistant_markdown(&message, self.config.cwd.as_path());
         let questions = item.questions.as_deref().unwrap_or_default();
+        let transient = item.phase == Some(MessagePhase::Commentary) && questions.is_empty();
+        if transient {
+            self.transcript.streaming_commentary_item = None;
+            self.transcript.latest_commentary =
+                Some(self.commentary_cell(parsed.visible_markdown.clone()));
+            self.bump_active_cell_revision();
+        } else if !parsed.visible_markdown.is_empty() {
+            self.clear_commentary();
+        }
         let interrupted = self
             .transcript
             .last_flushed_agent_message
@@ -553,11 +617,13 @@ impl ChatWidget {
             // the authoritative message. Markdown references can span interruptions.
             self.flush_answer_stream_with_separator();
         }
-        if (from_replay || !questions.is_empty() || interrupted.is_some())
+        if (from_replay || transient || !questions.is_empty() || interrupted.is_some())
             && self.stream_controller.is_none()
             && !parsed.visible_markdown.is_empty()
         {
-            self.prepare_assistant_message();
+            if !transient {
+                self.prepare_assistant_message();
+            }
             self.mark_safety_buffering_agent_message_started();
             self.bottom_pane.hide_status_indicator();
             let context = self.thread_id.and_then(|thread_id| {
@@ -577,6 +643,11 @@ impl ChatWidget {
             if let Some(item) = interrupted {
                 self.app_event_tx
                     .send(AppEvent::CorrectFlushedAgentMessage { item, cell });
+            } else if transient {
+                // Preserve the order of finished activity in the detailed transcript.
+                self.flush_completed_tool_activity();
+                self.app_event_tx
+                    .send(AppEvent::InsertHistoryCell(Box::new(cell)));
             } else {
                 self.add_to_history(cell);
             }

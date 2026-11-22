@@ -148,11 +148,53 @@ impl ChatWidget {
                     ThreadItemPayload::Reasoning { id, .. } => Some(id.clone()),
                     _ => None,
                 });
+            let trailing_commentary_id = (status == TurnStatus::InProgress)
+                .then(|| items.last())
+                .flatten()
+                .filter(|item| item.completed_at_ms.is_none())
+                .and_then(|item| match &item.payload {
+                    ThreadItemPayload::AgentMessage {
+                        id,
+                        phase: Some(MessagePhase::Commentary),
+                        questions: None,
+                        ..
+                    } => Some(id.clone()),
+                    _ => None,
+                });
             for entry in items {
                 let item = entry.payload;
                 if hidden_nested_review_turn
                     && matches!(item, ThreadItemPayload::UserMessage { .. })
                 {
+                    continue;
+                }
+                // These items have no status of their own. A recorded start distinguishes
+                // an open call from an untimed item in a legacy transcript.
+                if status == TurnStatus::InProgress
+                    && let Some(started_at_ms) = entry.started_at_ms
+                    && entry.completed_at_ms.is_none()
+                    && matches!(
+                        item,
+                        ThreadItemPayload::WebSearch(_)
+                            | ThreadItemPayload::ImageView { .. }
+                            | ThreadItemPayload::Sleep(_)
+                    )
+                {
+                    self.handle_item_started_notification(
+                        ItemStartedNotification::new(
+                            self.thread_id.map(|id| id.to_string()).unwrap_or_default(),
+                            turn_id.clone(),
+                            item,
+                            started_at_ms,
+                        ),
+                        Some(replay_kind),
+                    );
+                    continue;
+                }
+                if trailing_commentary_id.as_deref() == Some(item.id())
+                    && let ThreadItemPayload::AgentMessage { id, text, .. } = item
+                {
+                    self.start_commentary((turn_id.clone(), id), &text);
                     continue;
                 }
                 if trailing_reasoning_id.as_deref() == Some(item.id())
@@ -235,21 +277,7 @@ impl ChatWidget {
         turn_id: String,
         replay_kind: ReplayKind,
     ) {
-        match item {
-            // Snapshots contain the completed item, without the live start that renders its diff.
-            ThreadItemPayload::FileChange {
-                changes,
-                status: codex_app_server_protocol::PatchApplyStatus::Completed,
-                ..
-            } => {
-                if !changes.is_empty() {
-                    self.on_patch_apply_begin(file_update_changes_to_display(changes));
-                }
-            }
-            item => {
-                self.handle_thread_item(item, turn_id, ThreadItemRenderSource::Replay(replay_kind));
-            }
-        }
+        self.handle_thread_item(item, turn_id, ThreadItemRenderSource::Replay(replay_kind));
     }
 
     pub(super) fn handle_thread_item(
@@ -345,14 +373,17 @@ impl ChatWidget {
                     codex_app_server_protocol::CommandExecutionStatus::Completed
                     | codex_app_server_protocol::CommandExecutionStatus::Failed,
                 ..
-            } if from_replay => self.handle_command_execution_completed_now(item),
+            } if from_replay => {
+                self.hide_running_tool(item.id());
+                self.handle_command_execution_completed_now(item);
+            }
             item @ ThreadItemPayload::CommandExecution { .. } => {
                 self.on_command_execution_completed(item)
             }
-            ThreadItemPayload::FileChange {
+            item @ ThreadItemPayload::FileChange {
                 status: codex_app_server_protocol::PatchApplyStatus::InProgress,
                 ..
-            } => {}
+            } => self.show_running_tool(&item),
             item @ ThreadItemPayload::FileChange { .. } => self.on_file_change_completed(item),
             item @ ThreadItemPayload::McpToolCall {
                 status: codex_app_server_protocol::McpToolCallStatus::InProgress,
@@ -360,7 +391,6 @@ impl ChatWidget {
             } => self.on_mcp_tool_call_started(item),
             item @ ThreadItemPayload::McpToolCall { .. } => self.on_mcp_tool_call_completed(item),
             ThreadItemPayload::WebSearch(item) => {
-                self.on_web_search_begin(item.id.clone());
                 self.on_web_search_end(
                     item.id,
                     item.query,
@@ -370,6 +400,12 @@ impl ChatWidget {
             }
             ThreadItemPayload::ImageView { id, path } => {
                 self.on_view_image_tool_call(id, path);
+            }
+            ref item @ ThreadItemPayload::ImageGeneration(ref generation)
+                if generation.status == "in_progress" =>
+            {
+                self.show_running_tool(item);
+                self.on_image_generation_begin();
             }
             ThreadItemPayload::ImageGeneration(item) => {
                 self.on_image_generation_end(
@@ -433,7 +469,7 @@ impl ChatWidget {
             }),
             item @ ThreadItemPayload::SubAgentActivity { .. } => self.on_sub_agent_activity(item),
             item @ ThreadItemPayload::DynamicToolCall { .. } => self.on_dynamic_tool_item(item),
-            ThreadItemPayload::Sleep(_) => {}
+            ThreadItemPayload::Sleep(item) => self.hide_running_tool(&item.id),
         }
 
         if matches!(replay_kind, Some(ReplayKind::ThreadSnapshot)) && turn_id.is_empty() {

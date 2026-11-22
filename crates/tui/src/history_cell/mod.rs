@@ -159,6 +159,31 @@ pub(crate) enum HistoryRenderMode {
     Raw,
 }
 
+/// These canonical entries are available in the detailed transcript. The conversation
+/// renders current progress from the widget, so a completed item never enters scrollback.
+pub(crate) fn is_transient_progress(cell: &dyn HistoryCell) -> bool {
+    let cell = cell.as_any();
+    cell.is::<LabeledToolCell>()
+        || cell.is::<ActivityNoticeCell>()
+        || cell.is::<UnifiedExecInteractionCell>()
+        || cell.is::<WebSearchCell>()
+        || cell.is::<McpToolCallCell>()
+        || cell.is::<ComputerActivityCell>()
+        || cell.is::<DynamicToolCallCell>()
+        || cell.is::<PatchHistoryCell>()
+        || cell.is::<PatchFailureCell>()
+        || cell.is::<ViewImageHistoryCell>()
+        || cell.is::<ImageGenerationHistoryCell>()
+        || cell.is::<PlanUpdateCell>()
+        || cell.is::<ReasoningSummaryCell>()
+        || cell
+            .downcast_ref::<AgentMarkdownCell>()
+            .is_some_and(AgentMarkdownCell::is_transient_commentary)
+        || cell
+            .downcast_ref::<crate::exec_cell::ExecCell>()
+            .is_some_and(|exec| exec.iter_calls().all(|call| !call.is_user_shell_command()))
+}
+
 pub(crate) fn raw_lines_from_source(source: &str) -> Vec<Line<'static>> {
     if source.is_empty() {
         return Vec::new();
@@ -383,6 +408,19 @@ impl Renderable for Box<dyn HistoryCell> {
 }
 
 impl dyn HistoryCell {
+    /// Inline history can only append rows. Progress belongs in the redrawable viewport.
+    pub(crate) fn scrollback_hyperlink_lines(
+        &self,
+        width: u16,
+        mode: HistoryRenderMode,
+    ) -> Vec<HyperlinkLine> {
+        if mode == HistoryRenderMode::Rich && is_transient_progress(self) {
+            Vec::new()
+        } else {
+            self.display_hyperlink_lines_for_mode(width, mode)
+        }
+    }
+
     pub(crate) fn as_any(&self) -> &dyn Any {
         self
     }

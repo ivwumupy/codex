@@ -421,6 +421,8 @@ impl App {
             tui.frame_requester().schedule_frame();
             return;
         }
+        self.native_history
+            .reset_for_mode(&self.transcript_cells, &self.chat_widget);
         if self.overlay.is_some() {
             self.schedule_immediate_resize_reflow(tui);
             return;

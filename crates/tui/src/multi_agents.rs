@@ -4,6 +4,7 @@
 //! picker entries, and the fast-switch keyboard shortcuts. Higher-level coordination, such as
 //! deciding which thread becomes active or when a thread closes, stays in [`crate::app::App`].
 
+use crate::history_cell::ActivityNoticeCell;
 use crate::history_cell::LabeledToolCell;
 use crate::history_cell::PlainHistoryCell;
 use crate::render::line_utils::prefix_lines;
@@ -317,17 +318,17 @@ pub(crate) fn sub_agent_activity_display(
 
 pub(crate) fn sub_agent_activity_history_cell(
     item: &ThreadItemPayload,
-) -> Option<PlainHistoryCell> {
+) -> Option<ActivityNoticeCell> {
     let ThreadItemPayload::SubAgentActivity {
         kind, agent_path, ..
     } = item
     else {
         return None;
     };
-    Some(collab_event(
+    Some(ActivityNoticeCell(collab_event(
         sub_agent_activity_title(*kind, agent_path),
         Vec::new(),
-    ))
+    )))
 }
 
 fn sub_agent_activity_title(kind: SubAgentActivityKind, agent_path: &str) -> Line<'static> {

@@ -1,4 +1,4 @@
-//! Queue native terminal output behind unfinished dynamic tools.
+//! Keep raw terminal output in transcript order while dynamic tools are still running.
 //! Fullscreen rendering reads retained cells directly and never queues terminal output.
 //!
 //! Entries own their render source independently of the retained view. Consolidation remaps their
@@ -32,7 +32,10 @@ impl NativeHistory {
             .any(|entry| Arc::ptr_eq(&entry.source, cell))
     }
 
-    pub(super) fn insert(&mut self, cell: &Arc<dyn HistoryCell>) -> bool {
+    pub(super) fn insert(&mut self, cell: &Arc<dyn HistoryCell>, raw: bool) -> bool {
+        if !raw && history_cell::is_transient_progress(cell.as_ref()) {
+            return false;
+        }
         if is_pending(cell.as_ref()) || !self.pending.is_empty() {
             self.defer(cell);
             true
@@ -46,6 +49,25 @@ impl NativeHistory {
             source: cell.clone(),
             owner: Arc::downgrade(cell),
         });
+    }
+
+    /// A mode switch repaints from canonical history. In raw mode, rows from the
+    /// first live dynamic call onward must wait for its final output before printing.
+    pub(super) fn reset_for_mode(&mut self, cells: &[Arc<dyn HistoryCell>], chat: &ChatWidget) {
+        self.pending.clear();
+        if chat.raw_output_mode()
+            && let Some(first) = cells.iter().position(|cell| {
+                cell.as_any()
+                    .downcast_ref::<history_cell::DynamicToolCallCell>()
+                    .is_some_and(|tool| {
+                        tool.is_active() && chat.has_live_dynamic_tool(tool.call_id())
+                    })
+            })
+        {
+            for cell in &cells[first..] {
+                self.defer(cell);
+            }
+        }
     }
 
     /// Replace an entirely unprinted stream with final source. For a partly printed stream, keep

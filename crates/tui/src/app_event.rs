@@ -241,8 +241,10 @@ pub(crate) enum CapturedSideStream {
 #[derive(Debug)]
 pub(crate) struct CapturedSideDisplay {
     pub(crate) rendered_completion_turn_ids: std::collections::HashMap<String, bool>,
+    pub(crate) commentary: Option<crate::history_cell::AgentMarkdownCell>,
+    pub(crate) commentary_item: Option<(String, String)>,
+    pub(crate) running_tools: Vec<(String, Box<dyn HistoryCell>)>,
     pub(crate) active: Option<Box<dyn HistoryCell>>,
-    pub(crate) auxiliary: Vec<crate::terminal_hyperlinks::HyperlinkLine>,
     pub(crate) draft: Box<crate::bottom_pane::TextArea>,
     pub(crate) status: Option<String>,
     pub(crate) work: Option<CapturedSideWork>,

@@ -459,12 +459,22 @@ impl SidePaneLayout {
                 frames.schedule_frame_in(Duration::from_secs(1));
             }
         }
+        let display = &companion.display;
+        let commentary = display
+            .commentary
+            .as_ref()
+            .map(|cell| cell as &dyn crate::history_cell::HistoryCell)
+            .filter(|cell| cell.copy_source().is_some_and(|text| !text.is_empty()));
+        let progress = commentary
+            .into_iter()
+            .chain(display.running_tools.iter().map(|(_, cell)| cell.as_ref()));
         companion.view.render_parked(
             transcript,
             frame.buffer,
             &companion.cells,
             companion.display.active.as_deref(),
-            &companion.display.auxiliary,
+            commentary.filter(|_| display.commentary_item.is_some()),
+            progress,
             collapse_turn_details,
         );
         frame

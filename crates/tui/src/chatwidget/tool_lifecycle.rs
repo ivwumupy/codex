@@ -7,12 +7,94 @@ use super::*;
 use crate::thread_transcript::tools::McpHistory;
 use codex_utils_path_uri::LegacyAppPathString;
 
+/// Build the same live tool row for a focused or parked conversation.
+pub(crate) fn running_tool_cell(
+    item: &ThreadItemPayload,
+    cwd: &Path,
+) -> Option<Box<dyn HistoryCell>> {
+    let label = match item {
+        ThreadItemPayload::CommandExecution {
+            command, source, ..
+        } if *source != ExecCommandSource::UserShell => {
+            format!(
+                "Running {}",
+                strip_bash_lc_and_escape(&split_command_string(command))
+            )
+        }
+        ThreadItemPayload::FileChange { changes, .. } => {
+            let summary = crate::diff_render::running_patch_summary(
+                &file_update_changes_to_display(changes.clone()),
+                cwd,
+            );
+            return Some(Box::new(PlainHistoryCell::new(vec![summary])));
+        }
+        ThreadItemPayload::McpToolCall { server, tool, .. } => format!("Calling {server}.{tool}"),
+        ThreadItemPayload::DynamicToolCall {
+            namespace, tool, ..
+        } => match namespace {
+            Some(namespace) => format!("Calling {namespace}.{tool}"),
+            None => format!("Calling {tool}"),
+        },
+        ThreadItemPayload::CollabAgentToolCall { tool, .. } => match tool {
+            CollabAgentTool::SpawnAgent => "Starting agent",
+            CollabAgentTool::SendInput | CollabAgentTool::SendMessage => "Sending message to agent",
+            CollabAgentTool::FollowupTask => "Sending follow-up task",
+            CollabAgentTool::InterruptAgent => "Interrupting agent",
+            CollabAgentTool::ListAgents => "Listing agents",
+            CollabAgentTool::ResumeAgent => "Resuming agent",
+            CollabAgentTool::Wait => "Waiting for agents",
+            CollabAgentTool::CloseAgent => "Closing agent",
+        }
+        .into(),
+        ThreadItemPayload::WebSearch(_) => "Searching the web".into(),
+        ThreadItemPayload::ImageGeneration(_) => "Generating image".into(),
+        ThreadItemPayload::ImageView { .. } => "Viewing image".into(),
+        ThreadItemPayload::Sleep(_) => "Sleeping".into(),
+        _ => return None,
+    };
+    let label = label.lines().next().unwrap_or_default().to_owned();
+    Some(Box::new(PlainHistoryCell::new(vec![Line::from(vec![
+        "• ".dim(),
+        label.into(),
+    ])])))
+}
+
+pub(crate) fn upsert_running_tool(
+    tools: &mut Vec<(String, Box<dyn HistoryCell>)>,
+    id: &str,
+    cell: Box<dyn HistoryCell>,
+) {
+    if let Some((_, current)) = tools.iter_mut().find(|(key, _)| key == id) {
+        *current = cell;
+    } else {
+        tools.push((id.to_owned(), cell));
+    }
+}
+
 impl ChatWidget {
-    pub(super) fn on_patch_apply_begin(&mut self, changes: HashMap<PathBuf, FileChange>) {
-        self.add_to_history(history_cell::new_patch_event(changes, &self.config.cwd));
+    pub(super) fn show_running_tool(&mut self, item: &ThreadItemPayload) {
+        if let Some(cell) = running_tool_cell(item, self.config.cwd.as_path()) {
+            upsert_running_tool(&mut self.transcript.running_tools, item.id(), cell);
+            self.bump_active_cell_revision();
+            self.request_redraw();
+        }
+    }
+
+    pub(super) fn hide_running_tool(&mut self, id: &str) {
+        if let Some(index) = self
+            .transcript
+            .running_tools
+            .iter()
+            .position(|(key, _)| key == id)
+        {
+            self.transcript.running_tools.remove(index);
+            self.bump_active_cell_revision();
+            self.request_redraw();
+        }
     }
 
     pub(super) fn on_view_image_tool_call(&mut self, id: String, path: LegacyAppPathString) {
+        self.hide_running_tool(&id);
         self.flush_answer_stream_with_separator();
         self.add_to_history(history_cell::new_view_image_tool_call(id, path));
         self.request_redraw();
@@ -32,6 +114,7 @@ impl ChatWidget {
         revised_prompt: Option<String>,
         saved_path: Option<AbsolutePathBuf>,
     ) {
+        self.hide_running_tool(&call_id);
         self.flush_answer_stream_with_separator();
         self.add_to_history(history_cell::new_image_generation_call(
             call_id,
@@ -43,6 +126,7 @@ impl ChatWidget {
     }
 
     pub(super) fn on_file_change_completed(&mut self, item: ThreadItemPayload) {
+        self.hide_running_tool(item.id());
         self.defer_or_handle(
             item,
             InterruptManager::push_item_completed,
@@ -51,6 +135,7 @@ impl ChatWidget {
     }
 
     pub(super) fn on_mcp_tool_call_started(&mut self, item: ThreadItemPayload) {
+        self.show_running_tool(&item);
         self.defer_or_handle(
             item,
             InterruptManager::push_item_started,
@@ -59,6 +144,7 @@ impl ChatWidget {
     }
 
     pub(super) fn on_mcp_tool_call_completed(&mut self, item: ThreadItemPayload) {
+        self.hide_running_tool(item.id());
         self.defer_or_handle(
             item,
             InterruptManager::push_item_completed,
@@ -84,6 +170,7 @@ impl ChatWidget {
         query: String,
         action: codex_app_server_protocol::WebSearchAction,
     ) {
+        self.hide_running_tool(&call_id);
         self.flush_answer_stream_with_separator();
         let mut handled = false;
         if let Some(cell) = self
@@ -118,6 +205,11 @@ impl ChatWidget {
         else {
             return;
         };
+        if matches!(status, CollabAgentToolCallStatus::InProgress) {
+            self.show_running_tool(&item);
+        } else {
+            self.hide_running_tool(id);
+        }
         if matches!(tool, CollabAgentTool::SpawnAgent)
             && let Some(spawn_request) = multi_agents::spawn_request_summary(&item)
         {
@@ -164,13 +256,29 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_file_change_completed_now(&mut self, item: ThreadItemPayload) {
-        let ThreadItemPayload::FileChange { status, .. } = item else {
+        let ThreadItemPayload::FileChange {
+            id,
+            changes,
+            status,
+        } = item
+        else {
             return;
         };
-        // If the patch was successful, just let the "Edited" block stand.
-        // Otherwise, add a failure block.
-        if matches!(status, codex_app_server_protocol::PatchApplyStatus::Failed) {
-            self.add_to_history(history_cell::new_patch_apply_failure(String::new()));
+        use codex_app_server_protocol::PatchApplyStatus;
+        match status {
+            PatchApplyStatus::Completed if !changes.is_empty() => {
+                self.add_to_history(
+                    history_cell::new_patch_event(
+                        file_update_changes_to_display(changes),
+                        &self.config.cwd,
+                    )
+                    .with_activity_id(id),
+                );
+            }
+            PatchApplyStatus::Failed => {
+                self.add_to_history(history_cell::new_patch_apply_failure(String::new()));
+            }
+            _ => {}
         }
     }
 

@@ -128,9 +128,13 @@ impl ChatWidget {
                     .transcript
                     .has_replayed_cloud_text(&notification.turn_id, &notification.item_id)
                 {
-                    self.transcript.active_streamed_agent_message =
-                        Some((notification.turn_id, notification.item_id));
-                    self.on_agent_message_delta(notification.delta);
+                    let key = (notification.turn_id, notification.item_id);
+                    if self.transcript.streaming_commentary_item.as_ref() == Some(&key) {
+                        self.append_commentary_delta(&notification.delta);
+                    } else {
+                        self.transcript.active_streamed_agent_message = Some(key);
+                        self.on_agent_message_delta(notification.delta);
+                    }
                 }
             }
             ServerNotification::PlanDelta(notification) => {
@@ -161,6 +165,20 @@ impl ChatWidget {
             }
             ServerNotification::FileChangeOutputDelta(notification) => {
                 self.on_patch_apply_output_delta(notification.item_id, notification.delta);
+            }
+            ServerNotification::FileChangePatchUpdated(notification) => {
+                if self
+                    .transcript
+                    .running_tools
+                    .iter()
+                    .any(|(id, _)| id == &notification.item_id)
+                {
+                    self.show_running_tool(&ThreadItemPayload::FileChange {
+                        id: notification.item_id,
+                        changes: notification.changes,
+                        status: codex_app_server_protocol::PatchApplyStatus::InProgress,
+                    });
+                }
             }
             ServerNotification::TurnDiffUpdated(notification) => {
                 self.on_turn_diff(notification.diff)
@@ -348,7 +366,6 @@ impl ChatWidget {
             | ServerNotification::ProcessOutputDelta(_)
             | ServerNotification::ProcessExited(_)
             | ServerNotification::McpServerEventStream(_)
-            | ServerNotification::FileChangePatchUpdated(_)
             | ServerNotification::McpToolCallProgress(_)
             | ServerNotification::AppListUpdated(_)
             | ServerNotification::EnvironmentConnected(_)
@@ -500,7 +517,7 @@ impl ChatWidget {
         self.thread_usage.replaying_turn_completion = was_replaying_turn_completion;
     }
 
-    fn handle_item_started_notification(
+    pub(super) fn handle_item_started_notification(
         &mut self,
         notification: ItemStartedNotification,
         replay_kind: Option<ReplayKind>,
@@ -509,6 +526,7 @@ impl ChatWidget {
             ThreadItemPayload::AgentMessage {
                 id,
                 text,
+                phase,
                 questions,
                 ..
             } => {
@@ -518,11 +536,19 @@ impl ChatWidget {
                     .transcript
                     .has_replayed_cloud_text(&notification.turn_id, &id)
                     || questions.is_some()
-                    || text.is_empty()
                 {
                     return;
                 }
                 let key = (notification.turn_id, id);
+                if phase == Some(MessagePhase::Commentary) {
+                    if self.transcript.streaming_commentary_item.as_ref() != Some(&key) {
+                        self.start_commentary(key, &text);
+                    }
+                    return;
+                }
+                if text.is_empty() {
+                    return;
+                }
                 // A tool can interrupt this item and cause a second start before completion.
                 if self.transcript.active_streamed_agent_message.as_ref() != Some(&key)
                     && self.transcript.last_flushed_agent_message.as_ref() != Some(&key)
@@ -562,16 +588,19 @@ impl ChatWidget {
                 // Buffered notifications were received from this thread's live subscription.
                 self.on_command_execution_started(item, ThreadItemRenderSource::Live)
             }
-            ThreadItemPayload::FileChange { id: _, changes, .. } => {
-                self.on_patch_apply_begin(file_update_changes_to_display(changes));
-            }
+            item @ ThreadItemPayload::FileChange { .. } => self.show_running_tool(&item),
             item @ ThreadItemPayload::McpToolCall { .. } => self.on_mcp_tool_call_started(item),
             item @ ThreadItemPayload::DynamicToolCall { .. } => self.on_dynamic_tool_item(item),
-            ThreadItemPayload::WebSearch(item) => {
-                self.on_web_search_begin(item.id);
+            item @ ThreadItemPayload::WebSearch(_) => {
+                self.show_running_tool(&item);
+                self.on_web_search_begin(item.id().to_owned());
             }
-            ThreadItemPayload::ImageGeneration(_) => {
+            item @ ThreadItemPayload::ImageGeneration(_) => {
+                self.show_running_tool(&item);
                 self.on_image_generation_begin();
+            }
+            item @ (ThreadItemPayload::ImageView { .. } | ThreadItemPayload::Sleep(_)) => {
+                self.show_running_tool(&item)
             }
             ThreadItemPayload::CollabAgentToolCall {
                 id,

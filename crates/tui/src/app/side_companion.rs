@@ -14,6 +14,7 @@ use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::TurnStatus;
 use codex_protocol::items::AsyncUserInputQuestion;
+use codex_protocol::models::MessagePhase;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,8 +55,10 @@ impl SideCompanion {
         Self {
             display: CapturedSideDisplay {
                 rendered_completion_turn_ids: Default::default(),
+                commentary: None,
+                commentary_item: None,
+                running_tools: Vec::new(),
                 active: None,
-                auxiliary: Vec::new(),
                 draft: Box::default(),
                 status: None,
                 work: None,
@@ -84,13 +87,59 @@ impl SideCompanion {
                     .as_ref()
                     .is_none_or(|work| work.turn_id != event.turn.id) =>
             {
+                self.clear_progress();
                 self.display.work = Some(CapturedSideWork::new(
                     event.turn.id.clone(),
                     new_status(),
                     Duration::ZERO,
                 ));
             }
+            ServerNotification::ItemStarted(event) => {
+                if let ThreadItemPayload::AgentMessage {
+                    id,
+                    text,
+                    phase: Some(MessagePhase::Commentary),
+                    questions: None,
+                    ..
+                } = &event.item.payload
+                {
+                    let key = (event.turn_id.clone(), id.clone());
+                    if self.display.commentary_item.as_ref() != Some(&key) {
+                        self.display.commentary_item = Some(key);
+                        self.display.commentary = Some(self.commentary_cell(text.clone()));
+                    }
+                } else {
+                    return self.start_running_tool(&event.item.payload);
+                }
+            }
+            ServerNotification::FileChangePatchUpdated(event) => {
+                if !self
+                    .display
+                    .running_tools
+                    .iter()
+                    .any(|(id, _)| *id == event.item_id)
+                {
+                    return false;
+                }
+                return self.start_running_tool(&ThreadItemPayload::FileChange {
+                    id: event.item_id.clone(),
+                    changes: event.changes.clone(),
+                    status: codex_app_server_protocol::PatchApplyStatus::InProgress,
+                });
+            }
             ServerNotification::AgentMessageDelta(delta) if !delta.delta.is_empty() => {
+                if self
+                    .display
+                    .commentary_item
+                    .as_ref()
+                    .is_some_and(|(turn, item)| turn == &delta.turn_id && item == &delta.item_id)
+                    && let Some(cell) = &mut self.display.commentary
+                {
+                    cell.append_commentary_delta(&delta.delta);
+                    return true;
+                }
+                self.display.commentary = None;
+                self.display.commentary_item = None;
                 if self
                     .answer
                     .as_ref()
@@ -109,7 +158,10 @@ impl SideCompanion {
             }
             ServerNotification::ItemCompleted(event) => {
                 let item = &event.item.payload;
-                return self.finish_item(&event.turn_id, item);
+                let count = self.display.running_tools.len();
+                self.display.running_tools.retain(|(id, _)| id != item.id());
+                return self.finish_item(&event.turn_id, item)
+                    || count != self.display.running_tools.len();
             }
             ServerNotification::TurnCompleted(event)
                 if event.turn.status != TurnStatus::InProgress =>
@@ -141,6 +193,7 @@ impl SideCompanion {
                     self.answer = None;
                 }
                 let work = self.display.work.take_if(|work| work.turn_id == turn.id);
+                self.clear_progress();
                 if turn.status == TurnStatus::Completed
                     && (work.is_some() || store.active_turn_id() == Some(turn.id.as_str()))
                     && let Some(completion) = FinalMessageSeparator::from_turn_once(
@@ -153,10 +206,37 @@ impl SideCompanion {
                     self.cells.push(Arc::new(completion));
                 }
             }
-            ServerNotification::ThreadClosed(_) => return self.display.work.take().is_some(),
+            ServerNotification::ThreadClosed(_) => {
+                self.clear_progress();
+                self.display.work = None;
+            }
             _ => return false,
         }
         true
+    }
+
+    fn clear_progress(&mut self) {
+        self.display.commentary = None;
+        self.display.commentary_item = None;
+        self.display.running_tools.clear();
+    }
+
+    fn start_running_tool(&mut self, item: &ThreadItemPayload) -> bool {
+        let Some(cell) = crate::chatwidget::running_tool_cell(item, self.display.cwd.as_path())
+        else {
+            return false;
+        };
+        crate::chatwidget::upsert_running_tool(&mut self.display.running_tools, item.id(), cell);
+        true
+    }
+
+    fn commentary_cell(&self, text: String) -> AgentMarkdownCell {
+        AgentMarkdownCell::new_with_inline_visualizations(
+            text,
+            self.display.cwd.as_path(),
+            self.display.visualizations.clone(),
+        )
+        .with_phase(Some(MessagePhase::Commentary))
     }
 
     /// History pages may arrive while a reply or command still owns a slot in the parked transcript.
@@ -184,6 +264,7 @@ impl SideCompanion {
             ThreadItemPayload::AgentMessage {
                 id,
                 text,
+                phase,
                 questions,
                 ..
             } => {
@@ -201,8 +282,19 @@ impl SideCompanion {
                         index,
                         text.clone(),
                         questions.as_deref().unwrap_or_default(),
+                        phase.clone(),
                     );
                 }
+                if phase.as_ref() == Some(&MessagePhase::Commentary) && questions.is_none() {
+                    if !text.is_empty() {
+                        let parsed = parse_assistant_markdown(text, self.display.cwd.as_path());
+                        self.display.commentary =
+                            Some(self.commentary_cell(parsed.visible_markdown));
+                    }
+                } else {
+                    self.display.commentary = None;
+                }
+                self.display.commentary_item = None;
                 self.display.last_completed_agent_message = Some((turn.to_owned(), id.clone()));
             }
             ThreadItemPayload::CommandExecution {
@@ -270,19 +362,28 @@ impl SideCompanion {
             .to_owned();
         source.push_str(&answer.pending);
         answer.pending.clear();
-        self.write_answer(index, source, &[]);
+        self.write_answer(index, source, &[], None);
     }
 
-    fn write_answer(&mut self, index: usize, source: String, questions: &[AsyncUserInputQuestion]) {
+    fn write_answer(
+        &mut self,
+        index: usize,
+        source: String,
+        questions: &[AsyncUserInputQuestion],
+        phase: Option<MessagePhase>,
+    ) {
         let cwd = &self.display.cwd;
         let markdown = parse_assistant_markdown(&source, cwd.as_path());
-        let cell: Arc<dyn HistoryCell> = Arc::new(AgentMarkdownCell::from_parsed_message(
-            markdown.visible_markdown,
-            source,
-            cwd.as_path(),
-            self.display.visualizations.clone(),
-            questions,
-        ));
+        let cell: Arc<dyn HistoryCell> = Arc::new(
+            AgentMarkdownCell::from_parsed_message(
+                markdown.visible_markdown,
+                source,
+                cwd.as_path(),
+                self.display.visualizations.clone(),
+                questions,
+            )
+            .with_phase(phase),
+        );
         if index == self.cells.len() {
             self.cells.push(cell);
         } else {
@@ -290,5 +391,123 @@ impl SideCompanion {
                 .replace_range(&self.cells, index..index + 1, &cell);
             self.cells[index] = cell;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_app_server_protocol::AgentMessageDeltaNotification;
+    use codex_app_server_protocol::ItemCompletedNotification;
+    use codex_app_server_protocol::ItemStartedNotification;
+    use codex_utils_path_uri::LegacyAppPathString;
+
+    #[test]
+    fn parked_progress_replaces_commentary_and_retires_completed_tools() {
+        let cwd =
+            AbsolutePathBuf::try_from(crate::test_support::test_path_buf("/project")).unwrap();
+        let mut companion = SideCompanion::empty(cwd);
+        let store = ThreadEventStore::new(20);
+        let apply = |companion: &mut SideCompanion, event| {
+            assert!(
+                companion.apply_notification(&event, &store, || panic!("unexpected turn start"))
+            );
+        };
+        let start = |item| {
+            ServerNotification::ItemStarted(ItemStartedNotification::new(
+                "thread".into(),
+                "turn".into(),
+                item,
+                1,
+            ))
+        };
+        let finish = |item| {
+            ServerNotification::ItemCompleted(ItemCompletedNotification::new(
+                "thread".into(),
+                "turn".into(),
+                item,
+                Some(1),
+                2,
+            ))
+        };
+        let message = |id: &str, text: &str, phase| ThreadItemPayload::AgentMessage {
+            id: id.into(),
+            text: text.into(),
+            phase: Some(phase),
+            questions: None,
+            moderation: None,
+            memory_citation: None,
+            delivery: None,
+        };
+        let view_image = |id: &str| ThreadItemPayload::ImageView {
+            id: id.into(),
+            path: LegacyAppPathString::from_string("image.png"),
+        };
+        apply(
+            &mut companion,
+            finish(message(
+                "first",
+                "Inspecting files",
+                MessagePhase::Commentary,
+            )),
+        );
+        apply(&mut companion, start(view_image("image-1")));
+        apply(&mut companion, start(view_image("image-2")));
+        apply(
+            &mut companion,
+            start(message("second", "Reading", MessagePhase::Commentary)),
+        );
+        apply(
+            &mut companion,
+            ServerNotification::AgentMessageDelta(AgentMessageDeltaNotification {
+                thread_id: "thread".into(),
+                turn_id: "turn".into(),
+                item_id: "second".into(),
+                delta: " images".into(),
+            }),
+        );
+        assert_eq!(
+            companion
+                .display
+                .commentary
+                .as_ref()
+                .and_then(HistoryCell::copy_source),
+            Some("Reading images")
+        );
+        apply(&mut companion, finish(view_image("image-1")));
+        assert_eq!(
+            companion
+                .display
+                .running_tools
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+            ["image-2"]
+        );
+        apply(
+            &mut companion,
+            finish(message(
+                "second",
+                "Reading images",
+                MessagePhase::Commentary,
+            )),
+        );
+        apply(&mut companion, finish(view_image("image-2")));
+        apply(
+            &mut companion,
+            finish(message("final", "Files checked", MessagePhase::FinalAnswer)),
+        );
+        assert!(
+            companion.display.running_tools.is_empty() && companion.display.commentary.is_none()
+        );
+        assert_eq!(
+            companion
+                .cells
+                .iter()
+                .filter(|cell| !crate::history_cell::is_transient_progress(cell.as_ref()))
+                .filter_map(|cell| cell.copy_source())
+                .collect::<Vec<_>>(),
+            ["Files checked"]
+        );
     }
 }

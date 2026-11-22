@@ -580,7 +580,9 @@ pub(crate) struct AgentMarkdownCell {
     cwd: PathBuf,
     inline_visualization_context: Option<crate::inline_visualization::InlineVisualizationContext>,
     rendered_lines: Option<MarkdownRenderCache>,
-    question_titles: Vec<std::ops::Range<usize>>,
+    // Some questions have no matching title in the received Markdown. Their text
+    // still belongs in the conversation even when we can't decorate the titles.
+    question_titles: Option<Vec<std::ops::Range<usize>>>,
 }
 
 impl AgentMarkdownCell {
@@ -633,7 +635,7 @@ impl AgentMarkdownCell {
             cwd: cwd.to_path_buf(),
             inline_visualization_context,
             rendered_lines,
-            question_titles: Vec::new(),
+            question_titles: None,
         }
     }
 
@@ -645,12 +647,25 @@ impl AgentMarkdownCell {
         self
     }
 
+    pub(crate) fn is_transient_commentary(&self) -> bool {
+        self.phase == Some(codex_protocol::models::MessagePhase::Commentary)
+            && self.question_titles.is_none()
+    }
+
+    pub(crate) fn append_commentary_delta(&mut self, delta: &str) {
+        self.markdown_source.push_str(delta);
+        // The previous layout belonged to a shorter version of this message.
+        self.rendered_lines =
+            (!crate::inline_visualization::contains_inline_visualization(&self.markdown_source))
+                .then(MarkdownRenderCache::default);
+    }
+
     pub(crate) fn with_questions(
         mut self,
         questions: &[codex_protocol::items::AsyncUserInputQuestion],
     ) -> Self {
-        self.question_titles =
-            super::async_questions::title_ranges(&self.markdown_source, questions);
+        self.question_titles = (!questions.is_empty())
+            .then(|| super::async_questions::title_ranges(&self.markdown_source, questions));
         self
     }
 }
@@ -704,15 +719,12 @@ impl AgentMarkdownCell {
                     list_spacing,
                 )
             };
-            let lines = if self.question_titles.is_empty() {
+            let titles = self.question_titles.as_deref().unwrap_or_default();
+            let lines = if titles.is_empty() {
                 let lines = markdown(&self.markdown_source);
                 prefix_hyperlink_lines(lines, "• ".dim(), "  ".into())
             } else {
-                super::async_questions::render(
-                    &self.markdown_source,
-                    &self.question_titles,
-                    markdown,
-                )
+                super::async_questions::render(&self.markdown_source, titles, markdown)
             };
             normalize_whitespace_only_hyperlink_lines(lines)
         };

@@ -1,0 +1,48 @@
+---
+source: crates/tui/src/chatwidget/tests/status_and_layout.rs
+expression: "frames.join(\"\\n\\n\")"
+---
+Both commands running
+› Check the build
+
+• Checking the compiler output before running the unit
+  tests.
+
+• Running cargo build
+
+• Running cargo test
+
+• Working (0s • esc to interrupt)
+
+
+› Follow-up draft
+
+  GPT-5.6-Sol default · /tmp/project
+  tab to queue message
+
+Interrupted
+› Check the build
+
+■ Conversation interrupted - use /feedback if
+something went wrong
+
+
+› Follow-up draft
+
+  GPT-5.6-Sol default · /tmp/project
+
+Next turn
+› Check the build
+
+■ Conversation interrupted - use /feedback if
+something went wrong
+
+• Running cargo fmt
+
+• Working (0s • esc to interrupt)
+
+
+› Follow-up draft
+
+  GPT-5.6-Sol default · /tmp/project
+  tab to queue message

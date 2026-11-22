@@ -4,6 +4,8 @@ use super::*;
 use crate::app::test_support::make_test_app;
 use crate::thread_transcript::RawReasoningVisibility;
 use crate::thread_transcript::thread_items_to_transcript_cells;
+use codex_app_server_protocol::ItemCompletedNotification;
+use codex_app_server_protocol::ItemStartedNotification;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::TurnItemsView;
 use pretty_assertions::assert_eq;
@@ -73,32 +75,26 @@ fn project(
 async fn older_page_hydration_keeps_pending_computer_and_exploration_completion() {
     for kind in [ActivityKind::Computer, ActivityKind::Exploration] {
         let mut app = make_test_app().await;
-        match kind {
-            ActivityKind::Computer => {
-                app.chat_widget.handle_mcp_tool_call_completed_now(call(
-                    "newer",
-                    kind,
-                    "completed",
-                ));
-                app.chat_widget.handle_mcp_tool_call_started_now(call(
-                    "pending",
-                    kind,
-                    "inProgress",
-                ));
-            }
-            ActivityKind::Exploration => {
-                app.chat_widget.handle_command_execution_completed_now(call(
-                    "newer",
-                    kind,
-                    "completed",
-                ));
-                app.chat_widget.handle_command_execution_started_now(call(
-                    "pending",
-                    kind,
-                    "inProgress",
-                ));
-            }
-        }
+        let completed = |id| {
+            ServerNotification::ItemCompleted(ItemCompletedNotification::new(
+                "thread".to_owned(),
+                "turn".to_owned(),
+                call(id, kind, "completed"),
+                None,
+                10,
+            ))
+        };
+        app.chat_widget
+            .handle_server_notification(completed("newer"), None);
+        app.chat_widget.handle_server_notification(
+            ServerNotification::ItemStarted(ItemStartedNotification::new(
+                "thread".to_owned(),
+                "turn".to_owned(),
+                call("pending", kind, "inProgress"),
+                10,
+            )),
+            None,
+        );
         let mut current = turn(vec![
             call("older", kind, "completed"),
             reasoning("boundary"),
@@ -112,25 +108,16 @@ async fn older_page_hydration_keeps_pending_computer_and_exploration_completion(
             .extend(project(&app, &current.items[1..2]));
         app.join_older_activity_group(/*boundary*/ 1, std::slice::from_ref(&current));
         assert!(app.transcript_cells.is_empty());
-        if matches!(kind, ActivityKind::Computer) {
-            assert!(
-                crate::chatwidget::tests::helpers::render_bottom_popup(
-                    &app.chat_widget,
-                    /*width*/ 80
-                )
-                .contains("Using computer · 3 actions")
-            );
-        }
-        match kind {
-            ActivityKind::Computer => app.chat_widget.handle_mcp_tool_call_completed_now(call(
-                "pending",
-                kind,
-                "completed",
-            )),
-            ActivityKind::Exploration => app
-                .chat_widget
-                .handle_command_execution_completed_now(call("pending", kind, "completed")),
-        }
+        let live = app.chat_widget.compact_live_hyperlink_lines(80).unwrap();
+        assert_eq!(live.len(), 1);
+        let expected_label = match kind {
+            ActivityKind::Computer => "• Calling cua_repl.js",
+            ActivityKind::Exploration => "• Running cat pending.rs",
+        };
+        assert_eq!(live[0].line.to_string(), expected_label);
+        app.chat_widget
+            .handle_server_notification(completed("pending"), None);
+        assert!(app.chat_widget.compact_live_hyperlink_lines(80).is_none());
         current.items[3] = ThreadItem::untimed(call("pending", kind, "completed"));
         let expected = project(&app, &current.items);
         assert_eq!(

@@ -1303,6 +1303,18 @@ async fn live_app_server_file_change_item_started_preserves_changes() {
         }],
         status: AppServerPatchApplyStatus::InProgress,
     };
+    let live = || codex_app_server_protocol::FileChangePatchUpdatedNotification {
+        item_id: "patch-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        thread_id: "thread-1".to_string(),
+        changes: vec![FileUpdateChange {
+            path: "foo.txt".to_string(),
+            kind: PatchChangeKind::Add,
+            diff: "hello\nworld\n".to_string(),
+        }],
+    };
+    chat.handle_server_notification(ServerNotification::FileChangePatchUpdated(live()), None);
+    assert!(chat.transcript.running_tools.is_empty());
     chat.handle_server_notification(
         ServerNotification::ItemStarted(ItemStartedNotification::new(
             "thread-1".to_string(),
@@ -1313,9 +1325,12 @@ async fn live_app_server_file_change_item_started_preserves_changes() {
         /*replay_kind*/ None,
     );
 
-    let cells = drain_insert_history(&mut rx);
-    assert!(!cells.is_empty(), "expected patch history to be rendered");
-    let transcript = lines_to_single_string(cells.last().expect("patch cell"));
+    assert!(drain_insert_history(&mut rx).is_empty());
+    chat.handle_server_notification(ServerNotification::FileChangePatchUpdated(live()), None);
+    assert_eq!(
+        lines_to_single_string(&chat.transcript.running_tools[0].1.display_lines(80)).trim(),
+        "• Editing foo.txt (+2 -0)"
+    );
     let AppServerThreadItemPayload::FileChange { id, changes, .. } = item else {
         unreachable!()
     };
@@ -1330,8 +1345,9 @@ async fn live_app_server_file_change_item_started_preserves_changes() {
     );
     let replayed = drain_insert_history(&mut rx);
     assert_eq!(replayed.len(), 1);
-    assert_eq!(lines_to_single_string(&replayed[0]), transcript);
-    insta::assert_snapshot!(transcript, @"
+    chat.handle_server_notification(ServerNotification::FileChangePatchUpdated(live()), None);
+    assert!(chat.transcript.running_tools.is_empty());
+    insta::assert_snapshot!(lines_to_single_string(&replayed[0]), @"
     • Added foo.txt (+1 -0)
         1 +hello
     ");
@@ -1757,6 +1773,163 @@ async fn live_app_server_failed_turn_consolidates_streamed_answer() {
         saw_consolidate,
         "failed turn should consolidate streamed cells before clearing the stream controller"
     );
+}
+
+#[tokio::test]
+async fn resuming_a_turn_restores_only_unfinished_search_view_and_sleep_calls() {
+    use codex_app_server_protocol::SleepItem;
+    use codex_app_server_protocol::WebSearchItem;
+
+    let sleep = |id: &str| {
+        ThreadItemPayload::Sleep(SleepItem {
+            id: id.to_owned(),
+            duration_ms: 1000,
+        })
+    };
+    let open = [
+        ThreadItemPayload::WebSearch(WebSearchItem {
+            id: "web".into(),
+            query: String::new(),
+            action: None,
+            results: None,
+        }),
+        ThreadItemPayload::ImageView {
+            id: "image".into(),
+            path: LegacyAppPathString::from_string("diagram.png"),
+        },
+        sleep("wait"),
+    ];
+    let mut turn = app_server_turn("turn-1", AppServerTurnStatus::InProgress, None, None);
+    turn.items.push(ThreadItem::untimed(sleep("legacy")));
+    turn.items.push(ThreadItem {
+        payload: sleep("finished"),
+        started_at_ms: Some(1),
+        completed_at_ms: Some(2),
+    });
+    turn.items
+        .extend(open.iter().cloned().map(|payload| ThreadItem {
+            payload,
+            started_at_ms: Some(3),
+            completed_at_ms: None,
+        }));
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(None).await;
+    chat.replay_thread_turns(vec![turn], ReplayKind::ThreadSnapshot);
+    let live = chat
+        .transcript
+        .running_tools
+        .iter()
+        .map(|(id, _)| id.as_str());
+    assert_eq!(live.collect::<Vec<_>>(), ["web", "image", "wait"]);
+    for payload in open.into_iter().rev() {
+        chat.handle_server_notification(
+            ServerNotification::ItemCompleted(ItemCompletedNotification::new(
+                "thread-1".into(),
+                "turn-1".into(),
+                payload,
+                Some(3),
+                4,
+            )),
+            None,
+        );
+    }
+    assert!(chat.transcript.running_tools.is_empty());
+}
+
+#[tokio::test]
+async fn commentary_updates_in_place_through_live_and_resumed_turns() {
+    for resumed in [false, true] {
+        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
+        let item = AppServerThreadItemPayload::AgentMessage {
+            moderation: None,
+            id: "msg-1".to_string(),
+            text: if resumed { "First " } else { "" }.to_string(),
+            phase: Some(MessagePhase::Commentary),
+            memory_citation: None,
+            delivery: None,
+            questions: None,
+        };
+        if resumed {
+            let mut turn = app_server_turn("turn-1", AppServerTurnStatus::InProgress, None, None);
+            turn.items.push(ThreadItem::untimed(item));
+            chat.replay_thread_turns(vec![turn], ReplayKind::ThreadSnapshot);
+        } else {
+            handle_turn_started(&mut chat, "turn-1");
+            chat.handle_server_notification(
+                ServerNotification::ItemStarted(ItemStartedNotification::new(
+                    "thread-1".to_string(),
+                    "turn-1".to_string(),
+                    item,
+                    0,
+                )),
+                None,
+            );
+            assert!(chat.latest_commentary_cell().is_none());
+            handle_agent_message_delta(&mut chat, "First ");
+        }
+        handle_agent_message_delta(&mut chat, "update");
+        assert_eq!(
+            chat.latest_commentary_cell()
+                .and_then(HistoryCell::copy_source),
+            Some("First update")
+        );
+        assert!(chat.active_cell_transcript_key().is_some());
+        assert!(
+            lines_to_single_string(&chat.active_cell_transcript_lines(80).unwrap())
+                .contains("First update")
+        );
+        for raw in [true, false] {
+            chat.set_raw_output_mode(raw);
+            let lines = chat.active_cell_owned_transcript_lines(80, false).unwrap();
+            assert!(
+                lines
+                    .auxiliary
+                    .iter()
+                    .any(|line| line.line.to_string().contains("First update"))
+            );
+        }
+        assert!(chat.stream_controller.is_none());
+        begin_exec(&mut chat, "call-1", "echo hi");
+        for (id, message) in [("msg-1", "First update."), ("msg-2", "Second update.")] {
+            complete_assistant_message(&mut chat, id, message, Some(MessagePhase::Commentary));
+            assert!(
+                !chat
+                    .active_auxiliary_lines(80)
+                    .iter()
+                    .any(|line| line.line.to_string().contains(message))
+            );
+            assert_eq!(
+                chat.latest_commentary_cell()
+                    .and_then(HistoryCell::copy_source),
+                Some(message)
+            );
+        }
+        assert_eq!(chat.transcript.running_tools.len(), 1);
+        let history = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|event| match event {
+                AppEvent::InsertHistoryCell(cell)
+                    if cell
+                        .as_any()
+                        .downcast_ref::<history_cell::AgentMarkdownCell>()
+                        .is_some_and(history_cell::AgentMarkdownCell::is_transient_commentary) =>
+                {
+                    cell.copy_source().map(str::to_owned)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(history, ["First update.", "Second update."]);
+        if resumed {
+            handle_turn_interrupted(&mut chat, "turn-1");
+        } else {
+            complete_assistant_message(
+                &mut chat,
+                "msg-3",
+                "Done.",
+                Some(MessagePhase::FinalAnswer),
+            );
+        }
+        assert!(chat.latest_commentary_cell().is_none());
+    }
 }
 
 #[tokio::test]

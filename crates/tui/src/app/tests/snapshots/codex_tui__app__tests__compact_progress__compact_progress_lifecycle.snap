@@ -1,0 +1,50 @@
+---
+source: crates/tui/src/app/tests/compact_progress.rs
+expression: "frames.join(\"\\n\\n\")"
+---
+Two calls running
+
+› Update the guide.
+
+
+• Checking the guide.
+
+  I’ll compare the examples.
+
+• Searching the web
+
+• Editing guide.md (+2 -1)
+
+Shorter commentary streaming
+
+› Update the guide.
+
+
+• Updating examples.
+
+• Searching the web
+
+• Editing guide.md (+2 -1)
+
+Edit finished
+
+› Update the guide.
+
+
+• Updating examples.
+
+• Searching the web
+
+Search finished
+
+› Update the guide.
+
+
+• Updating examples.
+
+Final answer
+
+› Update the guide.
+
+
+• The guide is updated.

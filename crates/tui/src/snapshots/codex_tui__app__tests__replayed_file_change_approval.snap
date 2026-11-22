@@ -2,6 +2,9 @@
 source: crates/tui/src/app/tests.rs
 expression: rendered
 ---
+• Editing visible-target.md (+1 -0)
+
+
   Would you like to make the following edits?
 
   Description: Apply proposed file edits

@@ -322,7 +322,8 @@ impl TranscriptView {
         enabled: bool,
         active: Option<&dyn HistoryCell>,
     ) {
-        if self.turn_details.is_some() != enabled {
+        if self.turn_details.is_some() != enabled || self.hide_committed_progress == enabled {
+            self.hide_committed_progress = !enabled;
             self.selection = None;
             self.select_mode = None;
             self.copy_mode = None;
@@ -392,6 +393,13 @@ impl TranscriptView {
     pub(crate) fn turn_row(&self, cells: &[Arc<dyn HistoryCell>], index: usize) -> Option<TurnRow> {
         if self.detailed || self.mode != HistoryRenderMode::Rich {
             return None;
+        }
+        if self.hide_committed_progress
+            && cells
+                .get(index)
+                .is_some_and(|cell| crate::history_cell::is_transient_progress(cell.as_ref()))
+        {
+            return Some(TurnRow::Hidden);
         }
         let details = self.turn_details.as_ref()?;
         let key = cells.get(index).map_or(EntryKey::Live, EntryKey::cell);

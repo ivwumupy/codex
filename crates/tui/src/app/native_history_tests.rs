@@ -45,11 +45,8 @@ async fn quota_warnings_are_emitted_once_and_survive_native_replay() -> Result<(
     Ok(())
 }
 
-#[tokio::test]
-async fn settled_tool_precedes_queued_output_and_is_not_emitted_twice() -> Result<()> {
-    let mut app = crate::app::test_support::make_test_app().await;
-    let mut tui = crate::tui::test_support::make_test_tui()?;
-    let item = |status| ThreadItemPayload::DynamicToolCall {
+fn lookup(status: DynamicToolCallStatus) -> ThreadItemPayload {
+    ThreadItemPayload::DynamicToolCall {
         id: "lookup".into(),
         namespace: None,
         tool: "lookup".into(),
@@ -60,9 +57,42 @@ async fn settled_tool_precedes_queued_output_and_is_not_emitted_twice() -> Resul
         content_items: Some(vec![DynamicToolCallOutputContentItem::InputText {
             text: "unique result".into(),
         }]),
-    };
+    }
+}
+
+#[tokio::test]
+async fn compact_scrollback_displays_answers_while_a_dynamic_call_runs() -> Result<()> {
+    let mut app = crate::app::test_support::make_test_app().await;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
     let cell =
-        history_cell::DynamicToolCallCell::from_item(item(DynamicToolCallStatus::InProgress))
+        history_cell::DynamicToolCallCell::from_item(lookup(DynamicToolCallStatus::InProgress))
+            .unwrap();
+    app.insert_history_cell(&mut tui, Box::new(cell.clone()));
+    app.insert_history_cell(
+        &mut tui,
+        Box::new(history_cell::PlainHistoryCell::new(vec!["answer".into()])),
+    );
+    let rows = tui.pending_history_lines_for_test();
+    assert_eq!(
+        rows.iter()
+            .map(|line| line.line.to_string())
+            .collect::<Vec<_>>(),
+        ["answer"]
+    );
+    cell.update_from_item(lookup(DynamicToolCallStatus::Completed));
+    app.flush_native_history(&mut tui);
+    assert_eq!(tui.pending_history_lines_for_test(), rows);
+    assert_eq!(app.render_transcript_lines_for_reflow(80).lines, rows);
+    Ok(())
+}
+
+#[tokio::test]
+async fn settled_tool_precedes_queued_raw_output_and_is_not_emitted_twice() -> Result<()> {
+    let mut app = crate::app::test_support::make_test_app().await;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    app.chat_widget.set_raw_output_mode(true);
+    let cell =
+        history_cell::DynamicToolCallCell::from_item(lookup(DynamicToolCallStatus::InProgress))
             .unwrap();
     // Stale in-progress history is not in the live queue and cannot hide later context.
     app.transcript_cells.push(Arc::new(cell.clone()));
@@ -97,7 +127,7 @@ async fn settled_tool_precedes_queued_output_and_is_not_emitted_twice() -> Resul
             .iter()
             .any(|line| line.line.to_string().contains("Calling lookup"))
     );
-    cell.update_from_item(item(DynamicToolCallStatus::Completed));
+    cell.update_from_item(lookup(DynamicToolCallStatus::Completed));
     for _ in 0..=4097 / CELLS_PER_FRAME {
         app.flush_native_history(&mut tui);
     }
