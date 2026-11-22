@@ -74,7 +74,10 @@ impl App {
             tui.frame_requester().schedule_frame();
         }
         self.transcript_cells.push(cell.clone());
-        let deferred = tui.is_owned_screen() || self.native_history.insert(&cell);
+        let deferred = tui.is_owned_screen()
+            || self
+                .native_history
+                .insert(&cell, self.chat_widget.raw_output_mode());
         self.render_inserted_history_cell(tui, &cell, deferred);
 
         if is_session_header {
@@ -95,7 +98,7 @@ impl App {
         // Owned replay must not eagerly format every historical entry. Composite status cards are
         // the only committed cells whose mutable usage data needs insertion-time bookkeeping.
         let lines = if !deferred || cell.as_any().is::<history_cell::CompositeHistoryCell>() {
-            cell.display_hyperlink_lines_for_mode(width, self.chat_widget.history_render_mode())
+            cell.scrollback_hyperlink_lines(width, self.chat_widget.history_render_mode())
         } else {
             Vec::new()
         };
@@ -189,8 +192,8 @@ impl App {
         let width = self
             .chat_widget
             .history_wrap_width(tui.terminal.last_known_screen_size.width);
-        let updated_lines = status_cell
-            .display_hyperlink_lines_for_mode(width, self.chat_widget.history_render_mode());
+        let updated_lines =
+            status_cell.scrollback_hyperlink_lines(width, self.chat_widget.history_render_mode());
         if updated_lines == status_history.lines {
             self.pending_thread_usage_history_refresh = false;
             return Ok(());

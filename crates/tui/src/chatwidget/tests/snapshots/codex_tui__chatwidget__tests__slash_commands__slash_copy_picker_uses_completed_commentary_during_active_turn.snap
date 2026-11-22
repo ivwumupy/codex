@@ -2,6 +2,11 @@
 source: crates/tui/src/chatwidget/tests/slash_commands.rs
 expression: "render_bottom_popup(&chat, 80)"
 ---
+• Here is the command:
+
+  echo current
+
+
   Copy to clipboard
 
 

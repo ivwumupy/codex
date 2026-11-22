@@ -1324,10 +1324,41 @@ fn parked_screen(
         &mut buf,
         cells,
         active,
-        &[],
+        None,
+        std::iter::empty(),
         /*collapse_turn_details*/ true,
     );
     text(&buf).trim_end().to_owned()
+}
+
+#[test]
+fn parked_commentary_is_visible_while_streaming_in_each_presentation() {
+    let comment = crate::history_cell::AgentMarkdownCell::new(
+        "**Checking** files".into(),
+        std::path::Path::new("/tmp"),
+    );
+    for (mode, detailed, collapse, expected) in [
+        (HistoryRenderMode::Rich, false, false, "Checking files"),
+        (HistoryRenderMode::Rich, false, true, "Checking files"),
+        (HistoryRenderMode::Rich, true, false, "Checking files"),
+        (HistoryRenderMode::Raw, false, false, "**Checking** files"),
+    ] {
+        let mut view = TranscriptView::default();
+        view.set_presentation(detailed, mode);
+        let area = Rect::new(0, 0, 40, 8);
+        let mut buffer = Buffer::empty(area);
+        let cell = &comment as &dyn HistoryCell;
+        view.render_parked(
+            area,
+            &mut buffer,
+            &[],
+            None,
+            Some(cell),
+            std::iter::once(cell),
+            collapse,
+        );
+        assert_eq!(text(&buffer).matches(expected).count(), 1);
+    }
 }
 
 fn turn_screen(view: &mut TranscriptView, cells: &[Arc<dyn HistoryCell>]) -> String {
@@ -1472,8 +1503,15 @@ fn tool_groups_expand_independently_inside_a_completed_turn() {
     view.sync_turn_details(&cells, /*enabled*/ false, /*active*/ None);
     view.jump_to_latest();
     let disabled = turn_screen(&mut view, &cells);
-    assert!(disabled.contains("Checking stderr."));
-    assert!(disabled.contains("output sentinel"));
+    assert!(!disabled.contains("Checking stderr."));
+    assert!(!disabled.contains("echo hello"));
+    assert!(!disabled.contains("output sentinel"));
+    assert!(disabled.contains("The path is valid."));
+    assert!(disabled.contains("The fixture is missing."));
+    view.begin_search();
+    view.paste_search("output sentinel");
+    while view.advance_search(&cells) {}
+    assert!(view.search.match_anchor().is_some());
 }
 
 #[test]

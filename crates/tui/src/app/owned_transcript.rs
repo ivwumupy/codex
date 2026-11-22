@@ -212,7 +212,10 @@ impl App {
             self.local_settings.tui.copy_on_select_clear_selection;
         view.set_keymap_bindings(&self.keymap);
         view.set_presentation(view.is_detailed(), chat_widget.history_render_mode());
-        let active = chat_widget.active_activity_cell();
+        let compact = !view.is_detailed()
+            && !self.local_settings.tui.collapse_turn_details
+            && !chat_widget.raw_output_mode();
+        let active = chat_widget.active_activity_cell().filter(|_| !compact);
         let (live_summary, expanded) = view.sync_live_tool_summary(
             &self.transcript_cells,
             self.local_settings.tui.collapse_turn_details,
@@ -226,6 +229,10 @@ impl App {
         let changed = if detailed {
             view.sync_live_tail(transcript_width, active_key, |width| {
                 chat_widget.active_cell_transcript_hyperlink_lines(width)
+            })
+        } else if compact {
+            view.sync_live_tail(transcript_width, chat_widget.compact_live_key(), |width| {
+                chat_widget.compact_live_hyperlink_lines(width)
             })
         } else if let Some(row) = live_summary {
             view.sync_live_layout(transcript_width, active_key, |width| {

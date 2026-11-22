@@ -816,8 +816,7 @@ impl App {
                 .conversation_area(tui.terminal.last_known_screen_size.into())
                 .width;
             self.sync_owned_transcript(conversation_width);
-            let width = self.transcript_view.remaining_area().width.max(1);
-            let (stream, display) = self.chat_widget.take_side_display(width);
+            let (stream, display) = self.chat_widget.take_side_display();
             self.app_event_tx.send(AppEvent::ParkSideCompanion {
                 pair,
                 thread_id: old,

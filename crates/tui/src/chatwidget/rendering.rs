@@ -123,6 +123,63 @@ impl ExternalWriterNotice {
 }
 
 impl ChatWidget {
+    /// Canonical history may group several finished and unfinished calls in one cell.
+    /// The main view instead paints the current commentary and individual unfinished calls.
+    fn compact_live_cells(&self) -> impl Iterator<Item = &dyn HistoryCell> {
+        self.latest_commentary_cell()
+            .into_iter()
+            .chain(
+                self.transcript
+                    .running_tools
+                    .iter()
+                    .map(|(_, cell)| cell.as_ref()),
+            )
+            .chain(
+                self.transcript
+                    .active_cell
+                    .as_deref()
+                    .filter(|cell| !history_cell::is_transient_progress(*cell)),
+            )
+    }
+
+    /// Completed commentary already has its own entry in detailed and raw history.
+    fn transcript_live_cells(&self) -> impl Iterator<Item = &dyn HistoryCell> {
+        self.transcript.active_cell.as_deref().into_iter().chain(
+            self.latest_commentary_cell()
+                .filter(|_| self.transcript.streaming_commentary_item.is_some()),
+        )
+    }
+
+    pub(crate) fn compact_live_key(&self) -> Option<ActiveCellTranscriptKey> {
+        self.live_cells_key(self.compact_live_cells())
+    }
+
+    pub(crate) fn active_cell_transcript_key(&self) -> Option<ActiveCellTranscriptKey> {
+        self.live_cells_key(self.transcript_live_cells())
+    }
+
+    fn live_cells_key<'a>(
+        &self,
+        mut cells: impl Iterator<Item = &'a dyn HistoryCell>,
+    ) -> Option<ActiveCellTranscriptKey> {
+        let first = cells.next()?;
+        let mut key = ActiveCellTranscriptKey {
+            cacheable: first.has_stable_transcript_height(),
+            revision: self.transcript.active_cell_revision,
+            is_stream_continuation: first.is_stream_continuation(),
+            animation_tick: first.transcript_animation_tick(),
+        };
+        for cell in cells {
+            key.cacheable &= cell.has_stable_transcript_height();
+            key.animation_tick = key.animation_tick.max(cell.transcript_animation_tick());
+        }
+        Some(key)
+    }
+
+    pub(crate) fn compact_live_hyperlink_lines(&self, width: u16) -> Option<Vec<HyperlinkLine>> {
+        history_cell::compact_live_lines(self.compact_live_cells(), width)
+    }
+
     pub(crate) fn prepare_composer_images(&mut self, protocol: Option<crate::pets::ImageProtocol>) {
         self.composer_images = protocol
             .filter(|_| {
@@ -168,9 +225,21 @@ impl ChatWidget {
         }
 
         let active_cell_right_reserve = self.ambient_pet_wrap_reserved_cols();
-        let active_cell_renderable = match &self.transcript.active_cell {
-            Some(cell) => RenderableItem::Owned(Box::new(TranscriptAreaRenderable {
-                child: cell.as_ref(),
+        let mut flex = FlexRenderable::new();
+        let live_cells: Box<dyn Iterator<Item = &dyn HistoryCell> + '_> = if self.raw_output_mode()
+        {
+            Box::new(self.transcript_live_cells())
+        } else {
+            Box::new(self.compact_live_cells())
+        };
+        for cell in live_cells {
+            let is_active = self
+                .transcript
+                .active_cell
+                .as_deref()
+                .is_some_and(|active| std::ptr::eq(active, cell));
+            let renderable = RenderableItem::Owned(Box::new(TranscriptAreaRenderable {
+                child: cell,
                 // The initial header becomes the first history cell, which has no leading separator.
                 top: if cell.as_any().is::<history_cell::SessionHeaderHistoryCell>() {
                     0
@@ -181,20 +250,17 @@ impl ChatWidget {
                 // Externally backed transcript cells can also change viewport height without an
                 // active-cell revision. Spinner cells remain safe because their indicator width
                 // is stable and their display lines are still rebuilt on every frame.
-                persistent_layout: cell.has_stable_transcript_height().then_some(
+                persistent_layout: (is_active && cell.has_stable_transcript_height()).then_some(
                     PersistentActiveCellLayout {
                         cache: &self.transcript.active_cell_layout,
-                        cell_identity: cell.as_ref() as *const dyn HistoryCell as *const ()
-                            as usize,
+                        cell_identity: cell as *const dyn HistoryCell as *const () as usize,
                         revision: self.transcript.active_cell_revision,
                         render_mode: self.history_render_mode(),
                     },
                 ),
-            })),
-            None => RenderableItem::Owned(Box::new(())),
-        };
-        let mut flex = FlexRenderable::new();
-        flex.push(/*flex*/ 1, active_cell_renderable);
+            }));
+            flex.push(/*flex*/ 1, renderable);
+        }
 
         flex.push(
             /*flex*/ 0,
@@ -300,8 +366,9 @@ impl ChatWidget {
         width: u16,
         render_cell: impl Fn(&dyn HistoryCell, u16) -> Vec<HyperlinkLine>,
     ) -> Option<Vec<HyperlinkLine>> {
-        let lines = render_cell(self.transcript.active_cell.as_deref()?, width);
-        (!lines.is_empty()).then_some(lines)
+        history_cell::live_cell_lines(self.transcript_live_cells(), |cell| {
+            render_cell(cell, width)
+        })
     }
 
     pub(crate) fn note_rendered_width(&self, width: u16) {

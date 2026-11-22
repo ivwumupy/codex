@@ -140,6 +140,7 @@ impl ChatWidget {
         completion: Option<history_cell::FinalMessageSeparator>,
         from_replay: bool,
     ) {
+        self.clear_commentary();
         if self.status_state.reasoning_resume_turn_id.is_some() {
             self.on_agent_reasoning_final();
         }
@@ -166,6 +167,7 @@ impl ChatWidget {
         self.flush_answer_and_plan_streams();
         self.flush_interrupt_activity();
         self.finish_dynamic_activity();
+        self.transcript.running_tools.clear();
         self.flush_unified_exec_wait_streak();
         self.flush_completed_tool_activity();
         if !from_replay {
@@ -337,9 +339,11 @@ impl ChatWidget {
     /// This does not clear MCP startup tracking, because MCP startup can overlap with turn cleanup
     /// and should continue to drive the bottom-pane running indicator while it is in progress.
     pub(super) fn finalize_turn(&mut self) {
+        self.clear_commentary();
         self.flush_answer_and_plan_streams();
         self.flush_interrupt_activity();
         self.finish_dynamic_activity();
+        self.transcript.running_tools.clear();
         if self.status_state.reasoning_resume_turn_id.is_some() {
             self.on_agent_reasoning_final();
         }

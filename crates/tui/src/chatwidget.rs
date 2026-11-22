@@ -53,7 +53,6 @@ use crate::bottom_pane::StatusSurfacePreviewData;
 use crate::bottom_pane::StatusSurfacePreviewItem;
 use crate::bottom_pane::TerminalTitleItem;
 use crate::bottom_pane::TerminalTitleSetupView;
-use crate::diff_model::FileChange;
 use crate::git_action_directives::parse_assistant_markdown;
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::PermissionProfileSnapshot;
@@ -382,6 +381,8 @@ use self::status_surfaces::CachedProjectRootName;
 mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;
 mod tool_lifecycle;
+pub(crate) use tool_lifecycle::running_tool_cell;
+pub(crate) use tool_lifecycle::upsert_running_tool;
 mod tool_requests;
 mod transcript;
 mod transcript_export;
@@ -1960,25 +1961,6 @@ impl ChatWidget {
     /// message is recorded.
     pub(crate) fn rollout_path(&self) -> Option<PathBuf> {
         self.current_rollout_path.clone()
-    }
-
-    /// Returns a cache key describing the current in-flight cells for the transcript overlay.
-    ///
-    /// `Ctrl+T` renders committed transcript cells plus a render-only live tail derived from the
-    /// current active cell, and the overlay caches that tail; this
-    /// key is what it uses to decide whether it must recompute. When there are no live cells, this
-    /// returns `None` so the overlay can drop the tail entirely.
-    ///
-    /// Sources backed by external mutable state disable reuse even when revision and animation
-    /// tick are unchanged. Stable sources still require a revision bump when their content changes.
-    pub(crate) fn active_cell_transcript_key(&self) -> Option<ActiveCellTranscriptKey> {
-        let cell = self.transcript.active_cell.as_ref()?;
-        Some(ActiveCellTranscriptKey {
-            cacheable: cell.has_stable_transcript_height(),
-            revision: self.transcript.active_cell_revision,
-            is_stream_continuation: cell.is_stream_continuation(),
-            animation_tick: cell.transcript_animation_tick(),
-        })
     }
 
     /// Returns the active cell's annotated transcript lines for a given terminal width.

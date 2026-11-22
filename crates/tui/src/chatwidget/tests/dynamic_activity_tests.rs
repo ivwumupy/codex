@@ -31,6 +31,33 @@ fn dynamic_item(id: &str, status: DynamicToolCallStatus) -> AppServerThreadItemP
 }
 
 #[tokio::test]
+async fn main_view_tracks_overlapping_tools_in_start_order_until_each_finishes() {
+    let (mut chat, _events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    let ids = |chat: &ChatWidget| {
+        chat.transcript
+            .running_tools
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>()
+    };
+
+    let shell = begin_unified_exec_startup(&mut chat, "shell", "process", "cargo check");
+    chat.on_dynamic_tool_item(dynamic_item("lookup", DynamicToolCallStatus::InProgress));
+    let other = dynamic_item("other", DynamicToolCallStatus::InProgress);
+    chat.on_dynamic_tool_item(other.clone());
+    chat.on_dynamic_tool_item(other);
+    assert_eq!(ids(&chat), ["shell", "lookup", "other"]);
+
+    chat.on_dynamic_tool_item(dynamic_item("lookup", DynamicToolCallStatus::Failed));
+    assert_eq!(ids(&chat), ["shell", "other"]);
+    end_exec(&mut chat, shell, "", "", /*exit_code*/ 0);
+    assert_eq!(ids(&chat), ["other"]);
+    chat.finalize_turn();
+    assert!(chat.transcript.running_tools.is_empty());
+}
+
+#[tokio::test]
 async fn terminal_dynamic_activity_retains_calls_across_both_fallbacks() {
     let mut outputs = Vec::new();
     for (owned_enabled, alternate_screen) in

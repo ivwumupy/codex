@@ -34,6 +34,11 @@ pub(super) struct StatusCopySource {
 #[derive(Default)]
 pub(super) struct TranscriptState {
     pub(super) active_cell: Option<Box<dyn HistoryCell>>,
+    /// Commentary lives beside tool activity until another message or turn supersedes it.
+    pub(super) latest_commentary: Option<crate::history_cell::AgentMarkdownCell>,
+    pub(super) streaming_commentary_item: Option<(String, String)>,
+    /// Main-view progress in start order, independent of transcript activity grouping.
+    pub(super) running_tools: Vec<(String, Box<dyn HistoryCell>)>,
     /// Shared retained rows for concurrently running dynamic tools, removed on completion.
     pub(super) dynamic_calls:
         std::collections::HashMap<String, crate::history_cell::DynamicToolCallCell>,
@@ -120,6 +125,8 @@ impl TranscriptState {
     }
 
     pub(super) fn reset_turn_flags(&mut self) {
+        self.latest_commentary = None;
+        self.streaming_commentary_item = None;
         self.saw_copy_source_this_turn = false;
         self.last_completed_agent_message = None;
         self.active_streamed_agent_message = None;

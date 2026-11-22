@@ -35,6 +35,20 @@ impl HistoryCell for PlainHistoryCell {
     }
 }
 
+/// Tool and worker lifecycle notices with no independent invocation to count.
+#[derive(Debug)]
+pub(crate) struct ActivityNoticeCell(pub(crate) PlainHistoryCell);
+
+impl HistoryCell for ActivityNoticeCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.0.display_lines(width)
+    }
+
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        self.0.raw_lines()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct LabeledToolCell {
     cell: PlainHistoryCell,

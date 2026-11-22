@@ -3,13 +3,9 @@
 use super::*;
 use crate::app::app_server_requests::AppServerRequestResolution;
 use crate::app::owned_transcript::tests::buffer_text;
-use crate::chatwidget::tests::helpers::normalize_snapshot_paths;
 use crate::custom_terminal::test_support::last_rendered_buffer;
 use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::PatchApplyStatus;
-use crossterm::event::MouseButton;
-use crossterm::event::MouseEvent;
-use crossterm::event::MouseEventKind;
 use pretty_assertions::assert_eq;
 use ratatui::layout::Rect;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -199,33 +195,9 @@ async fn active_patch_approval_pager_preserves_changes_and_accepts_once() -> Res
     let size = tui.terminal.size()?;
     app.render_owned_transcript(&mut tui, size)?;
     let collapsed = buffer_text(last_rendered_buffer(&tui.terminal));
+    assert!(collapsed.contains("Editing 3 files (+5 -2)"));
     assert!(!collapsed.contains("+delta"));
-    let (column, row) = collapsed
-        .lines()
-        .enumerate()
-        .find_map(|(row, line)| line.find("+ Show details").map(|column| (column, row)))
-        .expect("visible patch disclosure");
-    for kind in [
-        MouseEventKind::Down(MouseButton::Left),
-        MouseEventKind::Up(MouseButton::Left),
-    ] {
-        app.handle_tui_event(
-            &mut tui,
-            &mut app_server,
-            TuiEvent::Mouse(MouseEvent {
-                kind,
-                column: column as u16,
-                row: row as u16,
-                modifiers: KeyModifiers::NONE,
-            }),
-        )
-        .await?;
-    }
-    app.render_owned_transcript(&mut tui, size)?;
-    let expanded = buffer_text(last_rendered_buffer(&tui.terminal));
-    insta::with_settings!({snapshot_path => "../../snapshots"}, {
-        insta::assert_snapshot!("patch_approval_expanded_inline", normalize_snapshot_paths(expanded));
-    });
+    assert!(!collapsed.contains("+ Show details"));
     let request = open_patch(&mut app, &mut rx);
     assert_eq!(request.changes, expected_changes());
     assert_eq!(request.id, ITEM_ID);

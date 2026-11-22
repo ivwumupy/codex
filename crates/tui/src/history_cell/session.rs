@@ -120,6 +120,32 @@ impl HistoryCell for ForkedThreadHistoryCell {
 #[derive(Debug)]
 pub struct SessionInfoCell(CompositeHistoryCell);
 
+pub(crate) fn compact_live_lines<'a>(
+    cells: impl Iterator<Item = &'a dyn HistoryCell>,
+    width: u16,
+) -> Option<Vec<HyperlinkLine>> {
+    live_cell_lines(cells, |cell| {
+        fullscreen_session_lines(cell, width, false, HistoryRenderMode::Rich)
+    })
+}
+
+pub(crate) fn live_cell_lines<'a>(
+    cells: impl Iterator<Item = &'a dyn HistoryCell>,
+    render: impl Fn(&dyn HistoryCell) -> Vec<HyperlinkLine>,
+) -> Option<Vec<HyperlinkLine>> {
+    let mut lines = Vec::new();
+    for cell in cells {
+        let part = render(cell);
+        if !part.is_empty() {
+            if !lines.is_empty() {
+                lines.push("".into());
+            }
+            lines.extend(part);
+        }
+    }
+    (!lines.is_empty()).then_some(lines)
+}
+
 /// Fullscreen transcript presentation omits tips; scrollback retains the original cells.
 pub(crate) fn fullscreen_session_lines(
     cell: &dyn HistoryCell,

@@ -174,9 +174,26 @@ fn tool_and_notice_projection_uses_normal_transcript_presentation() {
             id: "compact-1".to_string(),
         },
     ];
-    let rendered = items
+    let projected = items
         .into_iter()
         .flat_map(|item| cells(item, &cwd))
+        .collect::<Vec<_>>();
+    let visible: Vec<_> = projected
+        .iter()
+        .filter(|cell| !history_cell::is_transient_progress(cell.as_ref()))
+        .flat_map(|cell| cell.display_lines(/*width*/ 80))
+        .map(|line| line.to_string())
+        .collect();
+    assert_eq!(
+        visible,
+        [
+            ">> Code review started: current changes <<",
+            "<< Code review finished: No findings >>",
+            "• Context compacted",
+        ]
+    );
+    let rendered = projected
+        .iter()
         .flat_map(|cell| cell.display_lines(/*width*/ 80))
         .map(|line| line.to_string())
         .collect::<Vec<_>>()

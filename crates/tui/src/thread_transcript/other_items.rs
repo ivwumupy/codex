@@ -44,10 +44,10 @@ pub(super) fn cells(item: ThreadItemPayload, cwd: &AbsolutePathBuf) -> Transcrip
                 } else {
                     "Patch application in progress"
                 };
-                cells.push(Arc::new(history_cell::new_info_event(
-                    message.to_string(),
-                    /*hint*/ None,
-                )));
+                cells.push(Arc::new(
+                    history_cell::new_info_event(message.to_string(), /*hint*/ None)
+                        .with_tool_label(message.to_string()),
+                ));
             }
         },
         ThreadItemPayload::WebSearch(item) => {
@@ -68,10 +68,10 @@ pub(super) fn cells(item: ThreadItemPayload, cwd: &AbsolutePathBuf) -> Transcrip
             } else {
                 &item.status
             };
-            cells.push(Arc::new(history_cell::new_info_event(
-                format!("Image generation · {status}"),
-                /*hint*/ None,
-            )));
+            let label = format!("Image generation · {status}");
+            cells.push(Arc::new(
+                history_cell::new_info_event(label.clone(), /*hint*/ None).with_tool_label(label),
+            ));
         }
         ThreadItemPayload::ImageGeneration(item) => {
             cells.push(Arc::new(history_cell::new_image_generation_call(

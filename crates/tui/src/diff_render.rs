@@ -439,6 +439,39 @@ fn render_line_count_summary(added: usize, removed: usize) -> Vec<RtSpan<'static
     spans
 }
 
+/// Build the live patch row once per patch update, without highlighting or wrapping its diff.
+pub(crate) fn running_patch_summary(
+    changes: &HashMap<PathBuf, FileChange>,
+    cwd: &Path,
+) -> RtLine<'static> {
+    let mut line = RtLine::from(vec!["• ".dim(), "Editing".bold()]);
+    if changes.is_empty() {
+        line.push_span(" files");
+        return line;
+    }
+    if changes.len() == 1
+        && let Some((path, change)) = changes.iter().next()
+    {
+        line.push_span(format!(" {}", display_path_for(path, cwd)));
+        if let FileChange::Update {
+            move_path: Some(to),
+            ..
+        } = change
+        {
+            line.push_span(format!(" → {}", display_path_for(to, cwd)));
+        }
+    } else {
+        line.push_span(format!(" {} files", changes.len()));
+    }
+    let (added, removed) = changes
+        .values()
+        .map(line_counts)
+        .fold((0, 0), |(added, removed), (a, r)| (added + a, removed + r));
+    line.push_span(" ");
+    line.extend(render_line_count_summary(added, removed));
+    line
+}
+
 fn render_changes_block(
     rows: Vec<Row<'_>>,
     wrap_cols: usize,

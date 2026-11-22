@@ -5168,12 +5168,12 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
         assert_eq!(text.matches("Worked for").count(), 1, "{frame}");
     }
 
-    // A command already running at handoff belongs before replies received while parked.
+    // A command running at handoff stays visible until its completion arrives while parked.
     let turn = "command-turn";
     let cwd = app.config.cwd.clone();
-    let command = |status| ThreadItemPayload::CommandExecution {
-        id: "cmd".into(),
-        command: "echo sidebar-check".into(),
+    let command = |id: &str, command: &str, status| ThreadItemPayload::CommandExecution {
+        id: id.into(),
+        command: command.into(),
         cwd: cwd.clone().into(),
         status,
         source: Default::default(),
@@ -5193,7 +5193,11 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
         ServerNotification::ItemStarted(ItemStartedNotification::new(
             parent.to_string(),
             turn.into(),
-            command(CommandExecutionStatus::InProgress),
+            command(
+                "cmd",
+                "echo sidebar-check",
+                CommandExecutionStatus::InProgress,
+            ),
             /*started_at_ms*/ 0,
         )),
     ] {
@@ -5202,6 +5206,20 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
     keys!(prefix, side);
     let running = side_frame(&mut app, &mut tui, size)?;
     assert!(running.contains("Running echo sidebar-check"), "{running}");
+    app.enqueue_thread_notification(
+        parent,
+        ServerNotification::ItemStarted(ItemStartedNotification::new(
+            parent.to_string(),
+            turn.into(),
+            command(
+                "parked-cmd",
+                "echo second-check",
+                CommandExecutionStatus::InProgress,
+            ),
+            /*started_at_ms*/ 0,
+        )),
+    )
+    .await?;
     app.enqueue_thread_notification(
         parent,
         agent_message_delta_notification(parent, turn, "after-command", "Command finished."),
@@ -5214,7 +5232,11 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             codex_app_server_protocol::ItemCompletedNotification::new(
                 parent.to_string(),
                 turn.into(),
-                command(CommandExecutionStatus::Completed),
+                command(
+                    "cmd",
+                    "echo sidebar-check",
+                    CommandExecutionStatus::Completed,
+                ),
                 /*started_at_ms*/ None,
                 /*completed_at_ms*/ 0,
             ),
@@ -5222,15 +5244,9 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
     )
     .await?;
     let finished = side_frame(&mut app, &mut tui, size)?;
-    let (_, after_command) = finished
-        .split_once("Ran echo sidebar-check")
-        .unwrap_or_else(|| panic!("{finished}"));
-    assert!(after_command.contains("Command finished."), "{finished}");
-    assert_eq!(
-        finished.matches("echo sidebar-check").count(),
-        1,
-        "{finished}"
-    );
+    assert!(finished.contains("Command finished."), "{finished}");
+    assert!(!finished.contains("echo sidebar-check"), "{finished}");
+    assert!(finished.contains("Running echo second-check"), "{finished}");
     // Check feedback after capturing the layout snapshots and before the clipboard toast appears.
     app.select_agent_thread(&mut tui, &mut app_server, side_thread_id)
         .await?;

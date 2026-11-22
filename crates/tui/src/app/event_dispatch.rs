@@ -1111,7 +1111,7 @@ impl App {
 
                     self.finish_required_stream_reflow(tui)?;
                 } else {
-                    let deferred = tui.is_owned_screen() || self.native_history.insert(&consolidated);
+                    let deferred = tui.is_owned_screen() || self.native_history.insert(&consolidated, self.chat_widget.raw_output_mode());
                     self.transcript_cells.push(consolidated.clone());
                     if let Some(Overlay::Transcript(t)) = &mut self.overlay {
                         t.insert_cell(consolidated.clone());

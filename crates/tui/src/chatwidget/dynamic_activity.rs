@@ -3,14 +3,20 @@
 use super::*;
 
 impl ChatWidget {
+    pub(crate) fn has_live_dynamic_tool(&self, id: &str) -> bool {
+        self.transcript.dynamic_calls.contains_key(id)
+    }
+
     pub(super) fn on_dynamic_tool_item(&mut self, item: ThreadItemPayload) {
-        let started = matches!(
-            &item,
-            ThreadItemPayload::DynamicToolCall {
-                status: codex_app_server_protocol::DynamicToolCallStatus::InProgress,
-                ..
-            }
-        );
+        let ThreadItemPayload::DynamicToolCall { id, status, .. } = &item else {
+            return;
+        };
+        let started = *status == codex_app_server_protocol::DynamicToolCallStatus::InProgress;
+        if started {
+            self.show_running_tool(&item);
+        } else {
+            self.hide_running_tool(id);
+        }
         self.defer_or_handle(
             item,
             |interrupts, item| {

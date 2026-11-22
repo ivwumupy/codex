@@ -34,7 +34,7 @@ impl ChatWidget {
         else {
             return;
         };
-        let (_command, parsed_cmd) = command_execution_command_and_parsed(command, command_actions);
+        let (_, parsed_cmd) = command_execution_command_and_parsed(command, command_actions);
         self.flush_answer_stream_with_separator();
         if is_unified_exec_source(*source) {
             if *source == ExecCommandSource::UnifiedExecStartup && !render_source.is_replay() {
@@ -45,9 +45,10 @@ impl ChatWidget {
             }
             // Unified exec may be parsed as Unknown; keep the working indicator visible regardless.
             self.bottom_pane.ensure_status_indicator();
-            if !is_standard_tool_call(&parsed_cmd) {
-                return;
-            }
+        }
+        self.show_running_tool(&item);
+        if is_unified_exec_source(*source) && !is_standard_tool_call(&parsed_cmd) {
+            return;
         }
         self.defer_or_handle(
             item,
@@ -146,6 +147,7 @@ impl ChatWidget {
         else {
             return;
         };
+        self.hide_running_tool(id);
         if is_unified_exec_source(*source) {
             if let Some(process_id) = process_id.as_deref()
                 && self

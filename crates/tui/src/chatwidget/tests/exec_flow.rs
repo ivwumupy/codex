@@ -1678,7 +1678,7 @@ async fn apply_patch_events_emit_history_cells() {
         "expected approval request to surface via modal without emitting history cells"
     );
 
-    // 2) Begin apply -> per-file apply block cell (no global header)
+    // A running patch owns one summary row until its terminal event.
     let mut changes2 = HashMap::new();
     changes2.insert(
         PathBuf::from("foo.txt"),
@@ -1687,28 +1687,15 @@ async fn apply_patch_events_emit_history_cells() {
         },
     );
     handle_patch_apply_begin(&mut chat, "c1", "turn-c1", changes2);
-    let cells = drain_insert_history(&mut rx);
-    assert!(!cells.is_empty(), "expected apply block cell to be sent");
-    let blob = lines_to_single_string(cells.last().unwrap());
-    insta::assert_snapshot!(blob, @"
-    • Added foo.txt (+16 -0)
-         1 +line 1
-         2 +line 2
-         3 +line 3
-         4 +line 4
-         5 +line 5
-         6 +line 6
-         7 +line 7
-         8 +line 8
-         9 +line 9
-        10 +line 10
-        11 +line 11
-        12 +line 12
-        13 +line 13
-        14 +line 14
-        15 +line 15
-        16 +line 16
-    ");
+    assert!(drain_insert_history(&mut rx).is_empty());
+    let [(id, live)] = chat.transcript.running_tools.as_slice() else {
+        panic!("expected a single running patch");
+    };
+    assert_eq!(id, "c1");
+    assert_eq!(
+        lines_to_single_string(&live.display_lines(80)).trim(),
+        "• Editing foo.txt (+16 -0)"
+    );
 
     // 3) End apply success -> success cell
     let mut end_changes = HashMap::new();
@@ -1726,10 +1713,9 @@ async fn apply_patch_events_emit_history_cells() {
         AppServerPatchApplyStatus::Completed,
     );
     let cells = drain_insert_history(&mut rx);
-    assert!(
-        cells.is_empty(),
-        "no success cell should be emitted anymore"
-    );
+    assert!(chat.transcript.running_tools.is_empty());
+    assert_eq!(cells.len(), 1);
+    assert!(lines_to_single_string(&cells[0]).contains("16 +line 16"));
 }
 
 #[tokio::test]
@@ -1765,12 +1751,10 @@ async fn apply_patch_manual_approval_adjusts_header() {
     );
     handle_patch_apply_begin(&mut chat, "c1", "turn-c1", apply_changes);
 
-    let cells = drain_insert_history(&mut rx);
-    assert!(!cells.is_empty(), "expected apply block cell to be sent");
-    let blob = lines_to_single_string(cells.last().unwrap());
-    assert!(
-        blob.contains("Added foo.txt") || blob.contains("Edited foo.txt"),
-        "expected apply summary header for foo.txt: {blob:?}"
+    assert!(drain_insert_history(&mut rx).is_empty());
+    assert_eq!(
+        lines_to_single_string(&chat.transcript.running_tools[0].1.display_lines(80)).trim(),
+        "• Editing foo.txt (+1 -0)"
     );
 }
 
@@ -1810,9 +1794,7 @@ async fn apply_patch_manual_flow_snapshot() {
         },
     );
     handle_patch_apply_begin(&mut chat, "c1", "turn-c1", apply_changes);
-    let approved_lines = drain_insert_history(&mut rx)
-        .pop()
-        .expect("approved patch cell");
+    let approved_lines = chat.transcript.running_tools[0].1.display_lines(80);
 
     assert_chatwidget_snapshot!(
         "apply_patch_manual_flow_history_approved",

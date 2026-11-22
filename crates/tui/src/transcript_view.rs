@@ -126,6 +126,7 @@ pub(crate) struct TranscriptView {
     last_click: Option<(std::time::Instant, u16, u16, u8)>,
     disclosure: disclosure::Disclosure,
     turn_details: Option<turn_details::TurnDetails>,
+    hide_committed_progress: bool,
 }
 
 impl Default for TranscriptView {
@@ -167,6 +168,7 @@ impl Default for TranscriptView {
             last_click: None,
             disclosure: disclosure::Disclosure::default(),
             turn_details: None,
+            hide_committed_progress: false,
         }
     }
 }
@@ -356,34 +358,50 @@ impl TranscriptView {
     }
 
     /// Reflow the captured live owner without treating a passive paint as reading new output.
-    pub(crate) fn render_parked(
+    pub(crate) fn render_parked<'a>(
         &mut self,
         area: Rect,
         buffer: &mut Buffer,
         cells: &[Arc<dyn HistoryCell>],
-        active: Option<&dyn HistoryCell>,
-        auxiliary: &[HyperlinkLine],
+        active: Option<&'a dyn HistoryCell>,
+        streaming_commentary: Option<&'a dyn HistoryCell>,
+        progress: impl Iterator<Item = &'a dyn HistoryCell>,
         collapse_turn_details: bool,
     ) {
         let width = area.width;
         let unseen_activity = self.unseen_activity;
-        let (summary, expanded) = self.sync_live_tool_summary(cells, collapse_turn_details, active);
+        let compact =
+            !self.detailed && self.mode == HistoryRenderMode::Rich && !collapse_turn_details;
+        let (summary, expanded) =
+            self.sync_live_tool_summary(cells, collapse_turn_details, active.filter(|_| !compact));
         let disclose = !self.disclosure.live_ids.is_empty() && self.mode == HistoryRenderMode::Rich;
         let mode = self.mode;
         let lines = |width| {
-            let mut lines = active.map_or_else(Vec::new, |c| c.transcript_hyperlink_lines(width));
-            if !lines.is_empty() && !auxiliary.is_empty() {
-                lines.push("".into());
-            }
-            lines.extend_from_slice(auxiliary);
-            (!lines.is_empty()).then_some(lines)
+            crate::history_cell::live_cell_lines(
+                active.into_iter().chain(streaming_commentary),
+                |cell| cell.transcript_hyperlink_lines(width),
+            )
+        };
+        let auxiliary = |width| {
+            streaming_commentary.map_or_else(Vec::new, |cell| {
+                crate::history_cell::fullscreen_session_lines(cell, width, false, mode)
+            })
         };
         self.sync_search_live_tail(width, /*key*/ None, lines);
         if self.detailed {
             self.sync_live_tail(width, /*key*/ None, lines);
+        } else if compact {
+            self.sync_live_tail(width, /*key*/ None, |width| {
+                crate::history_cell::compact_live_lines(
+                    progress.chain(
+                        active.filter(|cell| !crate::history_cell::is_transient_progress(*cell)),
+                    ),
+                    width,
+                )
+            });
         } else if let Some(row) = summary {
             self.sync_live_layout(width, /*key*/ None, |width| {
-                Some(row.layout(width, expanded, auxiliary.to_vec()))
+                Some(row.layout(width, expanded, auxiliary(width)))
             });
         } else {
             self.sync_live_activity_tail(width, /*key*/ None, expanded && disclose, |width| {
@@ -396,7 +414,7 @@ impl TranscriptView {
                         )
                     }
                 });
-                let mut auxiliary = auxiliary.to_vec();
+                let mut auxiliary = auxiliary(width);
                 if activity.is_empty() && auxiliary.is_empty() {
                     return None;
                 }
