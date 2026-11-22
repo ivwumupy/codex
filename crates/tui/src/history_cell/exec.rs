@@ -6,7 +6,56 @@
 use super::*;
 use crate::style::accent_color;
 use crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines;
+use crate::text_formatting::single_line_graphemes;
 use crate::width::display_width;
+
+const TRUNCATION_SUFFIX: &str = " [...]";
+
+fn command_preview_line(
+    command: &str,
+    width: usize,
+    mut prefix: Line<'static>,
+    command_style: Style,
+) -> Line<'static> {
+    let budget = width.saturating_sub(prefix.width());
+    if budget == 0 {
+        return crate::line_truncation::truncate_line_to_width(prefix, width);
+    }
+    let mut graphemes = single_line_graphemes(command);
+    let snippet: String = graphemes.by_ref().take(80).collect();
+    let (visible, remainder, _) = take_prefix_by_width(&snippet, budget);
+    let truncated = !remainder.is_empty() || graphemes.next().is_some();
+    let suffix_width = display_width(TRUNCATION_SUFFIX);
+    if truncated && budget > suffix_width {
+        let (visible, _, _) = take_prefix_by_width(&visible, budget - suffix_width);
+        prefix.push_span(Span::styled(visible, command_style));
+        prefix.push_span(TRUNCATION_SUFFIX.dim());
+    } else {
+        prefix.push_span(Span::styled(visible, command_style));
+    }
+    prefix
+}
+
+#[derive(Debug)]
+pub(crate) struct RunningCommandCell(pub(crate) String);
+
+impl HistoryCell for RunningCommandCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        if width == 0 {
+            return Vec::new();
+        }
+        vec![command_preview_line(
+            &self.0,
+            usize::from(width),
+            vec!["• ".dim(), "Running ".into()].into(),
+            Style::default(),
+        )]
+    }
+
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        plain_lines(self.display_lines(u16::MAX))
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct UnifiedExecInteractionCell {
@@ -163,54 +212,22 @@ impl HistoryCell for UnifiedExecProcessesCell {
 
         let prefix = "  • ";
         let prefix_width = display_width(prefix);
-        let truncation_suffix = " [...]";
+        let truncation_suffix = TRUNCATION_SUFFIX;
         let truncation_suffix_width = display_width(truncation_suffix);
         let mut shown = 0usize;
         for process in &self.processes {
             if shown >= max_processes {
                 break;
             }
-            let command = &process.command_display;
-            let (snippet, snippet_truncated) = {
-                let max_graphemes = 80;
-                let mut graphemes = command.graphemes(true);
-                let snippet: String = graphemes
-                    .by_ref()
-                    .take(max_graphemes)
-                    .map(|grapheme| match grapheme {
-                        "\n" | "\r\n" => "↵",
-                        _ => grapheme,
-                    })
-                    .collect();
-                (snippet, graphemes.next().is_some())
-            };
+            out.push(command_preview_line(
+                &process.command_display,
+                wrap_width,
+                prefix.dim().into(),
+                Style::default().fg(accent_color()),
+            ));
             if wrap_width <= prefix_width {
-                out.push(Line::from(prefix.dim()));
                 shown += 1;
                 continue;
-            }
-            let budget = wrap_width.saturating_sub(prefix_width);
-            let mut needs_suffix = snippet_truncated;
-            if !needs_suffix {
-                let (_, remainder, _) = take_prefix_by_width(&snippet, budget);
-                if !remainder.is_empty() {
-                    needs_suffix = true;
-                }
-            }
-            if needs_suffix && budget > truncation_suffix_width {
-                let available = budget.saturating_sub(truncation_suffix_width);
-                let (truncated, _, _) = take_prefix_by_width(&snippet, available);
-                out.push(
-                    vec![
-                        prefix.dim(),
-                        truncated.fg(accent_color()),
-                        truncation_suffix.dim(),
-                    ]
-                    .into(),
-                );
-            } else {
-                let (truncated, _, _) = take_prefix_by_width(&snippet, budget);
-                out.push(vec![prefix.dim(), truncated.fg(accent_color())].into());
             }
 
             let chunk_prefix_first = "    ↳ ";

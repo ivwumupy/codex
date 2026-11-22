@@ -2,6 +2,14 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::width::display_width;
 
+/// Yields display graphemes for a single-line preview, marking each line break.
+pub(crate) fn single_line_graphemes(text: &str) -> impl Iterator<Item = &str> {
+    text.graphemes(true).map(|grapheme| match grapheme {
+        "\n" | "\r\n" => "↵",
+        _ => grapheme,
+    })
+}
+
 pub(crate) fn capitalize_first(input: &str) -> String {
     let mut chars = input.chars();
     match chars.next() {
