@@ -93,6 +93,7 @@ impl Mailboxes {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn remove(&self, agent: ThreadId) {
         // Dropping pending mail can run extension destructors. Release the lock first.
         let mailbox = self

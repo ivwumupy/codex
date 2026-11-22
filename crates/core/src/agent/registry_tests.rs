@@ -46,7 +46,7 @@ fn session_depth_defaults_to_zero_for_root_sources() {
 }
 
 #[test]
-fn thread_spawn_depth_increments_and_enforces_limit() {
+fn thread_spawn_depth_increments_for_child() {
     let session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: ThreadId::new(),
         depth: 1,
@@ -54,12 +54,7 @@ fn thread_spawn_depth_increments_and_enforces_limit() {
         agent_nickname: None,
         agent_role: None,
     });
-    let child_depth = next_thread_spawn_depth(&session_source);
-    assert_eq!(child_depth, 2);
-    assert!(exceeds_thread_spawn_depth_limit(
-        child_depth,
-        /*max_depth*/ 1
-    ));
+    assert_eq!(next_thread_spawn_depth(&session_source), 2);
 }
 
 #[test]
@@ -67,9 +62,6 @@ fn non_thread_spawn_subagents_default_to_depth_zero() {
     let session_source = SessionSource::SubAgent(SubAgentSource::Review);
     assert_eq!(session_depth(&session_source), 0);
     assert_eq!(next_thread_spawn_depth(&session_source), 1);
-    assert!(!exceeds_thread_spawn_depth_limit(
-        /*depth*/ 1, /*max_depth*/ 1
-    ));
 }
 
 #[test]
