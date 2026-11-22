@@ -3,6 +3,58 @@ use codex_app_server_protocol::ThreadItem;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn running_multiline_commands_show_line_breaks() {
+    let (mut chat, _events, _operations) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    begin_exec(&mut chat, "wrapped", "printf 'one\\n'\r\n\n  echo two\n");
+    handle_exec_begin(
+        &mut chat,
+        AppServerThreadItemPayload::CommandExecution {
+            model_context: None,
+            sandbox_type: None,
+            id: "raw".into(),
+            command: "pwd\nls".into(),
+            cwd: test_path_buf("/tmp").abs().into(),
+            process_id: None,
+            plugin_id: None,
+            script_path: None,
+            source: ExecCommandSource::Agent,
+            status: AppServerCommandExecutionStatus::InProgress,
+            command_actions: Vec::new(),
+            aggregated_output: None,
+            exit_code: None,
+            duration_ms: None,
+        },
+    );
+
+    let lines = chat.compact_live_hyperlink_lines(80).expect("live rows");
+    let rendered = lines_to_single_string(&crate::terminal_hyperlinks::visible_lines(lines));
+    insta::assert_snapshot!(rendered, @r"
+    • Running printf 'one\n'↵↵  echo two↵
+
+    • Running pwd↵ls
+    ");
+}
+
+#[tokio::test]
+async fn running_multiline_command_uses_ps_length_limit() {
+    let (mut chat, _events, _operations) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    let tail = "a".repeat(75);
+    begin_exec(&mut chat, "long", &format!("pwd\n界{tail}z"));
+
+    let render = |width| {
+        let lines = chat.compact_live_hyperlink_lines(width).expect("live row");
+        lines_to_single_string(&crate::terminal_hyperlinks::visible_lines(lines))
+    };
+    assert_eq!(
+        render(120).trim_end(),
+        format!("• Running pwd↵界{tail} [...]")
+    );
+    insta::assert_snapshot!(render(23), @"• Running pwd↵界a [...]");
+}
+
+#[tokio::test]
 async fn external_writer_snapshot_freezes_active_command_and_mcp_rows() {
     let mut rendered = Vec::new();
     for active_mcp in [false, true] {
@@ -1378,14 +1430,9 @@ async fn disabled_slash_command_while_task_running_snapshot() {
 // Synthesizes an exec approval request to trigger the approval modal
 // and snapshots the visual output using the ratatui TestBackend.
 #[tokio::test]
-async fn approval_modal_exec_snapshot() -> anyhow::Result<()> {
+async fn approval_modal_exec_snapshot() {
     // Build a chat widget with manual channels to avoid spawning the agent.
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    // Ensure policy allows surfacing approvals explicitly (not strictly required for direct event).
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
     // Inject an exec approval request to display the approval modal.
     let ev = ExecApprovalRequestEvent {
         kind: Default::default(),
@@ -1432,19 +1479,13 @@ async fn approval_modal_exec_snapshot() -> anyhow::Result<()> {
         "approval_modal_exec",
         terminal.backend().vt100().screen().contents()
     );
-
-    Ok(())
 }
 
 // Snapshot test: command approval modal without a reason
 // Ensures spacing looks correct when no reason text is provided.
 #[tokio::test]
-async fn approval_modal_exec_without_reason_snapshot() -> anyhow::Result<()> {
+async fn approval_modal_exec_without_reason_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
 
     let ev = ExecApprovalRequestEvent {
         kind: Default::default(),
@@ -1476,20 +1517,13 @@ async fn approval_modal_exec_without_reason_snapshot() -> anyhow::Result<()> {
         "approval_modal_exec_no_reason",
         terminal.backend().vt100().screen().contents()
     );
-
-    Ok(())
 }
 
 // Snapshot test: approval modal with a proposed execpolicy prefix that is multi-line;
 // we should not offer adding it to execpolicy.
 #[tokio::test]
-async fn approval_modal_exec_multiline_prefix_hides_execpolicy_option_snapshot()
--> anyhow::Result<()> {
+async fn approval_modal_exec_multiline_prefix_hides_execpolicy_option_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
 
     let script = "python - <<'PY'\nprint('hello')\nPY".to_string();
     let command = vec!["bash".into(), "-lc".into(), script];
@@ -1523,19 +1557,13 @@ async fn approval_modal_exec_multiline_prefix_hides_execpolicy_option_snapshot()
         "approval_modal_exec_multiline_prefix_no_execpolicy",
         contents
     );
-
-    Ok(())
 }
 
 // Snapshot test: patch approval modal
 #[tokio::test]
-async fn approval_modal_patch_snapshot() -> anyhow::Result<()> {
+async fn approval_modal_patch_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.cwd = test_path_buf("/tmp/project").abs();
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
 
     // Build a small changeset and a reason/grant_root to exercise the prompt text.
     let mut changes = HashMap::new();
@@ -1564,8 +1592,6 @@ async fn approval_modal_patch_snapshot() -> anyhow::Result<()> {
     let contents = terminal.backend().vt100().screen().contents();
     assert!(!contents.contains("$ apply_patch"));
     assert_chatwidget_snapshot!("approval_modal_patch", normalize_snapshot_paths(contents));
-
-    Ok(())
 }
 
 #[tokio::test]
@@ -1915,13 +1941,8 @@ async fn apply_patch_full_flow_integration_like() {
 }
 
 #[tokio::test]
-async fn apply_patch_untrusted_shows_approval_modal() -> anyhow::Result<()> {
+async fn apply_patch_request_shows_approval_modal() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    // Ensure approval policy is untrusted (OnRequest)
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
 
     // Simulate a patch approval request from backend
     let mut changes = HashMap::new();
@@ -1961,19 +1982,11 @@ async fn apply_patch_untrusted_shows_approval_modal() -> anyhow::Result<()> {
         contains_title,
         "expected approval modal to be visible with title 'Would you like to make the following edits?'"
     );
-
-    Ok(())
 }
 
 #[tokio::test]
-async fn apply_patch_request_omits_diff_summary_from_modal() -> anyhow::Result<()> {
+async fn apply_patch_request_omits_diff_summary_from_modal() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    // Ensure we are in OnRequest so an approval is surfaced
-    chat.config
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest.to_core())?;
 
     // Simulate backend asking to apply a patch adding two lines to README.md
     let mut changes = HashMap::new();
@@ -2014,6 +2027,4 @@ async fn apply_patch_request_omits_diff_summary_from_modal() -> anyhow::Result<(
     assert!(!contents.contains("README.md (+2 -0)"));
     assert!(!contents.contains("+line one"));
     assert!(!contents.contains("+line two"));
-
-    Ok(())
 }

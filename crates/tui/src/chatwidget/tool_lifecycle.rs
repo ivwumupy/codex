@@ -4,7 +4,9 @@
 //! events as transcript cells.
 
 use super::*;
+use crate::text_formatting::single_line_graphemes;
 use crate::thread_transcript::tools::McpHistory;
+use codex_shell_command::parse_command::extract_shell_command;
 use codex_utils_path_uri::LegacyAppPathString;
 
 /// Build the same live tool row for a focused or parked conversation.
@@ -16,10 +18,12 @@ pub(crate) fn running_tool_cell(
         ThreadItemPayload::CommandExecution {
             command, source, ..
         } if *source != ExecCommandSource::UserShell => {
-            format!(
-                "Running {}",
-                strip_bash_lc_and_escape(&split_command_string(command))
-            )
+            let argv = split_command_string(command);
+            let script =
+                extract_shell_command(&argv).map_or(command.as_str(), |(_, script)| script);
+            return Some(Box::new(history_cell::RunningCommandCell(
+                script.to_owned(),
+            )));
         }
         ThreadItemPayload::FileChange { changes, .. } => {
             let summary = crate::diff_render::running_patch_summary(
@@ -52,7 +56,7 @@ pub(crate) fn running_tool_cell(
         ThreadItemPayload::Sleep(_) => "Sleeping".into(),
         _ => return None,
     };
-    let label = label.lines().next().unwrap_or_default().to_owned();
+    let label: String = single_line_graphemes(&label).collect();
     Some(Box::new(PlainHistoryCell::new(vec![Line::from(vec![
         "• ".dim(),
         label.into(),
