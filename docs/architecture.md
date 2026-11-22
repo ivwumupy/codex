@@ -49,8 +49,8 @@ flowchart TD
 
 1. **配置入口已经收紧，运行时仍带着云 provider。** 内置表只有 OpenAI，自定义 provider 合并时会拒绝 Bedrock、GCP 以及若干账号认证字段。运行时工厂仍能构造 Bedrock/GCP，`model-provider` 和 `app-server` 的清单仍直接依赖 `aws-auth`，`login` 仍使用 `workload-identity` 的类型。这是按产品范围可以先消掉的一组依赖。[配置校验](../crates/model-provider-info/src/lib.rs) · [运行时选择](../crates/model-provider/src/provider.rs) · [凭据管理](../crates/login/src/auth/manager.rs)
 2. **账号功能还出现在命令和协议表面。** app-server 仍能解析 ChatGPT 登录请求，再返回 unsupported。`chatgpt` 中的 `codex apply` 读取云任务的 diff，本地模型工具 `apply-patch` 是另一条调用链。`backend-client` 既提供账号 profile 和 analytics，又承担 API key 的 turn cost 查询。删除整个包会同时影响后者。[账号 RPC](../crates/app-server/src/request_processors/account_processor.rs) · [云任务 diff](../crates/chatgpt/src/apply_command.rs) · [费用查询](../crates/app-server/src/turn_cost_worker.rs)
-3. **前端仍经客户端库拿到服务端内部类型。** `tui` 的 Cargo 清单里没有直接的 `core` 依赖，但 TUI 通过 `app-server-client::legacy_core` 使用 `core::config::ConfigBuilder` 等实现。客户端库还直接构造进程内服务。只改清单无法形成客户端边界。另一个容易混淆的名字是 `core-api`，它重新导出大量 core 类型。[TUI 引用](../crates/tui/src/lib.rs) · [客户端导出](../crates/app-server-client/src/lib.rs) · [core-api](../crates/core-api/src/lib.rs)
-4. **单看依赖数量无法决定该拆谁。** 149 个 workspace 成员中，`core` 直接依赖 69 个成员，`app-server` 依赖 62 个，`cli` 依赖 47 个，`tui` 依赖 46 个。`protocol` 有 78 个直接消费者。这里统计各目标平台及 feature 的清单声明，每对包只计一次，排除外部依赖、build 和 dev 依赖。应先清掉已退出的功能，再看哪些依赖仍跨过了职责边界。[workspace 清单](../Cargo.toml)
+3. **前端仍经客户端库拿到服务端内部类型。** `tui` 的 Cargo 清单里没有直接的 `core` 依赖，但 TUI 通过 `app-server-client::legacy_core` 使用 `core::config::ConfigBuilder` 等实现。客户端库还直接构造进程内服务。只改清单无法形成客户端边界。[TUI 引用](../crates/tui/src/lib.rs) · [客户端导出](../crates/app-server-client/src/lib.rs)
+4. **单看依赖数量无法决定该拆谁。** 146 个 workspace 成员中，`core` 直接依赖 69 个成员，`app-server` 依赖 62 个，`cli` 依赖 47 个，`tui` 依赖 46 个。`protocol` 有 77 个直接消费者。这里统计各目标平台及 feature 的清单声明，每对包只计一次，排除外部依赖、build 和 dev 依赖。应先清掉已退出的功能，再看哪些依赖仍跨过了职责边界。[workspace 清单](../Cargo.toml)
 
 ## 建议的 PR 顺序
 
@@ -61,7 +61,7 @@ flowchart TD
 | 3. 理顺前端启动边界 | 从一个实际泄漏开始，将 TUI 用到的本地偏好与服务端运行配置分开。先用已有配置 RPC 承载服务端字段，把进程内启动构造集中起来，逐个移除 `legacy_core` 引用。显式远端、共享 daemon 与进程内三条路径分别覆盖。 | 使用同一个 mock 跑 TUI 与 `codex exec`。显式远端请求抵达指定服务，`--no-daemon` 在已有 daemon 的环境中仍只使用进程内服务。迁移完成的 TUI 模块直接依赖前端或协议类型。 |
 | 4. 用一个扩展检验 core 的边界 | 对 `ext-*` 逐个追踪注册处、运行时依赖和回调。选择一个直接依赖 core、实际只消费少数操作的扩展，优先复用已有注册接口，将实现细节留在宿主。用结果判断下一个扩展是否适合同样的做法。 | 注册、工具或事件回调、取消与关闭按该扩展的现有行为通过测试。Cargo 图中减少对应的直接依赖。 |
 
-`v8-poc` 可以作为低优先级的独立清理项。决定是否保留时检查实验、示例和打包用途。Code Mode host 本身就是一个例子，运行时通过进程启动的程序可以没有任何 Rust 反向依赖。
+Code Mode host 由运行时作为子进程启动，在 Rust 依赖图之外使用。
 
 ## Workspace 目录索引
 
@@ -71,17 +71,17 @@ flowchart TD
 | --- | --- |
 | 入口与终端 | `cli`、`tui`、`exec`、`arg0`、`ansi-escape`、`terminal-detection`、`mermaid`、`utils-cli` |
 | 应用服务与 RPC | `app-server`、`app-server-client`、`app-server-daemon`、`app-server-protocol`、`app-server-protocol-noop-macros`、`app-server-transport`、`codex-experimental-api-macros` |
-| 会话与公共数据类型 | `core`、`core-api`、`protocol`、`context-fragments`、`prompts`、`tools`、`collaboration-mode-templates`、`agent-roles` |
+| 会话与公共数据类型 | `core`、`protocol`、`context-fragments`、`prompts`、`tools`、`collaboration-mode-templates`、`agent-roles` |
 | 配置与安装环境 | `config`、`features`、`codex-home`、`install-context`、`build-info` |
 | 推理与 HTTP | `model-provider-info`、`model-provider`、`models-manager`、`codex-api`、`codex-client`、`http-client`、`responses-api-proxy`、`websocket-client`、`response-debug-context` |
 | 凭据、托管身份与后端 | `login`、`keyring-store`、`secrets`、`aws-auth`、`workload-identity`、`agent-identity`、`runtime-agent-instance`、`user-verification`、`websocket-auth`、`chatgpt`、`backend-client`、`codex-backend-openapi-models`、`connectors` |
-| 工具执行、文件与沙箱 | `exec-server`、`exec-server-cli`、`exec-server-protocol`、`sandboxing`、`execpolicy`、`network-proxy`、`process-hardening`、`shell-command`、`apply-patch`、`file-search`、`file-system`、`file-watcher`、`git-utils`、`worktree`、`uds`、`stdio-to-uds`、`tcp-tunnel` |
+| 工具执行、文件与沙箱 | `exec-server`、`exec-server-cli`、`exec-server-protocol`、`sandboxing`、`execpolicy`、`network-proxy`、`shell-command`、`apply-patch`、`file-search`、`file-system`、`file-watcher`、`git-utils`、`worktree`、`uds`、`stdio-to-uds`、`tcp-tunnel` |
 | Code Mode 与 UI 插件进程 | `code-mode`、`code-mode-protocol`、`code-mode-host`、`code-mode-runtime`、`plugin-host` |
 | 会话存储与历史 | `thread-store`、`rollout`、`state`、`history`、`message-history`、`attachment-store`、`agent-graph-store`、`external-agent-migration` |
 | 内置扩展 | `ext-extension-api`、`ext-agent`、`ext-agent-message-board`、`ext-connectors`、`ext-git-attribution`、`ext-goal`、`ext-guardian-reviewer`、`ext-guardian-v2`、`ext-guardian-v3`、`ext-history-notes`、`ext-image-generation`、`ext-items`、`ext-mcp`、`ext-memories`、`ext-multi-env-copy-file`、`ext-queue`、`ext-skills`、`ext-web-search` |
 | 插件、外部工具与扩展的支撑库 | `plugin`、`core-plugin-common`、`core-plugins`、`hooks`、`skills`、`codex-mcp`、`rmcp-client`、`memories-read`、`memories-write`、`guardian-context`、`message-board`、`message-board-mcp`、`agent-message-board-client`、`agent-message-board-host` |
 | 诊断与遥测 | `diagnostics`、`direct-tool-timing`、`feedback`、`otel`、`otel-trace-websocket`、`rollout-trace` |
-| 测试、示例和实验 | `app-server-test-client`、`app-server-test-support`、`core-test-support`、`exec-server-test-support`、`protocol-test-support`、`test-binary-support`、`v8-poc` |
+| 测试、示例和实验 | `app-server-test-client`、`app-server-test-support`、`core-test-support`、`exec-server-test-support`、`protocol-test-support`、`test-binary-support` |
 | 通用小库 | `async-utils`、`utils-absolute-path`、`utils-approval-presets`、`utils-audio`、`utils-cache`、`utils-cargo-bin`、`utils-critical-path`、`utils-elapsed`、`utils-fuzzy-match`、`utils-git-discovery`、`utils-head-tail-buffer`、`utils-home-dir`、`utils-image`、`utils-json-to-toml`、`utils-model-facing-id`、`utils-output-truncation`、`utils-path-uri`、`utils-path-utils`、`utils-plugins`、`utils-process`、`utils-pty`、`utils-readiness`、`utils-redacted-string`、`utils-rustls-provider`、`utils-sandbox-summary`、`utils-sleep-inhibitor`、`utils-stream-parser`、`utils-string`、`utils-template` |
 
 可在仓库根目录复核成员及当前平台的依赖链。
