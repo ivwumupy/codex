@@ -36,8 +36,6 @@ use codex_guardian_reviewer::ReviewSessionResult;
 use codex_guardian_reviewer::SessionDisposition;
 use codex_guardian_reviewer::token_usage_delta;
 use codex_history::InitialHistory;
-#[cfg(test)]
-use codex_history::RolloutItem;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
@@ -878,15 +876,6 @@ impl GuardianReviewSession {
 
 #[cfg(test)]
 impl GuardianReviewSession {
-    pub(crate) async fn committed_fork_rollout_items_for_test(&self) -> Option<Vec<RolloutItem>> {
-        let state = self.state.lock().await;
-        let snapshot = state.conversation.snapshot()?;
-        match &snapshot.history().initial_history {
-            InitialHistory::Forked(items) => Some(items.clone()),
-            InitialHistory::New | InitialHistory::Cleared | InitialHistory::Resumed(_) => None,
-        }
-    }
-
     pub(crate) async fn send_trunk_event_raw_for_test(&self, event: Event) {
         self.session.send_event_raw(event).await;
     }
