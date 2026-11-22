@@ -214,7 +214,7 @@ fn search_finds_settings_across_groups_and_preserves_the_selected_group() {
     assert_eq!(panel.picker.search_query(), None);
 
     panel.handle_key_event(KeyEvent::from(KeyCode::Char('/')));
-    assert!(panel.handle_paste("composer stars".to_string()));
+    assert!(panel.handle_paste("animations".to_string()));
     panel.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(matches!(

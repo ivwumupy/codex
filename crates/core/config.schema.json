@@ -3834,7 +3834,6 @@
             "effort": true,
             "progress": true,
             "shimmer": true,
-            "starfield": true,
             "title": true,
             "welcome": true
           },
@@ -4692,11 +4691,6 @@
         "shimmer": {
           "default": true,
           "description": "Shimmer status and loading text.",
-          "type": "boolean"
-        },
-        "starfield": {
-          "default": true,
-          "description": "Animate the composer starfield.",
           "type": "boolean"
         },
         "title": {

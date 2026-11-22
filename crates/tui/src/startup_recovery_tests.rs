@@ -20,7 +20,6 @@ fn snapshot(text: &str) -> ComposerDraftSnapshot {
         pending_pastes: Vec::new(),
         startup_local_history: Vec::new(),
         last_composer_activity_at: None,
-        sparkle_draft: Default::default(),
     }
 }
 

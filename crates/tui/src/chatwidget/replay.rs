@@ -106,9 +106,6 @@ impl ChatWidget {
     /// distinguish replayed events from live ones.
     pub(crate) fn replay_thread_turns(&mut self, turns: Vec<Turn>, replay_kind: ReplayKind) {
         self.turn_lifecycle.has_turn_history |= !turns.is_empty();
-        if !turns.is_empty() || matches!(replay_kind, ReplayKind::ThreadSnapshot) {
-            self.bottom_pane.dismiss_composer_sparkle();
-        }
         if matches!(replay_kind, ReplayKind::ThreadSnapshot) && !turns.is_empty() {
             self.warning_display_state.startup_complete = true;
         }

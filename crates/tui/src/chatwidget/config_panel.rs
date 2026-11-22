@@ -100,12 +100,7 @@ impl ChatWidget {
             return;
         };
         match setting {
-            ConfigToggle::Animations | ConfigToggle::ComposerStars => {
-                self.bottom_pane.set_motion_preferences(tui);
-                let model = self.current_model().to_string();
-                self.bottom_pane.stop_ineligible_sparkle(&model, tui);
-                self.bottom_pane.select_sparkle_model(&model, tui);
-            }
+            ConfigToggle::Animations => self.bottom_pane.set_motion_preferences(tui),
             ConfigToggle::PasteDetection => self.bottom_pane.set_disable_paste_burst(
                 /*disabled*/ tui.disable_paste_burst.unwrap_or(/*default*/ false),
             ),
@@ -141,29 +136,17 @@ impl ChatWidget {
         notice: Option<String>,
         preference: ConfigPreference,
     ) -> bool {
-        if let ConfigPreference::Toggle { setting, .. } = preference {
-            match setting {
-                ConfigToggle::Animations => {
-                    self.bottom_pane.complete_selection_toggle_for_active_view(
-                        crate::config_panel::EFFECTS_VIEW_ID,
-                        /*index*/ 0,
-                    );
-                }
-                ConfigToggle::ComposerStars => {
-                    self.bottom_pane.complete_selection_toggle_for_active_view(
-                        crate::config_panel::EFFECTS_VIEW_ID,
-                        /*index*/ 1,
-                    );
-                }
-                ConfigToggle::AutomaticRecaps
-                | ConfigToggle::CollapseTurnDetails
-                | ConfigToggle::CopyOnSelectClearSelection
-                | ConfigToggle::Notifications
-                | ConfigToggle::PasteDetection
-                | ConfigToggle::StartInVimMode
-                | ConfigToggle::StatusLineColors
-                | ConfigToggle::Tips => {}
+        if matches!(
+            preference,
+            ConfigPreference::Toggle {
+                setting: ConfigToggle::Animations,
+                ..
             }
+        ) {
+            self.bottom_pane.complete_selection_toggle_for_active_view(
+                crate::config_panel::EFFECTS_VIEW_ID,
+                /*index*/ 0,
+            );
         }
         let toggle_states = self
             .bottom_pane

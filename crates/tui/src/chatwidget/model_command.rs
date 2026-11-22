@@ -1,7 +1,6 @@
 //! Validate inline model choices before applying them through session-only model selection.
 
 use super::ChatWidget;
-use super::session_model_selection::AstraModelPickerAction;
 use super::slash_command_args;
 use crate::app_event::AppEvent;
 use crate::history_cell;
@@ -164,16 +163,13 @@ impl ChatWidget {
             service_tier,
         } = command;
         let warning = self.ultra_reasoning_concurrency_warning(&effort);
-        let thread_id = self.sparkle_thread_for_picker_action(&model);
         self.set_queue_autosend_suppressed(/*suppressed*/ true);
         let scoped = self.scope_model_picker_event();
-        self.app_event_tx.send(scoped(
-            AstraModelPickerAction::SelectSessionModel {
-                effort: Some(effort),
-                service_tier,
-            }
-            .into_picker_event(thread_id, model),
-        ));
+        self.app_event_tx.send(scoped(AppEvent::SelectSessionModel {
+            model,
+            effort: Some(effort),
+            service_tier,
+        }));
         if let Some(warning) = warning {
             self.app_event_tx
                 .send(scoped(AppEvent::InsertHistoryCell(Box::new(

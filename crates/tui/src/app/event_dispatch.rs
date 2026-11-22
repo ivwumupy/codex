@@ -176,19 +176,6 @@ impl App {
             event => event,
         };
 
-        let (event, sparkle_model) = match event {
-            AppEvent::AstraSelectedFromModelPicker {
-                thread_id,
-                model,
-                action,
-            } => {
-                let should_offer = self.chat_widget.current_model() != model
-                    && self.chat_widget.sparkle_thread_for_picker_action(&model) == Some(thread_id);
-                let next_event = action.into_app_event(model.clone());
-                (next_event, should_offer.then_some(model))
-            }
-            event => (event, None),
-        };
         match event {
             AppEvent::OpenDaemonMenu => self.open_daemon_menu(),
             AppEvent::ConfirmDaemonRestart => self.confirm_daemon_restart(),
@@ -2045,7 +2032,7 @@ impl App {
                         .await;
                 }
             }
-            AppEvent::ScopedModelPicker { .. } | AppEvent::AstraSelectedFromModelPicker { .. } => unreachable!("picker event unwrapped"),
+            AppEvent::ScopedModelPicker { .. } => unreachable!("picker event unwrapped"),
             AppEvent::SettingsSelectionClosed => {
                 #[cfg(any(target_os = "windows", test))]
                 let windows_sandbox_setup_pending =
@@ -2174,10 +2161,6 @@ impl App {
                         /*service_tier*/ None,
                     )
                     .await;
-                    if let Some(model) = sparkle_model.as_ref() {
-                        self.chat_widget
-                            .on_sparkle_model_selected_from_picker(model);
-                    }
                     return Ok(AppRunControl::Continue);
                 }
                 if self
@@ -3497,10 +3480,6 @@ impl App {
                     self.insert_history_cell(tui, Box::new(cell));
                 }
             }
-        }
-        if let Some(model) = sparkle_model {
-            self.chat_widget
-                .on_sparkle_model_selected_from_picker(&model);
         }
         Ok(AppRunControl::Continue)
     }

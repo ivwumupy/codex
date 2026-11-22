@@ -25,7 +25,6 @@ async fn launch_screen_mode_survives_configuration_reload() -> anyhow::Result<()
     config.tui_alternate_screen = AltScreenMode::Auto;
     config.animations = true;
     config.tui_auto_recap = true;
-    config.tui_effects.starfield = true;
     config.disable_paste_burst = false;
     config.show_tooltips = true;
 
@@ -52,7 +51,6 @@ async fn launch_screen_mode_survives_configuration_reload() -> anyhow::Result<()
         reloaded_config.tui_theme = Some("nord".into());
         reloaded_config.animations = false;
         reloaded_config.tui_auto_recap = false;
-        reloaded_config.tui_effects.starfield = false;
         reloaded_config.disable_paste_burst = true;
         reloaded_config.show_tooltips = false;
         let mut expected_reload = LocalSettings::from(&reloaded_config);
@@ -60,7 +58,6 @@ async fn launch_screen_mode_survives_configuration_reload() -> anyhow::Result<()
         expected_reload.tui.alternate_screen = expected_alt;
         expected_reload.tui.animations = local.tui.animations;
         expected_reload.tui.auto_recap = local.tui.auto_recap;
-        expected_reload.tui.effects.starfield = local.tui.effects.starfield;
         expected_reload.tui.disable_paste_burst = local.tui.disable_paste_burst;
         expected_reload.tui.show_tooltips = local.tui.show_tooltips;
         assert_eq!(local.reloaded(&reloaded_config), expected_reload);

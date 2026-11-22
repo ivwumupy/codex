@@ -327,7 +327,6 @@ impl ChatWidget {
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
         let thread_id = self.thread_id();
-        let sparkle_thread = self.sparkle_thread_for_picker_action(&model_for_action);
         let scoped = self.scope_model_picker_event();
         vec![Box::new(move |tx| {
             if model_for_action == LUNA_RESERVE_MODEL {
@@ -339,24 +338,20 @@ impl ChatWidget {
                     }));
                 }
             } else if effort_for_action == Some(ReasoningEffortConfig::Ultra) {
-                tx.send(scoped(
-                    AstraModelPickerAction::ApplyAdvancedReasoning {
-                        effort: ReasoningEffortConfig::Ultra,
-                    }
-                    .into_picker_event(sparkle_thread, model_for_action.clone()),
-                ));
+                tx.send(scoped(AppEvent::ApplyAdvancedReasoning {
+                    model: model_for_action.clone(),
+                    effort: ReasoningEffortConfig::Ultra,
+                }));
             } else if should_prompt_plan_mode_scope {
                 tx.send(scoped(AppEvent::OpenPlanReasoningScopePrompt {
                     model: model_for_action.clone(),
                     effort: effort_for_action.clone(),
                 }));
             } else {
-                tx.send(scoped(
-                    AstraModelPickerAction::ApplyModelSelection {
-                        effort: effort_for_action.clone(),
-                    }
-                    .into_picker_event(sparkle_thread, model_for_action.clone()),
-                ));
+                tx.send(scoped(AppEvent::ApplyModelSelection {
+                    model: model_for_action.clone(),
+                    effort: effort_for_action.clone(),
+                }));
             }
             if let Some(warning) = warning.clone() {
                 tx.send(scoped(AppEvent::InsertHistoryCell(Box::new(
@@ -433,7 +428,6 @@ impl ChatWidget {
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
-        let sparkle_thread = self.sparkle_thread_for_picker_action(&model);
 
         let scoped = self.scope_model_picker_event();
         let plan_only_actions: Vec<SelectionAction> = vec![Box::new({
@@ -441,10 +435,7 @@ impl ChatWidget {
             let effort = effort.clone();
             let warning = warning.clone();
             move |tx| {
-                tx.send(scoped(
-                    AstraModelPickerAction::UpdateModel
-                        .into_picker_event(sparkle_thread, model.clone()),
-                ));
+                tx.send(scoped(AppEvent::UpdateModel(model.clone())));
                 tx.send(scoped(AppEvent::UpdatePlanModeReasoningEffort(
                     effort.clone(),
                 )));
@@ -460,10 +451,7 @@ impl ChatWidget {
         })];
         let scoped = self.scope_model_picker_event();
         let all_modes_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-            tx.send(scoped(
-                AstraModelPickerAction::UpdateModel
-                    .into_picker_event(sparkle_thread, model.clone()),
-            ));
+            tx.send(scoped(AppEvent::UpdateModel(model.clone())));
             tx.send(scoped(AppEvent::UpdateReasoningEffort(effort.clone())));
             tx.send(scoped(AppEvent::UpdatePlanModeReasoningEffort(
                 effort.clone(),

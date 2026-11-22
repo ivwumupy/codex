@@ -286,7 +286,7 @@ fn settings(tui: &Tui, status: ConfigPanelStatus) -> Vec<ConfigSetting> {
             section: ConfigSection::Appearance,
             label: "Effects",
             description: "Configure animations and composer effects",
-            keywords: "animations motion accessibility spinner starfield stars composer stars",
+            keywords: "animations motion accessibility spinner",
             value: ConfigEditor::Effects.value(tui, status),
         },
         ConfigSetting {

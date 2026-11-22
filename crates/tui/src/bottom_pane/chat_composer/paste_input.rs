@@ -27,9 +27,6 @@ impl ChatComposer {
         shell_prefix: ShellPrefixHandling,
     ) {
         self.draft.skill_completion_space = None;
-        if !text.is_empty() && self.sparkle.draft.get() == sparkle::SparkleDraft::Untouched {
-            self.dismiss_sparkle();
-        }
         let started_vim_edit = self.begin_direct_vim_edit();
         let elements_before = target
             .replaces_text()
@@ -92,7 +89,6 @@ impl ChatComposer {
     /// Classify an explicit paste before integrating text shared with the buffered key path.
     pub fn handle_paste(&mut self, pasted: String) -> bool {
         self.flush_pending_paste_burst();
-        self.note_sparkle_paste(&pasted);
         self.apply_paste(pasted)
     }
 

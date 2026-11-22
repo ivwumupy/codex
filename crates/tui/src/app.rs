@@ -1174,8 +1174,6 @@ impl App {
         match &event {
             TuiEvent::FocusLost => {
                 app_server.focused_conversation = None;
-                self.chat_widget
-                    .set_sparkle_terminal_focus(/*focused*/ false);
                 let now = Instant::now();
                 let thread_id = self.current_displayed_thread_id();
 
@@ -1343,8 +1341,6 @@ impl App {
     }
 
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui, screen_size: Size) -> Result<Rect> {
-        self.chat_widget
-            .set_sparkle_terminal_focus(tui.is_terminal_focused());
         if tui.is_owned_screen() {
             return self.render_owned_transcript(tui, screen_size);
         }

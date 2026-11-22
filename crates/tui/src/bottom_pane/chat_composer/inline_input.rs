@@ -1,7 +1,7 @@
 //! Embed the composer in question rows, resetting history navigation when drafts change.
 //! Recovered appends cancel pending Vim commands before moving the cursor and stay out of dot repeat.
 //! Normal-mode recovery is one undoable edit; active insert/replace sessions keep their grouping.
-//! Paste payloads stay intact and sparkle stays dismissed.
+//! Paste payloads stay intact.
 //! Command prefixes become escaped, editable prompt text before answers are appended.
 
 use super::super::textarea::VimPersistentState;
@@ -21,7 +21,6 @@ impl ComposerDraft {
 impl ChatComposer {
     pub(in crate::bottom_pane) fn append_recovered_drafts(&mut self, drafts: &str) {
         self.flush_pending_input();
-        self.dismiss_sparkle();
         if self.draft.textarea.is_vim_operator_pending() {
             self.draft.textarea.enter_vim_normal_mode();
         }

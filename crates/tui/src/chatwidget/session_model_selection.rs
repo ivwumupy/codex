@@ -1,57 +1,9 @@
-//! Session-only model selections leave durable defaults untouched. Explicit Astra selections retain
-//! their originating task and are checked against its effective model when the app applies them.
+//! Session-only model selections leave durable defaults untouched.
 
 use super::*;
 use crate::bottom_pane::SelectionSecondaryAction;
 use crate::keymap::ListAction;
 use crate::model_catalog::LUNA_RESERVE_MODEL;
-
-/// A final Astra selection whose model transition must be checked while the app applies it.
-#[derive(Debug)]
-pub(crate) enum AstraModelPickerAction {
-    UpdateModel,
-    ApplyModelSelection {
-        effort: Option<ReasoningEffortConfig>,
-    },
-    ApplyAdvancedReasoning {
-        effort: ReasoningEffortConfig,
-    },
-    SelectSessionModel {
-        effort: Option<ReasoningEffortConfig>,
-        service_tier: Option<String>,
-    },
-}
-
-impl AstraModelPickerAction {
-    pub(super) fn into_picker_event(self, thread_id: Option<ThreadId>, model: String) -> AppEvent {
-        match thread_id {
-            Some(thread_id) => AppEvent::AstraSelectedFromModelPicker {
-                thread_id,
-                model,
-                action: self,
-            },
-            None => self.into_app_event(model),
-        }
-    }
-
-    pub(crate) fn into_app_event(self, model: String) -> AppEvent {
-        match self {
-            Self::UpdateModel => AppEvent::UpdateModel(model),
-            Self::ApplyModelSelection { effort } => AppEvent::ApplyModelSelection { model, effort },
-            Self::ApplyAdvancedReasoning { effort } => {
-                AppEvent::ApplyAdvancedReasoning { model, effort }
-            }
-            Self::SelectSessionModel {
-                effort,
-                service_tier,
-            } => AppEvent::SelectSessionModel {
-                model,
-                effort,
-                service_tier,
-            },
-        }
-    }
-}
 
 impl ChatWidget {
     pub(super) fn session_model_selection_action(
@@ -81,19 +33,16 @@ impl ChatWidget {
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
-        let sparkle_thread = self.sparkle_thread_for_picker_action(&model);
         let scoped = self.scope_model_picker_event();
         Some(SelectionSecondaryAction {
             key,
             footer_hint: hints.into(),
             action: Box::new(move |tx| {
-                tx.send(scoped(
-                    AstraModelPickerAction::SelectSessionModel {
-                        effort: effort.clone(),
-                        service_tier: None,
-                    }
-                    .into_picker_event(sparkle_thread, model.clone()),
-                ));
+                tx.send(scoped(AppEvent::SelectSessionModel {
+                    model: model.clone(),
+                    effort: effort.clone(),
+                    service_tier: None,
+                }));
                 if let Some(warning) = warning.clone() {
                     tx.send(scoped(AppEvent::InsertHistoryCell(Box::new(
                         history_cell::new_warning_event(warning),

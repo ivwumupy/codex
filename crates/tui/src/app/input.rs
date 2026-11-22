@@ -701,7 +701,6 @@ impl App {
             // Esc so the active UI (e.g. status indicator, modals, popups)
             // handles it.
             if self.should_handle_backtrack_esc(key_event) {
-                self.chat_widget.prepare_composer_sparkle_key(key_event);
                 if key_event.kind == KeyEventKind::Press {
                     self.handle_backtrack_esc_key(tui);
                 }

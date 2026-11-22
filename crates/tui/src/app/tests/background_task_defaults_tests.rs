@@ -135,7 +135,7 @@ async fn command_center_new_keeps_startup_draft_visible_through_handoff() -> Res
 }
 
 #[tokio::test]
-async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_not() -> Result<()> {
+async fn agents_overview_keeps_the_composer_plain_on_new_and_existing_tasks() -> Result<()> {
     let render = |chat: &ChatWidget| {
         crate::terminal_palette::with_test_default_colors(
             crate::terminal_probe::DefaultColors {
@@ -145,14 +145,11 @@ async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_no
             || render_bottom_popup(chat, /*width*/ 80),
         )
     };
-    let has_stars = |text: &str| text.chars().any(|ch| "⠁⠂⠄⠈⠐⠠⡀⢀".contains(ch));
     for model in ["gpt-6-astra", "gpt-5.5"] {
         let (mut app, _events, _ops) = make_test_app_with_channels().await;
         trust_launch_folder(&mut app);
-        app.cli_kv_overrides.extend([
-            ("tui.animations".into(), TomlValue::Boolean(true)),
-            ("tui.effects.starfield".into(), TomlValue::Boolean(true)),
-        ]);
+        app.cli_kv_overrides
+            .push(("tui.animations".into(), TomlValue::Boolean(true)));
         app.harness_overrides.model = Some(model.into());
         let mut server = start_config_write_test_app_server(&app).await?;
         let mut tui = make_test_tui()?;
@@ -162,13 +159,6 @@ async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_no
         let original = app.chat_widget.thread_id().expect("new dashboard task");
         assert_eq!(app.chat_widget.current_model(), model);
         let created = render(&app.chat_widget);
-        assert_eq!(has_stars(&created), model == "gpt-6-astra", "{model}");
-        if model != "gpt-6-astra" {
-            app.chat_widget.set_model("gpt-6-astra");
-            app.chat_widget
-                .on_sparkle_model_selected_from_picker("gpt-6-astra");
-            assert!(has_stars(&render(&app.chat_widget)));
-        }
         app.harness_overrides.model = Some("gpt-6-astra".into());
         app.new_agents_overview_session(&mut tui, &mut server, /*cwd*/ None)
             .await?;
@@ -177,10 +167,6 @@ async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_no
             .await?;
         assert_eq!(app.chat_widget.thread_id(), Some(original));
         let returned = render(&app.chat_widget);
-        assert!(!has_stars(&returned));
-        app.chat_widget
-            .on_sparkle_model_selected_from_picker("gpt-6-astra");
-        assert!(!has_stars(&render(&app.chat_widget)));
         if model == "gpt-6-astra" {
             let before_footer = |output: &str| {
                 output
