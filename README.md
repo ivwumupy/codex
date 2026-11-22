@@ -27,6 +27,6 @@ printenv OPENAI_API_KEY | codex login
 
 ## Docs
 
-- [**Rust protocol overview**](./docs/protocol_v1.md)
+- [Architecture](./docs/architecture.md)
 
 This repository is licensed under the [Apache-2.0 License](LICENSE).
