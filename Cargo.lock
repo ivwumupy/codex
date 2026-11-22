@@ -1364,7 +1364,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "async-channel",
  "base64 0.22.1",
  "bytes",
  "chrono",
@@ -1527,7 +1526,6 @@ dependencies = [
  "codex-uds",
  "codex-utils-absolute-path",
  "codex-utils-rustls-provider",
- "color-eyre",
  "futures",
  "pretty_assertions",
  "serde",
@@ -2225,29 +2223,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-core-api"
-version = "0.0.0"
-dependencies = [
- "codex-app-server-protocol",
- "codex-arg0",
- "codex-config",
- "codex-core",
- "codex-exec-server",
- "codex-extension-api",
- "codex-features",
- "codex-history",
- "codex-home",
- "codex-image-generation-extension",
- "codex-login",
- "codex-model-provider",
- "codex-model-provider-info",
- "codex-models-manager",
- "codex-protocol",
- "codex-state",
- "codex-utils-absolute-path",
-]
-
-[[package]]
 name = "codex-core-plugin-common"
 version = "0.0.0"
 dependencies = [
@@ -2281,7 +2256,6 @@ dependencies = [
  "codex-runtime-agent-instance",
  "codex-shell-command",
  "codex-skills",
- "codex-tools",
  "codex-utils-absolute-path",
  "codex-utils-cargo-bin",
  "codex-utils-path",
@@ -2534,7 +2508,6 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "shlex",
  "thiserror 2.0.18",
  "unicode-normalization",
 ]
@@ -3465,7 +3438,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "url",
  "windows-sys 0.61.2",
 ]
@@ -3549,14 +3521,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "codex-process-hardening"
-version = "0.0.0"
-dependencies = [
- "libc",
- "pretty_assertions",
 ]
 
 [[package]]
@@ -3672,8 +3636,6 @@ dependencies = [
  "bytes",
  "clap",
  "codex-http-client",
- "codex-process-hardening",
- "ctor",
  "http",
  "libc",
  "pretty_assertions",
@@ -3827,7 +3789,6 @@ dependencies = [
  "codex-network-proxy",
  "codex-otel",
  "codex-protocol",
- "codex-uds",
  "codex-utils-absolute-path",
  "codex-utils-cargo-bin",
  "codex-utils-home-dir",
@@ -4474,7 +4435,6 @@ version = "0.0.0"
 dependencies = [
  "assert_matches",
  "thiserror 2.0.18",
- "time",
  "tokio",
 ]
 
@@ -4535,14 +4495,6 @@ name = "codex-utils-template"
 version = "0.0.0"
 dependencies = [
  "pretty_assertions",
-]
-
-[[package]]
-name = "codex-v8-poc"
-version = "0.0.0"
-dependencies = [
- "pretty_assertions",
- "v8",
 ]
 
 [[package]]

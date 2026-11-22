@@ -101,7 +101,6 @@ codex-otel = { path = "crates/otel" }
 codex-otel-trace-websocket = { path = "crates/otel-trace-websocket" }
 codex-plugin = { path = "crates/plugin" }
 codex-model-provider = { path = "crates/model-provider" }
-codex-process-hardening = { path = "crates/process-hardening" }
 codex-protocol = { path = "crates/protocol" }
 codex-protocol-test-support = { path = "crates/protocol-test-support" }
 codex-prompts = { path = "crates/prompts" }
@@ -440,7 +439,6 @@ unwrap_used = "deny"
 ignored = [
     "icu_provider",
     "openssl-sys",
-    "codex-v8-poc",
 ]
 
 [profile.dev]

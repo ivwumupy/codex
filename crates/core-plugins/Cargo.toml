@@ -31,7 +31,6 @@ codex-protocol = { workspace = true }
 codex-runtime-agent-instance = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-skills = { workspace = true }
-codex-tools = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 codex-utils-path = { workspace = true }
 codex-utils-path-uri = { workspace = true }
