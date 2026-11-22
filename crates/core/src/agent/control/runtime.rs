@@ -19,7 +19,6 @@ use arc_swap::ArcSwapOption;
 use codex_extension_api::ThreadInstructionsProvider;
 use codex_protocol::AgentPath;
 use codex_protocol::ItemIdGenerator;
-use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::error::AgentErrorContext;
 use codex_protocol::error::CodexErr;
@@ -248,8 +247,8 @@ impl LocalAgentRuntime {
             .tree_id
     }
 
-    /// Bind local startup to the same tree state with this session's identity.
-    pub(crate) fn control(&self, session_id: SessionId) -> LocalAgentControl {
+    #[cfg(test)]
+    pub(crate) fn control(&self, session_id: codex_protocol::SessionId) -> LocalAgentControl {
         LocalAgentControl {
             session_id,
             runtime: self.clone(),

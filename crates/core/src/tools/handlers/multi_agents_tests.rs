@@ -34,7 +34,6 @@ use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::items::TurnItem;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -47,7 +46,6 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::FileSystemSandboxPolicy;
 use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::ItemCompletedEvent;
 use codex_protocol::protocol::NetworkSandboxPolicy;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SandboxPolicy;
@@ -103,31 +101,6 @@ fn function_payload(args: serde_json::Value) -> ToolPayload {
     ToolPayload::Function {
         arguments: args.to_string(),
     }
-}
-
-fn parse_agent_id(id: &str) -> ThreadId {
-    ThreadId::from_string(id).expect("agent id should be valid")
-}
-
-async fn wait_for_recorded_user_input(thread: &crate::CodexThread, expected: &[UserInput]) {
-    timeout(Duration::from_secs(5), async {
-        loop {
-            let event = thread
-                .next_event()
-                .await
-                .expect("event stream should stay open");
-            if let EventMsg::ItemCompleted(ItemCompletedEvent {
-                item: TurnItem::UserMessage(item),
-                ..
-            }) = event.msg
-            {
-                assert_eq!(item.content, expected);
-                return;
-            }
-        }
-    })
-    .await
-    .expect("timed out waiting for recorded user input");
 }
 
 fn thread_manager() -> ThreadManager {

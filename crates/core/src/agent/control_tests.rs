@@ -1304,10 +1304,6 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
     config.model = Some("gpt-5.6-sol".to_string());
     config.multi_agent_v2.max_concurrent_threads_per_session = 3;
     config.permissions.allow_login_shell = true;
-    config
-        .permissions
-        .set_permission_profile(PermissionProfile::read_only())
-        .expect("read-only parent profile");
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let client_mcp_extensions =
         ClientMcpExtensions::new([(OPENAI_FORM_EXTENSION_ID.to_string(), serde_json::json!({}))]);
@@ -1415,12 +1411,12 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
     }
 
     let mut sender_config = harness.config.clone();
-    sender_config.model_provider_id = "ollama".to_string();
-    sender_config.model_provider = sender_config
-        .model_providers
-        .get("ollama")
-        .cloned()
-        .expect("ollama provider should be configured");
+    sender_config.model_provider_id = "test-sender".to_string();
+    sender_config.model_provider.name = "Test sender".to_string();
+    sender_config.model_providers.insert(
+        sender_config.model_provider_id.clone(),
+        sender_config.model_provider.clone(),
+    );
 
     let mut parent_turn = parent_thread.session.new_default_turn().await;
     let residency_pin = match route {
