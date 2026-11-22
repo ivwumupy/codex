@@ -32,7 +32,7 @@ fn run_live(prompt: &str) -> (assert_cmd::assert::Assert, TempDir) {
     // implementation). Instead we configure the std `Command` ourselves, then later hand the
     // resulting `Output` to `assert_cmd` for the familiar assertions.
 
-    let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("codex-rs").unwrap());
+    let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("codex").unwrap());
     cmd.current_dir(dir.path());
     cmd.env("OPENAI_API_KEY", require_api_key());
     cmd.env("HOME", home.path());
@@ -50,24 +50,16 @@ fn run_live(prompt: &str) -> (assert_cmd::assert::Assert, TempDir) {
     //       – an in‑memory buffer so we can pass it to `assert_cmd` later
 
     // Pass the prompt through the `--` separator so the CLI knows when user input ends.
-    cmd.arg("--allow-no-git-exec")
-        .arg("-v")
+    cmd.arg("exec")
+        .arg("--skip-git-repo-check")
         .arg("--")
         .arg(prompt);
 
-    cmd.stdin(Stdio::piped());
+    cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().expect("failed to spawn codex-rs");
-
-    // Send the terminating newline so Session::run exits after the first turn.
-    child
-        .stdin
-        .as_mut()
-        .expect("child stdin unavailable")
-        .write_all(b"\n")
-        .expect("failed to write to child stdin");
+    let mut child = cmd.spawn().expect("failed to spawn codex exec");
 
     // Helper that tees a ChildStdout/ChildStderr into both the parent’s stdio and a Vec<u8>.
     fn tee<R: Read + Send + 'static>(

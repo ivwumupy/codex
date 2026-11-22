@@ -3,9 +3,15 @@ use std::fs;
 use tempfile::tempdir;
 
 fn apply_patch_command() -> anyhow::Result<Command> {
-    Ok(Command::new(codex_utils_cargo_bin::cargo_bin(
-        "apply_patch",
-    )?))
+    let mut command = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.arg0("apply_patch");
+    }
+    #[cfg(not(unix))]
+    command.arg(codex_apply_patch::CODEX_CORE_APPLY_PATCH_ARG1);
+    Ok(Command::from_std(command))
 }
 
 #[test]
@@ -49,6 +55,7 @@ fn test_apply_patch_cli_add_and_update() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn test_apply_patch_cli_stdin_add_and_update() -> anyhow::Result<()> {
     let tmp = tempdir()?;

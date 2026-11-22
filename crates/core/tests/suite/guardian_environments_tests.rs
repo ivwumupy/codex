@@ -6,7 +6,7 @@ use codex_history::RolloutItem;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::protocol::GuardianAssessmentStatus;
 use codex_protocol::protocol::TurnEnvironmentRequests;
-use codex_utils_cargo_bin::cargo_bin;
+use codex_utils_cargo_bin::cargo_example;
 use codex_utils_path_uri::PathUri;
 use core_test_support::exec_server::ExecServerProcess;
 use core_test_support::streaming_sse::StreamingSseChunk;
@@ -37,7 +37,7 @@ async fn direct_mcp_approval_uses_the_server_owners_denied_paths() -> Result<()>
     .await?;
     let mcp_servers = serde_json::from_value(json!({
         "files": {
-            "command": cargo_bin("test_stdio_server")?,
+            "command": cargo_example("test_stdio_server")?,
             "cwd": workspace.path(),
             "environment_id": REMOTE_ENVIRONMENT_ID,
             "default_tools_approval_mode": "prompt",
@@ -189,7 +189,7 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
         // The MCP server runs on the host, not on the mock executor.
         let servers = serde_json::from_value(json!({
             "files": {
-                "command": cargo_bin("test_stdio_server")?,
+                "command": cargo_example("test_stdio_server")?,
                 "environment_id": LOCAL_ENVIRONMENT_ID,
                 "default_tools_approval_mode": "prompt",
             }

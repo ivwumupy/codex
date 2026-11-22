@@ -11,12 +11,12 @@ Run from the repository root.
 cargo build -p codex-cli --bin codex
 
 # 2) Start websocket app-server in background
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   serve --listen ws://127.0.0.1:4222 --kill
 
 # 3) Call app-server (defaults to ws://127.0.0.1:4222)
-cargo run -p codex-app-server-test-client -- model-list
+cargo run -p codex-app-server-test-client --example app_server_client -- model-list
 ```
 
 `send-message` and `send-message-v2` handle `request_user_input` server requests interactively.
@@ -36,7 +36,7 @@ export CODEX_HOME="$(mktemp -d)"
 printf 'cli_auth_credentials_store = "file"\n' > "$CODEX_HOME/config.toml"
 
 cargo build -p codex-cli --bin codex
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   test-login \
   --amazon-bedrock \
@@ -54,7 +54,7 @@ resulting `account/updated` notification. It uses the active `CODEX_HOME`, so po
 isolated directory when testing credential cleanup.
 
 ```bash
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   test-logout
 ```
@@ -75,7 +75,7 @@ retries ephemeral turns while the installed remote bundle finishes syncing.
 # Build a debug Codex binary; analytics capture is unavailable in release builds.
 cargo build -p codex-cli --bin codex
 
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   plugin-analytics-smoke \
   --plugin-id linear@openai-curated-remote
@@ -111,7 +111,7 @@ in `remote_plugin_id`.
 local `<plugin>@<marketplace>` ID.
 
 ```bash
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   plugin-analytics-mutation-smoke \
   --remote-plugin-id <REMOTE_PLUGIN_ID> \
@@ -134,7 +134,7 @@ command prints one of these final states:
 For a dirty or uncertain result, retry cleanup with:
 
 ```bash
-cargo run -p codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   --codex-bin ./target/debug/codex \
   plugin-remote-uninstall \
   --remote-plugin-id <REMOTE_PLUGIN_ID> \
@@ -151,7 +151,7 @@ Initialize a connection, then print every inbound JSON-RPC message until you sto
 `Ctrl+C`:
 
 ```bash
-cargo run -p codex-app-server-test-client -- watch
+cargo run -p codex-app-server-test-client --example app_server_client -- watch
 ```
 
 ## Testing Thread Rejoin Behavior
@@ -163,8 +163,8 @@ Build and start an app server using commands above. The app-server log is writte
 Create at least one thread, then list threads:
 
 ```bash
-cargo run -p codex-app-server-test-client -- send-message-v2 "seed thread for rejoin test"
-cargo run -p codex-app-server-test-client -- thread-list --limit 5
+cargo run -p codex-app-server-test-client --example app_server_client -- send-message-v2 "seed thread for rejoin test"
+cargo run -p codex-app-server-test-client --example app_server_client -- thread-list --limit 5
 ```
 
 Copy a thread id from the `thread-list` output.
@@ -174,12 +174,12 @@ Copy a thread id from the `thread-list` output.
 Terminal A:
 
 ```bash
-cargo run --bin codex-app-server-test-client -- \
+cargo run -p codex-app-server-test-client --example app_server_client -- \
   resume-message-v2 <THREAD_ID> "respond with thorough docs on the rust core"
 ```
 
 Terminal B (while Terminal A is still streaming):
 
 ```bash
-cargo run --bin codex-app-server-test-client -- thread-resume <THREAD_ID>
+cargo run -p codex-app-server-test-client --example app_server_client -- thread-resume <THREAD_ID>
 ```

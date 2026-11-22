@@ -99,6 +99,7 @@ use codex_protocol::turn_input::TurnInput;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_cargo_bin::cargo_bin;
+use codex_utils_cargo_bin::cargo_example;
 use codex_utils_path_uri::PathUri;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::assert_regex_match;
@@ -2328,7 +2329,7 @@ async fn local_stdio_server_uses_runtime_fallback_cwd_when_config_omits_cwd() ->
     let server_name = "rmcp_local_fallback_cwd";
     let expected_cwd = Arc::new(Mutex::new(None::<PathBuf>));
     let expected_cwd_for_config = Arc::clone(&expected_cwd);
-    let rmcp_test_server_bin = cargo_bin("test_stdio_server")?;
+    let rmcp_test_server_bin = cargo_example("test_stdio_server")?;
     let relative_server_path = PathBuf::from("mcp-bin").join(
         rmcp_test_server_bin
             .file_name()
@@ -4278,7 +4279,7 @@ async fn streamable_http_tool_call_round_trip(mode: HeadersHelperMode) -> anyhow
             };
             format!(
                 "\"{}\" --http-headers-helper \"{}\"{authorization_arg}",
-                cargo_bin("test_streamable_http_server")
+                cargo_example("test_streamable_http_server")
                     .expect("streamable HTTP helper binary")
                     .display(),
                 helper_invocations.display(),
@@ -5017,7 +5018,7 @@ async fn start_streamable_http_test_server(
     expected_token: Option<&str>,
     expected_gateway_token: Option<&str>,
 ) -> anyhow::Result<Option<StreamableHttpTestServer>> {
-    let rmcp_http_server_bin = match cargo_bin("test_streamable_http_server") {
+    let rmcp_http_server_bin = match cargo_example("test_streamable_http_server") {
         Ok(path) => path,
         Err(err) => {
             eprintln!("test_streamable_http_server binary not available, skipping test: {err}");

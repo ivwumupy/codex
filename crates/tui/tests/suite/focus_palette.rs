@@ -312,21 +312,7 @@ impl PtyCodex {
         codex_home: TempDir,
         extra_args: &[&str],
     ) -> Result<Self> {
-        let codex = codex_utils_cargo_bin::cargo_bin("codex-tui")
-            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex"))?;
-        Self::start_binary(
-            &codex, repo_root, codex_home, extra_args, /*editor*/ None,
-        )
-    }
-
-    /// Include the CLI dispatch futures when testing production stack headroom.
-    pub(super) fn start_cli(
-        repo_root: &Path,
-        codex_home: TempDir,
-        extra_args: &[&str],
-    ) -> Result<Self> {
-        let codex = codex_utils_cargo_bin::cargo_bin("codex")
-            .context("build codex-cli and set CARGO_BIN_EXE_codex to its executable")?;
+        let codex = codex_utils_cargo_bin::cargo_bin("codex")?;
         Self::start_binary(
             &codex, repo_root, codex_home, extra_args, /*editor*/ None,
         )

@@ -11,8 +11,6 @@ use tokio::process::Child;
 use tokio::process::Command;
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(target_os = "linux")]
-const CODEX_LINUX_SANDBOX_EXE_ENV_VAR: &str = "CODEX_TEST_LINUX_SANDBOX_EXE";
 
 /// Host-local exec-server fixture that exposes a WebSocket URL.
 ///
@@ -26,17 +24,12 @@ pub(crate) struct LocalWebsocketExecServer {
 impl LocalWebsocketExecServer {
     pub(crate) async fn start(codex_home: &Path, exec_server_program: &Path) -> Result<Self> {
         let mut command = Command::new(exec_server_program);
+        command.args(["exec-server", "--listen", "ws://127.0.0.1:0"]);
         command.stdin(Stdio::null());
         command.stdout(Stdio::piped());
         command.stderr(Stdio::inherit());
         command.current_dir(codex_home);
         command.env("CODEX_HOME", codex_home);
-        #[cfg(target_os = "linux")]
-        command.env(
-            CODEX_LINUX_SANDBOX_EXE_ENV_VAR,
-            core_test_support::find_codex_linux_sandbox_exe()
-                .context("should find binary for delayed exec-server Linux sandbox helper")?,
-        );
         command.kill_on_drop(true);
         let child = command.spawn().context("start local exec-server fixture")?;
         let mut exec_server = Self {

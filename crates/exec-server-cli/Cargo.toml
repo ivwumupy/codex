@@ -4,10 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "codex-exec-server"
-path = "src/main.rs"
-
 [lib]
 doctest = false
 
@@ -41,16 +37,12 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true }
 
-[target.'cfg(all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-tikv-jemallocator = { workspace = true }
-
 [dev-dependencies]
 assert_matches = { workspace = true }
 chrono = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 codex-utils-process = { workspace = true }
 futures = { workspace = true }
-insta = { workspace = true }
 jsonwebtoken = { workspace = true }
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }

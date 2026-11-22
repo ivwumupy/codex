@@ -30,7 +30,6 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use codex_rmcp_client::RmcpClient;
-use codex_utils_cargo_bin::CargoBinError;
 use futures::FutureExt as _;
 use pretty_assertions::assert_eq;
 use rmcp::model::CallToolResult;
@@ -53,8 +52,8 @@ const INITIALIZE_POST_FAILURE_CONTROL_PATH: &str = "/test/control/initialize-pos
 const INITIALIZED_NOTIFICATION_POST_FAILURE_CONTROL_PATH: &str =
     "/test/control/initialized-notification-post-failure";
 
-fn streamable_http_server_bin() -> Result<PathBuf, CargoBinError> {
-    codex_utils_cargo_bin::cargo_bin("test_streamable_http_server")
+fn streamable_http_server_bin() -> std::io::Result<PathBuf> {
+    codex_utils_cargo_bin::cargo_example("test_streamable_http_server")
 }
 
 fn init_params() -> InitializeRequestParams {

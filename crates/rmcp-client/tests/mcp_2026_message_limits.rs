@@ -232,7 +232,7 @@ async fn legacy_http_keeps_existing_large_json_response_behavior() -> anyhow::Re
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn modern_local_and_executor_stdio_reject_oversized_lines() -> anyhow::Result<()> {
-    let server = codex_utils_cargo_bin::cargo_bin("test_mcp_2026_stdio_server")?;
+    let server = codex_utils_cargo_bin::cargo_example("test_mcp_2026_stdio_server")?;
 
     for (mode, modern, executor) in [
         (McpProtocolMode::Legacy, false, false),

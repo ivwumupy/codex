@@ -30,9 +30,10 @@ use wiremock::matchers::path;
 
 #[tokio::test]
 async fn registration_bearer_rejects_plaintext_remote_registry() -> anyhow::Result<()> {
-    let binary = cargo_bin("codex-exec-server")?;
+    let binary = cargo_bin("codex")?;
     let home = tempfile::tempdir()?;
     let mut child = tokio::process::Command::from(background_command(&binary))
+        .arg("exec-server")
         .args([
             "--remote",
             "http://registry.example.invalid",
@@ -61,7 +62,7 @@ async fn registration_bearer_rejects_plaintext_remote_registry() -> anyhow::Resu
 
 #[tokio::test]
 async fn registration_uses_its_bearer_before_and_after_desktop_sign_in() -> anyhow::Result<()> {
-    let binary = cargo_bin("codex-exec-server")?;
+    let binary = cargo_bin("codex")?;
     let home = tempfile::tempdir()?;
     for (desktop_token, account_id) in [
         ("access_token_initial", None),
@@ -99,6 +100,7 @@ async fn registration_uses_its_bearer_before_and_after_desktop_sign_in() -> anyh
             .mount_as_scoped(&registry)
             .await;
         let mut server = tokio::process::Command::from(background_command(&binary))
+            .arg("exec-server")
             .args(["--remote", &registry.uri(), "--environment-id", "test"])
             .arg("--registration-bearer-stdin")
             .stdin(Stdio::piped())
@@ -128,7 +130,7 @@ async fn registration_uses_its_bearer_before_and_after_desktop_sign_in() -> anyh
 
 #[tokio::test]
 async fn standalone_initializes_reports_version_and_runs_helpers() -> anyhow::Result<()> {
-    let binary = cargo_bin("codex-exec-server")?;
+    let binary = cargo_bin("codex")?;
     let directory = tempfile::tempdir()?;
     let cwd = url::Url::from_directory_path(directory.path())
         .map_err(|()| anyhow::anyhow!("file URI"))?;
@@ -140,7 +142,7 @@ async fn standalone_initializes_reports_version_and_runs_helpers() -> anyhow::Re
     assert!(version.status.success(), "{version:?}");
     assert_eq!(
         String::from_utf8(version.stdout)?,
-        format!("codex-exec-server {}\n", env!("CARGO_PKG_VERSION"))
+        format!("codex-cli {}\n", env!("CARGO_PKG_VERSION"))
     );
 
     // The unsandboxed case also runs on Windows. Unix additionally verifies that
@@ -176,6 +178,7 @@ async fn standalone_initializes_reports_version_and_runs_helpers() -> anyhow::Re
     };
     for sandbox in sandboxes {
         let mut child = tokio::process::Command::from(background_command(&binary))
+            .arg("exec-server")
             .args(["--listen", "stdio"])
             .current_dir(directory.path())
             .env("CODEX_HOME", directory.path())

@@ -40,13 +40,13 @@ does not register agents, push MCP notifications,
 start turns, or change Core delivery. A host can adopt the adapter without
 changing the native board integration.
 
-## HTTP server
+## HTTP server example
 
-Build with `cargo build -p codex-message-board-mcp` from the repository root. Set
+Build with `cargo build -p codex-message-board-mcp --example message_board_server` from the repository root. Set
 `CODEX_MESSAGE_BOARD_TOKEN`, then run:
 
 ```sh
-target/debug/codex-message-board-mcp --sqlite-home /absolute/path/to/codex/sqlite-directory --listen 127.0.0.1:7777
+target/debug/examples/message_board_server --sqlite-home /absolute/path/to/codex/sqlite-directory --listen 127.0.0.1:7777
 ```
 
 Connect with ordinary MCP config; keep the native `agent_message_board` feature disabled:

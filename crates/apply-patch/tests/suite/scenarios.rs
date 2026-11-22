@@ -46,7 +46,8 @@ fn run_apply_patch_scenario(dir: &Path) -> anyhow::Result<()> {
     // Run apply_patch in the temporary directory. We intentionally do not assert
     // on the exit status here; the scenarios are specified purely in terms of
     // final filesystem state, which we compare below.
-    Command::new(codex_utils_cargo_bin::cargo_bin("apply_patch")?)
+    Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+        .arg(codex_apply_patch::CODEX_CORE_APPLY_PATCH_ARG1)
         .arg(patch)
         .current_dir(tmp.path())
         .output()

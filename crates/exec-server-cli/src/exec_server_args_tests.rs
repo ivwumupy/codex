@@ -4,16 +4,14 @@ use assert_matches::assert_matches;
 use pretty_assertions::assert_eq;
 
 use super::*;
-use crate::ExecServerCli;
 
 fn exec_server_from_args(args: &[&str]) -> ExecServerCommand {
-    let cli = ExecServerCli::try_parse_from(
-        ["codex-exec-server"]
+    ExecServerCommand::try_parse_from(
+        ["exec-server"]
             .into_iter()
             .chain(args.iter().copied()),
     )
-    .expect("parse executor arguments");
-    cli.command
+    .expect("parse executor arguments")
 }
 
 #[test]
@@ -69,8 +67,8 @@ fn exec_server_parses_executor_credential_options() {
 
 #[test]
 fn exec_server_forward_parses_shared_remote_options() {
-    let cli = ExecServerCli::try_parse_from([
-        "codex-exec-server",
+    let cli = ExecServerCommand::try_parse_from([
+        "exec-server",
         "forward",
         "--connect",
         "ws://127.0.0.1:8765",
@@ -84,7 +82,7 @@ fn exec_server_forward_parses_shared_remote_options() {
         "--use-agent-identity-auth",
     ])
     .expect("parse forward");
-    assert_matches!(cli.command, ExecServerCommand {
+    assert_matches!(cli, ExecServerCommand {
         command: Some(ExecServerSubcommand::Forward { connect }),
         remote: Some(remote),
         environment_id: Some(environment_id),
@@ -93,22 +91,4 @@ fn exec_server_forward_parses_shared_remote_options() {
         use_agent_identity_auth: true,
         ..
     } if connect == "ws://127.0.0.1:8765" && remote == "https://example.openai.com" && environment_id == "env-1" && name == "forwarded");
-}
-
-#[test]
-fn standalone_help_documents_executor_options() {
-    use clap::CommandFactory;
-    let help = ExecServerCli::command()
-        .term_width(80)
-        .mut_arg("exit_on_stdin_close", |arg| arg.hide_env_values(true))
-        .mut_arg("proxy_private_ips_via_upstream", |arg| {
-            arg.hide_env_values(true)
-        })
-        .render_long_help()
-        .to_string()
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n");
-    insta::assert_snapshot!(help);
 }

@@ -6,9 +6,7 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 fn run_apply_patch_in_dir(dir: &Path, patch: &str) -> anyhow::Result<assert_cmd::assert::Assert> {
-    let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("apply_patch")?);
-    cmd.current_dir(dir);
-    Ok(cmd.arg(patch).assert())
+    Ok(apply_patch_command(dir)?.arg(patch).assert())
 }
 
 fn assert_apply_patch_updates_file(
@@ -32,8 +30,9 @@ fn assert_apply_patch_updates_file(
 }
 
 fn apply_patch_command(dir: &Path) -> anyhow::Result<Command> {
-    let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("apply_patch")?);
-    cmd.current_dir(dir);
+    let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+    cmd.arg(codex_apply_patch::CODEX_CORE_APPLY_PATCH_ARG1)
+        .current_dir(dir);
     Ok(cmd)
 }
 

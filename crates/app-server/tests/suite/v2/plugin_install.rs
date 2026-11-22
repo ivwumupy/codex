@@ -569,7 +569,8 @@ async fn plugin_install_skips_mcp_oauth_for_unowned_environment() -> Result<()> 
         "[features]\nplugins = true\n",
     )?;
     let mut executor =
-        tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("exec-server")?)
+        tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+            .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)

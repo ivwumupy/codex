@@ -488,6 +488,14 @@ struct AppServerCommand {
     )]
     listen: codex_app_server::AppServerTransport,
 
+    /// Session source used to derive product restrictions and metadata.
+    #[arg(long, default_value = "vscode", value_parser = codex_protocol::protocol::SessionSource::from_startup_arg)]
+    session_source: codex_protocol::protocol::SessionSource,
+
+    #[cfg(debug_assertions)]
+    #[arg(long, hide = true)]
+    disable_plugin_startup_tasks_for_tests: bool,
+
     /// Use stdio as the transport (equivalent to `--listen stdio://`).
     #[arg(long = "stdio", conflicts_with = "listen")]
     stdio: bool,
@@ -1107,6 +1115,9 @@ async fn dispatch_cli(
                 code_mode_host,
                 strict_config: app_server_strict_config,
                 listen,
+                session_source,
+                #[cfg(debug_assertions)]
+                disable_plugin_startup_tasks_for_tests,
                 stdio,
                 managed_daemon,
                 analytics_default_enabled,
@@ -1151,6 +1162,12 @@ async fn dispatch_cli(
                         let _ = codex_app_server_daemon::maintain_stderr_log();
                     }
                     let runtime_options = codex_app_server::AppServerRuntimeOptions {
+                        #[cfg(debug_assertions)]
+                        plugin_startup_tasks: if disable_plugin_startup_tasks_for_tests {
+                            codex_app_server::PluginStartupTasks::Skip
+                        } else {
+                            codex_app_server::PluginStartupTasks::Start
+                        },
                         cloud_skills_snapshot,
                         code_mode_host_transport: code_mode_host.into(),
                         managed_daemon,
@@ -1159,11 +1176,11 @@ async fn dispatch_cli(
                     let exit = codex_app_server::run_main_with_transport_options(
                         arg0_paths.clone(),
                         root_config_overrides,
-                        LoaderOverrides::default(),
+                        app_server_loader_overrides(),
                         strict_config,
                         analytics_default_enabled,
                         transport,
-                        codex_protocol::protocol::SessionSource::VSCode,
+                        session_source,
                         auth,
                         runtime_options,
                     )
@@ -1709,6 +1726,23 @@ async fn disable_feature_in_config(feature: &str) -> anyhow::Result<()> {
         .await?;
     println!("Disabled feature `{feature}` in config.toml.");
     Ok(())
+}
+
+fn app_server_loader_overrides() -> LoaderOverrides {
+    #[cfg(debug_assertions)]
+    {
+        if std::env::var("CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG")
+            .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        {
+            return LoaderOverrides::without_managed_config_for_tests();
+        }
+        if let Some(path) = std::env::var_os("CODEX_APP_SERVER_MANAGED_CONFIG_PATH")
+            && !path.is_empty()
+        {
+            return LoaderOverrides::with_managed_config_path_for_tests(path.into());
+        }
+    }
+    LoaderOverrides::default()
 }
 
 fn loader_overrides_for_profile(

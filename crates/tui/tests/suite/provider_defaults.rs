@@ -93,7 +93,7 @@ async fn resume_lists_all_providers_and_fork_keeps_provider_filter() -> Result<(
                 ]);
             }
             let case = format!("{action}: embedded={embedded}, last={last}, explicit={explicit}");
-            let mut terminal = PtyCodex::start_cli(&cwd, home, &args)?;
+            let mut terminal = PtyCodex::start(&cwd, home, &args)?;
             if action == "resume" && last && explicit {
                 // --last finds the newest thread across providers. An explicit override
                 // cannot switch that thread from server-provider to openai.

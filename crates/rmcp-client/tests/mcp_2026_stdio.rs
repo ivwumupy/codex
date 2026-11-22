@@ -31,7 +31,7 @@ async fn exercise_stdio_server(
     opt_in: bool,
     use_executor: bool,
 ) -> anyhow::Result<()> {
-    let server = codex_utils_cargo_bin::cargo_bin("test_mcp_2026_stdio_server")?;
+    let server = codex_utils_cargo_bin::cargo_example("test_mcp_2026_stdio_server")?;
     let launcher: Arc<dyn StdioServerLauncher> = if use_executor {
         Arc::new(ExecutorStdioServerLauncher::new(
             Environment::default_for_tests().get_exec_backend(),

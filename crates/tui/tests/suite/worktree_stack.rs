@@ -19,11 +19,6 @@ use wiremock::matchers::body_string_contains;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn picker_side_worktree_fork_and_cd_run_on_the_production_stack() -> Result<()> {
-    let start = if codex_utils_cargo_bin::cargo_bin("codex").is_ok() {
-        PtyCodex::start_cli
-    } else {
-        PtyCodex::start
-    };
     let repository = tempfile::tempdir_in("/tmp")?;
     let root = repository.path().canonicalize()?;
     let status = Command::new("git")
@@ -95,7 +90,7 @@ async fn picker_side_worktree_fork_and_cd_run_on_the_production_stack() -> Resul
         /*desktop*/ None,
     )?);
     // Both launchers give codex-main and Tokio workers explicit 16 MiB stacks.
-    let mut terminal = start(
+    let mut terminal = PtyCodex::start(
         &root,
         codex_home,
         &[

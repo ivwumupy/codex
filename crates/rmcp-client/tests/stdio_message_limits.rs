@@ -66,7 +66,7 @@ fn wait_for_process_exit(process: &OwnedHandle) -> std::io::Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdio_message_limits_preserve_legacy_local_compatibility() -> anyhow::Result<()> {
-    let server = codex_utils_cargo_bin::cargo_bin("test_stdio_server")?;
+    let server = codex_utils_cargo_bin::cargo_example("test_stdio_server")?;
 
     for (executor, protocol_mode, accepts_oversized) in [
         (false, McpProtocolMode::Legacy, true),
@@ -138,7 +138,7 @@ async fn stdio_message_limits_preserve_legacy_local_compatibility() -> anyhow::R
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn local_stdio_initializes_without_a_console_directly_and_through_cmd() -> anyhow::Result<()>
 {
-    let server = codex_utils_cargo_bin::cargo_bin("test_stdio_server")?;
+    let server = codex_utils_cargo_bin::cargo_example("test_stdio_server")?;
     let temp_dir = tempfile::tempdir()?;
     let console_state_file = temp_dir.path().join("console-state");
     let server_pid_file = temp_dir.path().join("server.pid");
@@ -221,7 +221,7 @@ async fn local_stdio_initializes_without_a_console_directly_and_through_cmd() ->
 #[cfg(windows)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn local_stdio_shutdown_terminates_descendants_after_server_exit() -> anyhow::Result<()> {
-    let server = codex_utils_cargo_bin::cargo_bin("test_stdio_server")?;
+    let server = codex_utils_cargo_bin::cargo_example("test_stdio_server")?;
 
     for protocol_mode in [McpProtocolMode::Legacy, McpProtocolMode::V20260728] {
         let temp_dir = tempfile::tempdir()?;
