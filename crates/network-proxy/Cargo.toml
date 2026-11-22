@@ -9,10 +9,6 @@ name = "codex_network_proxy"
 path = "src/lib.rs"
 doctest = false
 
-[[bin]]
-name = "codex-network-proxy"
-path = "src/main.rs"
-
 [lints]
 workspace = true
 

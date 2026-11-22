@@ -87,40 +87,6 @@ In a Codex permission profile, set `version = 2` on `[permissions.<profile>.netw
 before using scoped hooks or credential substitution. Older clients reject this table key,
 so rolling back cannot silently enable unconditional header injection.
 
-The proxy can also run without a full Codex permissions profile. Put the network policy in a
-standalone JSON file:
-
-```json
-{
-  "network": {
-    "enabled": true,
-    "proxy_url": "http://127.0.0.1:3128",
-    "enable_socks5": false,
-    "enable_socks5_udp": false,
-    "allow_upstream_proxy": false,
-    "allow_local_binding": false,
-    "mode": "full",
-    "mitm": false,
-    "domains": {
-      "api.example.com": "allow"
-    }
-  }
-}
-```
-
-`mitm` defaults to `false`. `mitm_ca` defaults to `None` and is omitted from serialized JSON when
-unset. HTTPS MITM is enabled automatically for limited mode or configured `mitm_hooks`. Set `mitm` to
-`true` to enable it explicitly. The proxy requires `network.enabled = true`. Unknown policy fields are rejected in both modes.
-Standalone documents may include a top-level `metadata` value and omit `constraints`.
-
-```bash
-cargo run -p codex-network-proxy -- --config /path/to/network-proxy.json
-```
-
-Managed hosts must pass `--strict`, which rejects unknown fields at every typed level and requires
-an explicit `constraints` object. Library callers use `StaticNetworkProxyConfig::from_slice_strict`
-for the same checks.
-
 ### 3) Point a client at it
 
 For HTTP(S) traffic:

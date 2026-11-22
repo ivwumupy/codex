@@ -9,10 +9,6 @@ name = "codex_responses_api_proxy"
 path = "src/lib.rs"
 doctest = false
 
-[[bin]]
-name = "codex-responses-api-proxy"
-path = "src/main.rs"
-
 [lints]
 workspace = true
 

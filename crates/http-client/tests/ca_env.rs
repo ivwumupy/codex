@@ -9,7 +9,7 @@
 //! parsing, and user-facing errors. The HTTPS probes go further and perform real POSTs against
 //! locally generated certificates, including through a TLS-intercepting CONNECT proxy.
 
-use codex_utils_cargo_bin::cargo_bin;
+use codex_utils_cargo_bin::cargo_example;
 use rcgen::BasicConstraints;
 use rcgen::CertificateParams;
 use rcgen::CertifiedIssuer;
@@ -89,7 +89,7 @@ fn write_cert_file(temp_dir: &TempDir, name: &str, contents: &str) -> PathBuf {
 
 fn probe_command() -> Command {
     let mut cmd = Command::new(
-        cargo_bin("custom_ca_probe").expect("custom_ca_probe binary should be available"),
+        cargo_example("custom_ca_probe").expect("custom_ca_probe binary should be available"),
     );
     // `Command` inherits the parent environment by default, so scrub CA-related variables first or
     // these tests can accidentally pass/fail based on the developer shell or CI runner.

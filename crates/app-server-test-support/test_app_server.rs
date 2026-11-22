@@ -1818,7 +1818,7 @@ impl TestAppServerBuilder {
             environment,
             program,
             mut env_overrides,
-            args,
+            mut args,
             exec_server_delay,
             mock_chatgpt_backend,
         } = self;
@@ -1887,7 +1887,7 @@ impl TestAppServerBuilder {
                             "TestAppServer exec-server delay only supports the local test environment"
                         );
                         let exec_server_program =
-                            codex_utils_cargo_bin::cargo_bin("exec-server")
+                            codex_utils_cargo_bin::cargo_bin("codex")
                                 .context("should find binary for delayed exec-server fixture")?;
                         // Local auto environments normally use stdio. Start a
                         // host-local WebSocket fixture so the delay interposer has a
@@ -1943,8 +1943,10 @@ impl TestAppServerBuilder {
         };
         let program = match program {
             Some(program) => program,
-            None => codex_utils_cargo_bin::cargo_bin("codex-app-server")
-                .context("should find binary for codex-app-server")?,
+            None => {
+                args.insert(0, "app-server".to_owned());
+                codex_utils_cargo_bin::cargo_bin("codex")?
+            }
         };
         let env_overrides = env_overrides
             .iter()
@@ -1968,7 +1970,7 @@ impl TestAppServerBuilder {
 
 impl Drop for TestAppServer {
     fn drop(&mut self) {
-        // These tests spawn a `codex-app-server` child process.
+        // These tests spawn a `codex app-server` child process.
         //
         // We keep that child alive for the test and rely on Tokio's `kill_on_drop(true)` when this
         // helper is dropped. Tokio documents kill-on-drop as best-effort: dropping requests

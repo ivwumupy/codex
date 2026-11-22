@@ -15,9 +15,7 @@ use std::fs;
 use std::process::Command;
 use tempfile::tempdir;
 
-/// While we may add an `apply-patch` subcommand to the `codex` CLI multitool
-/// at some point, we must ensure that the smaller `codex-exec` CLI can still
-/// emulate the `apply_patch` CLI.
+/// Exercise the apply-patch re-exec path used by the CLI.
 #[test]
 fn test_standalone_exec_cli_can_use_apply_patch() -> anyhow::Result<()> {
     let tmp = tempdir()?;
@@ -25,7 +23,7 @@ fn test_standalone_exec_cli_can_use_apply_patch() -> anyhow::Result<()> {
     let absolute_path = tmp.path().join(relative_path);
     fs::write(&absolute_path, "original content\n")?;
 
-    Command::new(codex_utils_cargo_bin::cargo_bin("codex-exec")?)
+    Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
         .arg(CODEX_CORE_APPLY_PATCH_ARG1)
         .arg(
             r#"*** Begin Patch
@@ -215,7 +213,7 @@ async fn nested_apply_patch_alias_works_with_restricted_reads() -> anyhow::Resul
         return Ok(());
     }
     let test = test_codex_exec();
-    let binary = codex_utils_cargo_bin::cargo_bin("codex-exec")?.canonicalize()?;
+    let binary = codex_utils_cargo_bin::cargo_bin("codex")?.canonicalize()?;
     let binary_dir = serde_json::to_string(binary.parent().expect("binary directory"))?;
     let codex_home = serde_json::to_string(test.home_path())?;
     fs::write(

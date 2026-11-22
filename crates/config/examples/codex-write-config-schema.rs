@@ -30,7 +30,7 @@ fn default_out_path() -> Result<PathBuf> {
 
     let cwd = std::env::current_dir()?;
     for workspace in cwd.ancestors() {
-        if workspace.join("crates/config-schema/Cargo.toml").is_file()
+        if workspace.join("crates/config/Cargo.toml").is_file()
             && workspace.join("crates/core/Cargo.toml").is_file()
         {
             return Ok(workspace.join("crates/core/config.schema.json"));

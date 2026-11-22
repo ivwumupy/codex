@@ -7,5 +7,5 @@ When you change any fields included in `ConfigToml` (or nested config types),
 regenerate the schema:
 
 ```
-cargo run --bin codex-write-config-schema
+cargo run -p codex-config --example codex-write-config-schema
 ```

@@ -26,7 +26,7 @@ use codex_rmcp_client::determine_streamable_http_auth_status;
 use codex_rmcp_client::is_authentication_required_error;
 use codex_rmcp_client::save_oauth_tokens;
 use codex_rmcp_client::with_http_headers_helper;
-use codex_utils_cargo_bin::cargo_bin;
+use codex_utils_cargo_bin::cargo_example;
 use oauth2::AccessToken;
 use oauth2::RefreshToken;
 use oauth2::basic::BasicTokenType;
@@ -592,7 +592,7 @@ async fn assert_expired_token_refresh(
             CHILD_HELPER_COMMAND_ENV,
             format!(
                 "\"{}\" --http-headers-helper \"{}\"",
-                cargo_bin("test_streamable_http_server")?.display(),
+                cargo_example("test_streamable_http_server")?.display(),
                 helper_invocations.display(),
             ),
         );

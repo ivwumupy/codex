@@ -1494,7 +1494,6 @@ dependencies = [
  "tempfile",
  "test-case",
  "thiserror 2.0.18",
- "tikv-jemallocator",
  "time",
  "tokio",
  "tokio-rustls",
@@ -1979,6 +1978,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "clap",
  "codex-execpolicy",
  "codex-features",
  "codex-file-system",
@@ -2024,15 +2024,6 @@ dependencies = [
  "winapi-util",
  "windows-sys 0.61.2",
  "winreg 0.55.0",
-]
-
-[[package]]
-name = "codex-config-schema"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "codex-config",
 ]
 
 [[package]]
@@ -2488,13 +2479,11 @@ dependencies = [
  "codex-websocket-auth",
  "futures",
  "http",
- "insta",
  "jsonwebtoken",
  "pretty_assertions",
  "serde",
  "serde_json",
  "tempfile",
- "tikv-jemallocator",
  "tokio",
  "toml 0.9.11+spec-1.1.0",
  "tracing",
@@ -2671,15 +2660,12 @@ name = "codex-file-search"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "clap",
  "crossbeam-channel",
  "ignore",
  "nucleo",
  "pretty_assertions",
  "serde",
- "serde_json",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -4036,17 +4022,6 @@ version = "0.0.0"
 dependencies = [
  "codex-arg0",
  "tempfile",
-]
-
-[[package]]
-name = "codex-thread-manager-sample"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "codex-core-api",
- "serde_json",
- "tracing",
 ]
 
 [[package]]

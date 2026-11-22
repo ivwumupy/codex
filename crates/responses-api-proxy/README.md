@@ -6,7 +6,7 @@
 # Launch the proxy, dump request/response pairs to /tmp/proxy
 cd path/to/codex
 cargo build
-echo $OPENAI_API_KEY | ./target/debug/codex-responses-api-proxy \
+echo $OPENAI_API_KEY | ./target/debug/codex responses-api-proxy \
     --port 60001 \
     --dump-dir /tmp/proxy
 
@@ -36,12 +36,12 @@ endpoint described below.
 
 ## API-key usage (default)
 
-**IMPORTANT:** `codex-responses-api-proxy` is designed to be run by a privileged user with access to `OPENAI_API_KEY` so that an unprivileged user cannot inspect or tamper with the process. Though if `--http-shutdown` is specified, an unprivileged user _can_ make a `GET` request to `/shutdown` to shutdown the server, as an unprivileged user could not send `SIGTERM` to kill the process.
+**IMPORTANT:** `codex responses-api-proxy` is designed to be run by a privileged user with access to `OPENAI_API_KEY` so that an unprivileged user cannot inspect or tamper with the process. Though if `--http-shutdown` is specified, an unprivileged user _can_ make a `GET` request to `/shutdown` to shutdown the server, as an unprivileged user could not send `SIGTERM` to kill the process.
 
-A privileged user (i.e., `root` or a user with `sudo`) who has access to `OPENAI_API_KEY` would run the following to start the server, as `codex-responses-api-proxy` reads the auth token from `stdin`:
+A privileged user (i.e., `root` or a user with `sudo`) who has access to `OPENAI_API_KEY` would run the following to start the server, as `codex responses-api-proxy` reads the auth token from `stdin`:
 
 ```shell
-printenv OPENAI_API_KEY | env -u OPENAI_API_KEY codex-responses-api-proxy --http-shutdown --server-info /tmp/server-info.json
+printenv OPENAI_API_KEY | env -u OPENAI_API_KEY codex responses-api-proxy --http-shutdown --server-info /tmp/server-info.json
 ```
 
 A non-privileged user would then run Codex as follows, specifying the `model_provider` dynamically:
@@ -75,22 +75,14 @@ In this mode, stdin supplies GitHub's `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, **not**
 the minted GitHub OIDC JWT or an OpenAI API key. The proxy needs that request
 credential to request fresh subject tokens during long runs.
 
-For the npm-installed proxy, use Node.js 24 or newer for the example below.
-It sets `NODE_OPTIONS=--disable-sigusr1` to protect the launcher's credential
-input from Node's debugger. Some older Node versions accepted by the npm package
-do not support this option and will exit before starting the proxy. To run
-without Node.js, replace `codex-responses-api-proxy` in the example with the
-path to the native binary; keep the same pipe and environment handling.
-
 Supply the audience, provider ID, and service account ID as GitHub Actions
 variables (they are not secrets). Start the proxy as a privileged user, as in
 the API-key example:
 
 ```bash
 printenv ACTIONS_ID_TOKEN_REQUEST_TOKEN | (
-  exec env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u NODE_OPTIONS \
-    NODE_OPTIONS=--disable-sigusr1 \
-    codex-responses-api-proxy \
+  exec env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+    codex responses-api-proxy \
     --github-oidc \
     --oidc-audience "$OPENAI_WIF_AUDIENCE" \
     --identity-provider-id "$OPENAI_IDENTITY_PROVIDER_ID" \
@@ -155,7 +147,7 @@ guarantee for tokens passing through the HTTP/JSON client.
 ## CLI
 
 ```
-codex-responses-api-proxy [--port <PORT>] [--server-info <FILE>] [--http-shutdown] [--upstream-url <URL>] [--dump-dir <DIR>]
+codex responses-api-proxy [--port <PORT>] [--server-info <FILE>] [--http-shutdown] [--upstream-url <URL>] [--dump-dir <DIR>]
   [--github-oidc --oidc-audience <AUDIENCE> --identity-provider-id <ID>
    --service-account-id <ID> --github-oidc-request-url <URL>]
 ```
@@ -170,7 +162,7 @@ codex-responses-api-proxy [--port <PORT>] [--server-info <FILE>] [--http-shutdow
 For Azure, for example (ensure your deployment accepts `Authorization: Bearer <key>`):
 
 ```shell
-printenv AZURE_OPENAI_API_KEY | env -u AZURE_OPENAI_API_KEY codex-responses-api-proxy \
+printenv AZURE_OPENAI_API_KEY | env -u AZURE_OPENAI_API_KEY codex responses-api-proxy \
   --http-shutdown \
   --server-info /tmp/server-info.json \
   --upstream-url "https://YOUR_PROJECT_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/responses?api-version=2025-04-01-preview"
@@ -185,7 +177,7 @@ printenv AZURE_OPENAI_API_KEY | env -u AZURE_OPENAI_API_KEY codex-responses-api-
 
 Care is taken to restrict access/copying to the value of `OPENAI_API_KEY` retained in memory:
 
-- We leverage [`codex_process_hardening`](https://github.com/openai/codex/blob/main/codex-rs/process-hardening/README.md) so `codex-responses-api-proxy` is run with standard process-hardening techniques.
+- We leverage [`codex_process_hardening`](https://github.com/openai/codex/blob/main/codex-rs/process-hardening/README.md) so `codex responses-api-proxy` is run with standard process-hardening techniques.
 - At startup, we allocate a `1024` byte buffer on the stack and copy `"Bearer "` into the start of the buffer.
 - We then read from `stdin`, copying the contents into the buffer after `"Bearer "`.
 - After verifying the key matches `/^[a-zA-Z0-9_-]+$/` (and does not exceed the buffer), we create a `String` from that buffer (so the data is now on the heap).

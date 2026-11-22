@@ -3,7 +3,6 @@
 use anyhow::Context as _;
 use anyhow::ensure;
 use codex_arg0::Arg0PathEntryGuard;
-use codex_utils_cargo_bin::CargoBinError;
 use ctor::ctor;
 use std::sync::OnceLock;
 use tempfile::TempDir;
@@ -253,7 +252,7 @@ fn default_test_overrides() -> ConfigOverrides {
 }
 
 #[cfg(target_os = "linux")]
-pub fn find_codex_linux_sandbox_exe() -> Result<PathBuf, CargoBinError> {
+pub fn find_codex_linux_sandbox_exe() -> std::io::Result<PathBuf> {
     if let Some(path) = TEST_ARG0_PATH_ENTRY
         .get()
         .and_then(Option::as_ref)
@@ -262,11 +261,7 @@ pub fn find_codex_linux_sandbox_exe() -> Result<PathBuf, CargoBinError> {
         return Ok(path);
     }
 
-    if let Ok(path) = std::env::current_exe() {
-        return Ok(path);
-    }
-
-    codex_utils_cargo_bin::cargo_bin("codex-linux-sandbox")
+    std::env::current_exe()
 }
 
 /// Wait until the submission loop has processed previously enqueued operations.
@@ -459,8 +454,9 @@ pub fn format_with_current_shell_display_non_login(command: &str) -> String {
         .expect("serialize current shell command without login")
 }
 
-pub fn stdio_server_bin() -> Result<String, CargoBinError> {
-    codex_utils_cargo_bin::cargo_bin("test_stdio_server").map(|p| p.to_string_lossy().to_string())
+pub fn stdio_server_bin() -> std::io::Result<String> {
+    codex_utils_cargo_bin::cargo_example("test_stdio_server")
+        .map(|p| p.to_string_lossy().to_string())
 }
 
 pub mod fs_wait {

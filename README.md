@@ -9,9 +9,11 @@ Codex CLI is a coding agent that runs locally on Linux and macOS. This repositor
 Run the following commands from the repository root on Linux or macOS.
 
 ```shell
-cargo build --locked --bin codex --bin codex-code-mode-host --bin codex-exec-server
+cargo build --locked
 ./target/debug/codex
 ```
+
+The build produces `codex` and `codex-code-mode-host`. Keep both in the same directory for local Code Mode. Use `codex exec` for scripts and `codex app-server` for protocol clients. Run `cargo test --workspace` to include all crates and their test fixtures.
 
 The CLI runs commands with the current user's permissions and never prompts for execution approval. Explicit restricted profiles are rejected.
 

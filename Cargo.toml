@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+default-members = ["crates/cli", "crates/code-mode-host"]
 resolver = "2"
 
 [workspace.package]

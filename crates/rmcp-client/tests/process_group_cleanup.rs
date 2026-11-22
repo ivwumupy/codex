@@ -21,7 +21,7 @@ use rmcp::model::ProtocolVersion;
 use serde_json::json;
 
 fn stdio_server_bin() -> Result<std::path::PathBuf> {
-    codex_utils_cargo_bin::cargo_bin("test_stdio_server").map_err(Into::into)
+    codex_utils_cargo_bin::cargo_example("test_stdio_server").map_err(Into::into)
 }
 
 fn init_params() -> InitializeRequestParams {

@@ -811,8 +811,9 @@ pub(super) async fn connect_daemon_client(
 }
 
 pub(super) fn spawn_server(home: &Path, socket_path: &Path) -> Result<Child> {
-    let binary = codex_utils_cargo_bin::cargo_bin("codex-app-server")?;
+    let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
     Ok(Command::new(binary)
+        .arg("app-server")
         .args(["--listen", &format!("unix://{}", socket_path.display())])
         .args(DEFAULT_APP_SERVER_TEST_ARGS)
         .env("CODEX_HOME", home)

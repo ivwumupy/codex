@@ -4,10 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "codex-stdio-to-uds"
-path = "src/main.rs"
-
 [lib]
 name = "codex_stdio_to_uds"
 path = "src/lib.rs"

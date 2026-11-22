@@ -61,6 +61,27 @@ pub fn cargo_bin(name: &str) -> Result<PathBuf, CargoBinError> {
     }
 }
 
+/// Locate a subprocess fixture built by `cargo test --workspace` or `cargo build --workspace --examples`.
+pub fn cargo_example(name: &str) -> io::Result<PathBuf> {
+    let test_exe = std::env::current_exe()?;
+    let profile_dir = test_exe.parent().and_then(Path::parent).ok_or_else(|| {
+        io::Error::other("expected a test executable under the profile's deps directory")
+    })?;
+    let path = profile_dir
+        .join("examples")
+        .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    if !path.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "missing test fixture {} (build it with `cargo build --workspace --example {name}`)",
+                path.display()
+            ),
+        ));
+    }
+    Ok(path)
+}
+
 fn cargo_bin_env_keys(name: &str) -> Vec<String> {
     let mut keys = Vec::with_capacity(2);
     keys.push(format!("CARGO_BIN_EXE_{name}"));
