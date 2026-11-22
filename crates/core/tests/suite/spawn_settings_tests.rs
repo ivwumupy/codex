@@ -62,10 +62,12 @@ async fn spawn_reports_effective_settings_after_child_runtime_is_removed() -> Re
                 ev_response_created("parent-spawn"),
                 ev_function_call_with_namespace(
                     SPAWN_CALL_ID,
-                    MULTI_AGENT_V1_NAMESPACE,
+                    MULTI_AGENT_V2_NAMESPACE,
                     "spawn_agent",
                     &json!({
                         "message": CHILD_PROMPT,
+                        "task_name": "worker",
+                        "fork_turns": "none",
                         "agent_type": "custom",
                         "model": REQUESTED_MODEL,
                         "reasoning_effort": REQUESTED_REASONING_EFFORT,
@@ -90,7 +92,7 @@ async fn spawn_reports_effective_settings_after_child_runtime_is_removed() -> Re
         .with_model(INHERITED_MODEL)
         .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
-            config.features.enable(Feature::Collab).expect("enable collab");
+            config.features.enable(Feature::MultiAgentV2).expect("enable collab");
             config
                 .features
                 .disable(Feature::MultiAgentV2)

@@ -153,17 +153,7 @@ pub(super) async fn load_local_config_layers_with_overrides(
     let broker_requirements = requirements.clone().project(&[
         vec!["features".to_string(), "network_proxy".to_string()],
         vec!["features".to_string(), "credential_masking".to_string()],
-        vec![
-            "feature_requirements".to_string(),
-            "network_proxy".to_string(),
-        ],
-        vec![
-            "feature_requirements".to_string(),
-            "credential_masking".to_string(),
-        ],
         // Keep the tables intact so discovery validates the same declarations as startup.
-        vec!["experimental_network".to_string()],
-        vec!["network_proxy".to_string()],
         vec!["permissions".to_string(), "network".to_string()],
     ]);
     let effective_requirements =

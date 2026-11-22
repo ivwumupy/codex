@@ -3,7 +3,6 @@
 
 use crate::config::Config;
 use codex_features::FEATURES;
-use codex_features::Feature;
 use codex_features::Features;
 use codex_protocol::openai_models::ModelInfo;
 use serde_json::Value;
@@ -65,7 +64,6 @@ pub(crate) fn usage_tags(
     tags.extend(
         FEATURES
             .iter()
-            .filter(|spec| !matches!(spec.id, Feature::Collab | Feature::SpawnCsv))
             .map(|spec| {
                 (
                     format!("feature.{}", spec.key),

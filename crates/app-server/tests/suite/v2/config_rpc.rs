@@ -112,9 +112,9 @@ async fn config_requirements_read_includes_network_review_domains() -> Result<()
     let codex_home = TempDir::new()?;
     std::fs::write(
         codex_home.path().join("requirements.toml"),
-        r#"[experimental_network]
+        r#"[permissions.network]
 enabled = true
-allowed_domains = ["**.example.com"]
+domains = { "**.example.com" = "allow" }
 review_domains = ["review.example.com"]
 "#,
     )?;
@@ -434,7 +434,7 @@ ignore_rules = ["gpt-protected"]
 [models.new_thread]
 model = "gpt-managed"
 model_reasoning_effort = "medium"
-service_tier = "fast"
+service_tier = "priority"
 "#,
     )?;
     let mut mcp = TestAppServer::builder()
@@ -473,7 +473,7 @@ service_tier = "fast"
         defaults.model_reasoning_effort,
         Some(ReasoningEffort::Medium)
     );
-    assert_eq!(defaults.service_tier.as_deref(), Some("fast"));
+    assert_eq!(defaults.service_tier.as_deref(), Some("priority"));
 
     let config_id = mcp
         .send_config_read_request(ConfigReadParams {
@@ -499,7 +499,7 @@ service_tier = "fast"
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn config_read_disables_guardian_v2_when_managed_config_requires_guardian_v1() -> Result<()> {
     let codex_home = TempDir::new()?;
-    write_config(&codex_home, "[features]\nguardianv2 = true\n")?;
+    write_config(&codex_home, "[features]\nguardianv2.enabled = true\n")?;
     std::fs::write(
         codex_home.path().join("requirements.toml"),
         "allowed_approvals_reviewers = [\"auto_review\"]\n",

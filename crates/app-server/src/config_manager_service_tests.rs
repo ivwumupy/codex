@@ -2479,7 +2479,7 @@ span_attributes = { "service.name" = "managed-service" }"#,
 
 /// Legacy managed feature toggles own their normalized enabled origin and override metadata.
 #[tokio::test]
-async fn multi_agent_v2_boolean_layer_owns_enabled_origin_and_overrides() {
+async fn multi_agent_v2_enabled_origin_and_overrides() {
     let tmp = tempdir().expect("tempdir");
     let user_path = tmp.path().join(CONFIG_TOML_FILE);
     std::fs::write(
@@ -2491,7 +2491,7 @@ async fn multi_agent_v2_boolean_layer_owns_enabled_origin_and_overrides() {
     let managed_path = tmp.path().join("managed_config.toml");
     std::fs::write(
         &managed_path,
-        "[features]\nmulti_agent_v2 = false\nnetwork_proxy = false\n",
+        "[features]\nmulti_agent_v2.enabled = false\nnetwork_proxy.enabled = false\n",
     )
     .expect("managed config");
     let managed_file = AbsolutePathBuf::try_from(managed_path.clone()).expect("managed file");
@@ -2511,7 +2511,6 @@ async fn multi_agent_v2_boolean_layer_owns_enabled_origin_and_overrides() {
         .expect("read config");
     for path in [
         "features.multi_agent_v2.enabled",
-        "features.network_proxy",
         "features.network_proxy.enabled",
     ] {
         assert_eq!(
@@ -2542,6 +2541,32 @@ async fn multi_agent_v2_boolean_layer_owns_enabled_origin_and_overrides() {
 }
 
 #[tokio::test]
+async fn write_rejects_bare_structured_feature_before_modifying_the_file() -> Result<()> {
+    let tmp = tempdir()?;
+    let path = tmp.path().join(CONFIG_TOML_FILE);
+    let initial = "[features.code_mode]\nenabled = true\n";
+    std::fs::write(&path, initial)?;
+    let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
+    let error = service
+        .write_value(ConfigValueWriteParams {
+            file_path: Some(path.display().to_string()),
+            key_path: "features.code_mode".to_string(),
+            value: serde_json::json!(false),
+            merge_strategy: MergeStrategy::Replace,
+            expected_version: None,
+        })
+        .await
+        .expect_err("table feature must use enabled");
+    assert_eq!(
+        error.write_error_code(),
+        Some(ConfigWriteErrorCode::ConfigValidationError)
+    );
+    assert!(error.to_string().contains("features.code_mode.enabled"));
+    assert_eq!(std::fs::read_to_string(path)?, initial);
+    Ok(())
+}
+
+#[tokio::test]
 async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Result<()> {
     let tmp = tempdir()?;
     let user_path = tmp.path().join(CONFIG_TOML_FILE);
@@ -2565,8 +2590,8 @@ async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Resul
     service
         .write_value(ConfigValueWriteParams {
             file_path: Some(user_path.display().to_string()),
-            key_path: "features.network_proxy".to_string(),
-            value: serde_json::Value::Null,
+            key_path: "features.network_proxy.enabled".to_string(),
+            value: serde_json::json!(false),
             merge_strategy: MergeStrategy::Replace,
             expected_version: None,
         })
@@ -2581,7 +2606,7 @@ async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Resul
     let result = service
         .write_value(ConfigValueWriteParams {
             file_path: Some(user_path.display().to_string()),
-            key_path: "features.network_proxy".to_string(),
+            key_path: "features.network_proxy.enabled".to_string(),
             value: serde_json::json!(true),
             merge_strategy: MergeStrategy::Replace,
             expected_version: None,
@@ -2605,15 +2630,15 @@ async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Resul
     profile_service
         .write_value(ConfigValueWriteParams {
             file_path: Some(selected_path.display().to_string()),
-            key_path: "features.network_proxy".to_string(),
-            value: serde_json::Value::Null,
+            key_path: "features.network_proxy.enabled".to_string(),
+            value: serde_json::json!(false),
             merge_strategy: MergeStrategy::Replace,
             expected_version: None,
         })
         .await?;
     assert_eq!(
         toml::from_str::<TomlValue>(&std::fs::read_to_string(&selected_path)?)?,
-        toml::from_str::<TomlValue>("[features]\nnetwork_proxy = false\n")?
+        toml::from_str::<TomlValue>("[features]\nnetwork_proxy.enabled = false\n")?
     );
 
     service
@@ -2651,8 +2676,8 @@ async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Resul
     service
         .write_value(ConfigValueWriteParams {
             file_path: Some(user_path.display().to_string()),
-            key_path: "features.network_proxy".to_string(),
-            value: serde_json::Value::Null,
+            key_path: "features.network_proxy.enabled".to_string(),
+            value: serde_json::json!(false),
             merge_strategy: MergeStrategy::Replace,
             expected_version: None,
         })
@@ -2758,60 +2783,6 @@ beta = "b"
 async fn config_writes_apply_path_sensitive_merge_rules() -> Result<()> {
     let cases = [
         (
-            r#"[shell_environment_policy]
-exclude = ["AWS_*"]
-"#,
-            "shell_environment_policy",
-            serde_json::json!({"filters": {"AWS_*": "include"}}),
-            r#"[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-        ),
-        (
-            r#"[shell_environment_policy]
-inherit = "core"
-exclude = ["AWS_*"]
-"#,
-            "shell_environment_policy.filters",
-            serde_json::json!({"AWS_*": "include"}),
-            r#"[shell_environment_policy]
-inherit = "core"
-
-[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-        ),
-        (
-            r#"[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-            "shell_environment_policy.exclude",
-            serde_json::json!(["AWS_*"]),
-            r#"[shell_environment_policy]
-exclude = ["AWS_*"]
-"#,
-        ),
-        (
-            r#"[shell_environment_policy]
-exclude = ["AWS_*"]
-include_only = ["PATH"]
-"#,
-            "shell_environment_policy.filters",
-            serde_json::json!({}),
-            r#"[shell_environment_policy.filters]
-"#,
-        ),
-        (
-            r#"[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-            "shell_environment_policy.exclude",
-            serde_json::json!([]),
-            r#"[shell_environment_policy]
-exclude = []
-"#,
-        ),
-        (
             r#"[shell_environment_policy.filters]
 "aws_*" = "exclude"
 "#,
@@ -2853,7 +2824,7 @@ exclude = []
         ),
         (
             r#"[memories]
-no_memories_if_mcp_or_web_search = false
+disable_on_external_context = false
 "#,
             "memories",
             serde_json::json!({"disable_on_external_context": true}),
@@ -2863,7 +2834,7 @@ disable_on_external_context = true
         ),
         (
             r#"[features]
-multi_agent_v2 = true
+multi_agent_v2.enabled = true
 "#,
             "features.multi_agent_v2.subagent_usage_hint_text",
             serde_json::json!("Delegate carefully."),
@@ -2874,7 +2845,7 @@ subagent_usage_hint_text = "Delegate carefully."
         ),
         (
             r#"[features]
-multi_agent_v2 = true
+multi_agent_v2.enabled = true
 "#,
             "features.multi_agent_v2",
             serde_json::json!({"subagent_usage_hint_text": "Delegate carefully."}),
@@ -2888,7 +2859,7 @@ subagent_usage_hint_text = "Delegate carefully."
 enabled = true
 subagent_usage_hint_text = "Delegate carefully."
 "#,
-            "features.multi_agent_v2",
+            "features.multi_agent_v2.enabled",
             serde_json::json!(false),
             r#"[features.multi_agent_v2]
 enabled = false
@@ -2906,7 +2877,7 @@ subagent_usage_hint_text = "Delegate carefully."
         ),
         (
             r#"[features]
-network_proxy = true
+network_proxy.enabled = true
 "#,
             "features.network_proxy.credential_broker",
             serde_json::json!(true),
@@ -2920,7 +2891,7 @@ credential_broker = true
 enabled = true
 credential_broker = true
 "#,
-            "features.network_proxy",
+            "features.network_proxy.enabled",
             serde_json::json!(false),
             r#"[features.network_proxy]
 enabled = false
@@ -3029,9 +3000,7 @@ async fn upsert_shell_environment_scalar_preserves_unrelated_formatting() -> Res
         &path,
         r#"[shell_environment_policy]
 inherit = "all"
-exclude = [
-    "AWS_*", # keep this comment
-]
+filters = { "AWS_*" = "exclude" } # keep this comment
 set = { KEEP = "1", OTHER = "2", GH_HOST = "github.stale.example" } # keep this inline table
 "#,
     )?;
@@ -3051,9 +3020,7 @@ set = { KEEP = "1", OTHER = "2", GH_HOST = "github.stale.example" } # keep this 
         std::fs::read_to_string(&path)?,
         r#"[shell_environment_policy]
 inherit = "core"
-exclude = [
-    "AWS_*", # keep this comment
-]
+filters = { "AWS_*" = "exclude" } # keep this comment
 set = { KEEP = "1", OTHER = "2", GH_HOST = "github.stale.example" } # keep this inline table
 "#
     );
@@ -3184,24 +3151,8 @@ async fn shell_environment_upsert_rejects_case_variant_filters_in_one_edit() -> 
 }
 
 #[tokio::test]
-async fn shell_environment_representation_switch_reports_managed_override() -> Result<()> {
+async fn shell_environment_set_reports_managed_override() -> Result<()> {
     let cases = [
-        (
-            r#"[shell_environment_policy]
-exclude = ["AWS_*"]
-"#,
-            "shell_environment_policy.filters.AWS_*",
-            serde_json::json!("include"),
-            Some(serde_json::Value::Null),
-        ),
-        (
-            r#"[shell_environment_policy.filters]
-"AWS_*" = "include"
-"#,
-            "shell_environment_policy.exclude",
-            serde_json::json!(["AWS_*"]),
-            Some(serde_json::Value::Null),
-        ),
         (
             "[shell_environment_policy.set]\nGH_HOST = 'github.managed.example'\n",
             "shell_environment_policy.set.GH_HOST",

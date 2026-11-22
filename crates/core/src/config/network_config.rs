@@ -11,7 +11,6 @@ use codex_config::NetworkConstraints;
 use codex_config::Sourced;
 use codex_config::permissions_toml::NetworkToml;
 use codex_execpolicy::Policy;
-use codex_features::FeatureToml;
 use codex_features::FeaturesToml;
 use codex_network_proxy::EnvironmentNetworkPolicy;
 use codex_network_proxy::NetworkProxyConfig;
@@ -100,7 +99,7 @@ impl PreparedNetworkConfig {
                 .network_sandbox_policy()
                 .is_enabled()
         {
-            if let Some(FeatureToml::Config(config)) =
+            if let Some(config) =
                 features.and_then(|features| features.network_proxy.as_ref())
             {
                 apply_network_proxy_feature_config(&mut configured_proxy, config);

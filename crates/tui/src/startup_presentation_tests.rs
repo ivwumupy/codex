@@ -10,7 +10,7 @@ async fn selected_profile_controls_submit_before_the_first_frame() -> anyhow::Re
     let home = tempfile::tempdir()?;
     std::fs::write(
         home.path().join("config.toml"),
-        "disable_paste_burst = false\n",
+        "tui.disable_paste_burst = false\n",
     )?;
     let selected = AbsolutePathBuf::from_absolute_path(home.path().join("work.config.toml"))?;
     let cli = Cli::try_parse_from(["codex"])?;
@@ -22,7 +22,7 @@ async fn selected_profile_controls_submit_before_the_first_frame() -> anyhow::Re
             &selected,
             // Presentation must not compile the local execution profile.
             format!(
-                "default_permissions = \"server-only\"\ndisable_paste_burst = true\n[permissions.server-only]\nextends = \"missing-local-parent\"\n[tui.keymap.composer]\nsubmit = {submit}\n"
+                "default_permissions = \"server-only\"\ntui.disable_paste_burst = true\n[permissions.server-only]\nextends = \"missing-local-parent\"\n[tui.keymap.composer]\nsubmit = {submit}\n"
             ),
         )?;
         let presentation = load(

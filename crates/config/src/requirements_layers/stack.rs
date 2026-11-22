@@ -173,11 +173,6 @@ impl RequirementsLayerStack {
             })?;
         let mut output = ConfigRequirementsWithSources::default();
         populate_merged_regular_fields_with_sources(&mut output, requirements, &layers);
-        output.validate_network_spelling().map_err(|err| {
-            RequirementsCompositionError::ComposedParse {
-                message: err.to_string(),
-            }
-        })?;
         // Merge OTEL requirements so higher-priority exact values replace
         // lower-priority values while exporters stay atomic.
         let mut otel = None;
@@ -280,7 +275,6 @@ fn populate_merged_regular_fields_with_sources(
         apps,
         rules: _,
         enforce_residency,
-        network,
         application,
         mut permissions,
         auto_review,
@@ -333,13 +327,12 @@ fn populate_merged_regular_fields_with_sources(
     set_sourced!(browser_use, &["browser_use"]);
     set_sourced!(in_app_browser, &["in_app_browser"]);
     set_sourced!(windows, &["windows"]);
-    set_sourced!(feature_requirements, &["features", "feature_requirements"]);
+    set_sourced!(feature_requirements, &["features"]);
     set_sourced!(mcp_servers, &["mcp_servers"]);
     set_sourced!(plugins, &["plugins"]);
     set_sourced!(marketplaces, &["marketplaces"]);
     set_sourced!(apps, &["apps"]);
     set_sourced!(enforce_residency, &["enforce_residency"]);
-    set_sourced!(network, &["network_proxy"]);
     set_sourced!(application, &["application"]);
     let permission_sources = |contributes: fn(&toml::Table) -> bool| {
         RequirementSource::composite(

@@ -17,8 +17,6 @@ async fn unicode_math_termination_preserves_source_through_mode_and_resize() -> 
             let plan = kind != "answer";
             if plan {
                 app.chat_widget
-                    .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-                app.chat_widget
                     .set_collaboration_mask(CollaborationModeMask {
                         name: "Plan".into(),
                         mode: Some(ModeKind::Plan),

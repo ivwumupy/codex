@@ -485,7 +485,7 @@ async fn temporary_recap_threads_disable_memories_and_remote_mcp_servers() -> Re
     let codex_home = tempdir()?;
     std::fs::write(
         codex_home.path().join("config.toml"),
-        "features.context_management.experimental_mode = true\n[mcp_servers.filesystem]\ncommand = 'true'\n",
+        "features.context_management.enabled = true\n[mcp_servers.filesystem]\ncommand = 'true'\n",
     )?;
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());

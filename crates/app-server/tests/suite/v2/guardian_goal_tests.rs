@@ -32,7 +32,7 @@ async fn worker_guardian_sees_goal_set_after_spawn(origin: &str) -> Result<()> {
             "[mcp_servers.{TEST_SERVER_NAME}]\nurl = \"{mcp_url}/mcp\"\ndefault_tools_approval_mode = \"prompt\""
         ))
         .enable_feature(Feature::GuardianApproval)
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .enable_feature(Feature::MultiAgentV2)
         .enable_feature(Feature::Goals)
         .disable_feature(Feature::GuardianV2)

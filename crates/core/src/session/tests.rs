@@ -1498,10 +1498,10 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
             RequirementSource::LegacyManagedConfigTomlFromMdm,
         ));
         let mut requirements_toml = config.config_layer_stack.requirements_toml().clone();
-        requirements_toml.network = Some(codex_config::NetworkRequirementsToml {
+        requirements_toml.permissions.get_or_insert_default().network = Some(Box::new(codex_config::NetworkRequirementsToml {
             enabled: Some(true),
             ..Default::default()
-        });
+        }));
         config.config_layer_stack = ConfigLayerStack::new(layers, requirements, requirements_toml)
             .expect("rebuild config layer stack with network requirements");
     })
@@ -3056,6 +3056,16 @@ fn resolve_multi_agent_version_handles_unset_and_legacy_history() {
 
     assert_eq!(
         resolve_multi_agent_version(
+            &InitialHistory::Forked(vec![session_meta_item(
+                thread_id,
+                Some(MultiAgentVersion::V1)
+            )]),
+            None,
+        ),
+        Some(MultiAgentVersion::Disabled)
+    );
+    assert_eq!(
+        resolve_multi_agent_version(
             &InitialHistory::New,
             /*inherited_multi_agent_version*/ None
         ),
@@ -3071,7 +3081,7 @@ fn resolve_multi_agent_version_handles_unset_and_legacy_history() {
             }),
             /*inherited_multi_agent_version*/ None,
         ),
-        Some(MultiAgentVersion::V1)
+        None
     );
     assert_eq!(
         resolve_multi_agent_version(
@@ -3115,7 +3125,7 @@ fn resolve_multi_agent_version_handles_unset_and_legacy_history() {
             &InitialHistory::Forked(Vec::new()),
             /*inherited_multi_agent_version*/ None
         ),
-        Some(MultiAgentVersion::V1)
+        None
     );
 }
 
@@ -4424,7 +4434,7 @@ async fn set_rate_limits_retains_previous_credits() {
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -4548,7 +4558,7 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -5112,7 +5122,7 @@ async fn session_settings_null_service_tier_update_uses_default_service_tier() {
 }
 
 #[tokio::test]
-async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_value() {
+async fn session_settings_custom_service_tier_update_preserves_literal_value() {
     let session_configuration = make_session_configuration_for_tests().await;
 
     let updated = session_configuration
@@ -5126,11 +5136,11 @@ async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_
             },
             &[],
         )
-        .expect("legacy fast service tier update should apply");
+        .expect("custom service tier update should apply");
 
     assert_eq!(
         updated.step_settings.service_tier,
-        Some(ServiceTier::Fast.request_value().to_string())
+        Some("fast".to_string())
     );
 }
 
@@ -5174,7 +5184,7 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -5490,7 +5500,7 @@ async fn active_profile_update_rebuilds_network_proxy_config(
             toml::from_str(if credential_broker {
                 "network_proxy = { enabled = true, credential_broker = true }"
             } else {
-                "network_proxy = true"
+                "network_proxy.enabled = true"
             })
             .expect("valid features"),
         ),
@@ -6602,7 +6612,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -6933,7 +6943,7 @@ async fn make_session_with_config_and_rx(
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -7071,7 +7081,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -8910,7 +8920,7 @@ where
         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         windows_sandbox_type: config.permissions.windows_sandbox_type,
-        use_legacy_landlock: config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         legacy_fallback_cwd: config.cwd.clone(),
         runtime_workspace_roots: config.workspace_roots.clone(),
         codex_home: config.codex_home.clone(),
@@ -9951,10 +9961,6 @@ async fn capability_discovery_uses_environment_permission_profile() {
         .set_permission_profile(PermissionProfile::Disabled)
         .expect("unrestricted permission profile should be allowed");
     config.permissions.windows_sandbox_mode = Some(WindowsSandboxModeToml::Unelevated);
-    config
-        .features
-        .disable(Feature::UseLegacyLandlock)
-        .expect("disable legacy Landlock");
     turn_context.windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let mut environment = turn_context
         .initial_environments

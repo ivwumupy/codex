@@ -20,7 +20,7 @@ The CLI runs commands with the current user's permissions and never prompts for 
 Run `codex` to configure an API key or a custom provider. To save an OpenAI API key from the shell:
 
 ```shell
-printenv OPENAI_API_KEY | codex login --with-api-key
+printenv OPENAI_API_KEY | codex login
 ```
 
 ## Docs

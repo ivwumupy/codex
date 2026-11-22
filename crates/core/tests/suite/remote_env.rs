@@ -630,7 +630,7 @@ async fn environment_permissions_follow_configuration_ownership() -> Result<()> 
                         shell_environment_policy: Default::default(),
                         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                        use_legacy_landlock: false,
                         exec_policy: None,
                         mcp_policy: None,
                         network_policy: None,
@@ -1678,7 +1678,7 @@ async fn shared_executor_keeps_ready_capability_roots_scoped_to_each_attachment(
             shell_environment_policy: Default::default(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
             windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-            use_legacy_landlock: test.config.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             exec_policy: None,
             mcp_policy: None,
             network_policy: None,
@@ -1721,7 +1721,7 @@ async fn shared_executor_keeps_ready_capability_roots_scoped_to_each_attachment(
                     shell_environment_policy: Default::default(),
                     windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                     windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                    use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                    use_legacy_landlock: false,
                     exec_policy: None,
                     mcp_policy: None,
                     network_policy: None,
@@ -1748,7 +1748,7 @@ async fn shared_executor_keeps_ready_capability_roots_scoped_to_each_attachment(
                         shell_environment_policy: Default::default(),
                         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                        use_legacy_landlock: false,
                         exec_policy: None,
                         mcp_policy: None,
                         network_policy: None,
@@ -1810,7 +1810,7 @@ async fn shared_executor_keeps_ready_capability_roots_scoped_to_each_attachment(
                             shell_environment_policy: Default::default(),
                             windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                             windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                            use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                            use_legacy_landlock: false,
                             exec_policy: None,
                             mcp_policy: None,
                             network_policy: None,
@@ -1871,7 +1871,7 @@ async fn owner_network_policy_rejects_unsupported_environment_authority() -> Res
         shell_environment_policy: test.config.permissions.shell_environment_policy.clone(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         exec_policy: None,
         mcp_policy: None,
         network_policy: Some(EnvironmentNetworkPolicy::from_config(
@@ -1973,7 +1973,7 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
         shell_environment_policy: Default::default(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         exec_policy: None,
         mcp_policy: None,
         network_policy: None,
@@ -2416,7 +2416,7 @@ async fn future_pending_environment_can_finish_without_retargeting_the_active_tu
         shell_environment_policy: Default::default(),
         windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
         windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-        use_legacy_landlock: test.config.features.use_legacy_landlock(),
+        use_legacy_landlock: false,
         exec_policy: None,
         mcp_policy: None,
         network_policy: None,
@@ -3016,24 +3016,15 @@ async fn deferred_executor_stays_pending_after_materialization() -> Result<()> {
     Ok(())
 }
 
-#[test_case(false, "multi_agent_v1"; "v1")]
-#[test_case(true, "collaboration"; "v2")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn deferred_executor_spawn_agent_inherits_ready_step_environments(
-    multi_agent_v2: bool,
-    namespace: &str,
-) -> Result<()> {
+async fn deferred_executor_spawn_agent_inherits_ready_step_environments() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let server = start_mock_server().await;
     let wait_call_id = "wait-for-spawn-environment";
     let spawn_call_id = "spawn-in-ready-environment";
     let message = "inspect the ready step environment";
-    let spawn_arguments = if multi_agent_v2 {
-        json!({ "message": message, "task_name": "worker" })
-    } else {
-        json!({ "message": message })
-    }
-    .to_string();
+    let namespace = "collaboration";
+    let spawn_arguments = json!({"message": message, "task_name": "worker"}).to_string();
     let response_mock = mount_sse_sequence(
         &server,
         vec![
@@ -3089,12 +3080,7 @@ async fn deferred_executor_spawn_agent_inherits_ready_step_environments(
                 .set_permission_profile(PermissionProfile::workspace_write())
                 .expect("thread should allow workspace writes");
             assert!(config.features.enable(Feature::DeferredExecutor).is_ok());
-            assert!(config.features.enable(Feature::Collab).is_ok());
-            if multi_agent_v2 {
-                assert!(config.features.enable(Feature::MultiAgentV2).is_ok());
-            } else {
-                assert!(config.features.disable(Feature::MultiAgentV2).is_ok());
-            }
+            assert!(config.features.enable(Feature::MultiAgentV2).is_ok());
         });
     let (attach_tx, attach_rx) = tokio::sync::oneshot::channel();
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
@@ -3124,7 +3110,7 @@ async fn deferred_executor_spawn_agent_inherits_ready_step_environments(
             shell_environment_policy: Default::default(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
             windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-            use_legacy_landlock: test.config.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             exec_policy: None,
             mcp_policy: None,
             network_policy: None,

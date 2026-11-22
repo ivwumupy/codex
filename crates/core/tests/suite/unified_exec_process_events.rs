@@ -1073,19 +1073,19 @@ async fn exec_command_consumes_pushed_remote_process_events(
                 policy_callbacks: false,
             } => CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
-[experimental_network]
+[permissions.network]
 enabled = true
 allow_local_binding = true
 managed_allowed_domains_only = true
 
-[experimental_network.domains]
+[permissions.network.domains]
 "allowed.example.com" = "allow"
 "#,
             ),
             ManagedNetworkScenario::Disabled => {
                 CloudConfigBundleFixture::loader_with_enterprise_requirement(
                     r#"
-[experimental_network]
+[permissions.network]
 enabled = false
 "#,
                 )

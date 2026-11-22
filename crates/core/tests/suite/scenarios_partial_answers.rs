@@ -202,10 +202,6 @@ async fn partial_answers_survive_forked_child_requests(
             }
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("enable agents");
-            config
-                .features
                 .enable(Feature::MultiAgentV2)
                 .expect("enable agent paths");
         })

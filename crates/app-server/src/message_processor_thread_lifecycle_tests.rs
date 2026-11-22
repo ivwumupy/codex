@@ -302,7 +302,7 @@ async fn disconnected_v2_child_lifecycle(unload_delay_secs: u64, ephemeral: bool
         .with_root_config(&format!(
             "thread_unload_delay_secs = {unload_delay_secs}\napprovals_reviewer = \"user\""
         ))
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .enable_feature(Feature::MultiAgentV2);
     config.write(home.path())?;
     let config = Arc::new(
@@ -567,7 +567,7 @@ decision = "prompt-user"
         .with_approval_policy("on-request")
         .with_sandbox_mode("workspace-write")
         .with_root_config("approvals_reviewer = \"auto_review\"")
-        .enable_feature(Feature::Collab)
+        .enable_feature(Feature::MultiAgentV2)
         .enable_feature(Feature::MultiAgentV2)
         .write(home.path())?;
     let config = Arc::new(

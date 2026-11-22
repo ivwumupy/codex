@@ -244,7 +244,7 @@ fn format_labeled_requests_snapshot(
 
 fn configure_deferred_tool_world_state_without_agents(config: &mut Config) {
     config.update_plan_enabled = true;
-    config.agents_enabled = false;
+    config.features.disable(Feature::MultiAgentV2).unwrap();
 }
 
 fn tools_state_sections(request: &ResponsesRequest) -> Vec<String> {
@@ -308,7 +308,9 @@ async fn root_and_spawned_subagent_receive_distinct_mcp_session_sources() -> Res
     const SPAWN_CALL_ID: &str = "mcp-session-source-spawn";
 
     let server = responses::start_mock_server().await;
-    let spawn_args = serde_json::to_string(&json!({ "message": CHILD_PROMPT }))?;
+    let spawn_args = serde_json::to_string(
+        &json!({ "message": CHILD_PROMPT, "task_name":"worker", "fork_turns":"none" }),
+    )?;
     mount_sse_once_match(
         &server,
         |request: &Request| {
@@ -319,7 +321,7 @@ async fn root_and_spawned_subagent_receive_distinct_mcp_session_sources() -> Res
             ev_response_created("resp-parent-spawn"),
             ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                "multi_agent_v1",
+                "collaboration",
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -541,7 +543,7 @@ async fn root_reconciliation_reuses_pending_apps_startup() -> Result<()> {
                 shell_environment_policy: Default::default(),
                 windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
                 windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-                use_legacy_landlock: test.config.features.use_legacy_landlock(),
+                use_legacy_landlock: false,
                 exec_policy: None,
                 mcp_policy: None,
                 network_policy: None,

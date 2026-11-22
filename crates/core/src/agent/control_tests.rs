@@ -1136,7 +1136,6 @@ async fn ensure_v2_child_loaded_preserves_evicted_parent_authority() {
 async fn cancelled_v2_send_finishes_reload_registration() {
     let (home, mut config) = test_config().await;
     config.features.enable(Feature::MultiAgentV2).unwrap();
-    config.features.enable(Feature::Sqlite).unwrap();
     // The root leaves exactly one resident child slot available.
     config.multi_agent_v2.max_concurrent_threads_per_session = 2;
     let harness = AgentControlHarness::new_with_config(home, config).await;
@@ -1302,7 +1301,6 @@ async fn spawn_v2_reload_test_child(
 async fn check_v2_agent_reload(route: V2ReloadRoute) {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
-    let _ = config.features.enable(Feature::Sqlite);
     config.model = Some("gpt-5.6-sol".to_string());
     config.multi_agent_v2.max_concurrent_threads_per_session = 3;
     config.permissions.allow_login_shell = true;
@@ -1567,7 +1565,6 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
 async fn resume_agent_from_rollout_does_not_reopen_v2_descendants() {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
-    let _ = config.features.enable(Feature::Sqlite);
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
     let worker_path = AgentPath::root().join("worker").expect("worker path");
@@ -1730,7 +1727,6 @@ async fn cold_resume_with_thread_instructions_preserves_lazy_v2_child_inheritanc
 ) {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
-    let _ = config.features.enable(Feature::Sqlite);
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let parent = harness
         .manager
@@ -1912,10 +1908,6 @@ async fn v2_reload_preserves_shared_instructions_after_root_unloads(
         .features
         .enable(Feature::MultiAgentV2)
         .expect("enable multi-agent v2");
-    config
-        .features
-        .enable(Feature::Sqlite)
-        .expect("enable SQLite");
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let provider = Arc::new(TestThreadInstructionsProvider {
         text: "initial thread instructions".into(),
@@ -2204,12 +2196,10 @@ async fn pending_environment_failure_reaches_child_and_grandchild() {
     for feature in [
         Feature::DeferredExecutor,
         Feature::MultiAgentV2,
-        Feature::Sqlite,
     ] {
         config.features.enable(feature).expect("enable feature");
     }
     config.model = Some("gpt-5.6-sol".to_string());
-    config.agent_max_depth = 2;
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let cwd = PathUri::from_abs_path(&harness.config.codex_home);
     let pending = TurnEnvironmentSelection {
@@ -4321,8 +4311,8 @@ async fn spawn_agent_respects_legacy_max_threads_alias() {
 async fn spawn_agent_releases_slot_after_shutdown() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4364,8 +4354,8 @@ async fn spawn_agent_releases_slot_after_shutdown() {
 async fn spawn_agent_limit_shared_across_clones() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4409,8 +4399,8 @@ async fn spawn_agent_limit_shared_across_clones() {
 async fn resume_agent_respects_max_threads_limit() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
@@ -4465,8 +4455,8 @@ async fn resume_agent_respects_max_threads_limit() {
 async fn resume_agent_releases_slot_after_resume_failure() {
     let max_threads = 1usize;
     let (_home, config) = test_config_with_cli_overrides(vec![(
-        "agents.max_concurrent_threads_per_session".to_string(),
-        TomlValue::Integer(max_threads as i64),
+        "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+        TomlValue::Integer(max_threads as i64 + 1),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(

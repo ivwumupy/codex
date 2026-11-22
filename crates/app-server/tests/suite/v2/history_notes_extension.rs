@@ -128,7 +128,7 @@ async fn app_server_uses_configured_notes_backend_for_context_window_hints(
         .with_provider_base_url(&format!("{}/backend-api/codex", server.uri()))
         .with_provider_config("supports_websockets = false\nrequires_openai_auth = true")
         .with_extra_config(&format!(
-            "[features.context_management]\nexperimental_mode = false\n\n[features.token_budget]\nenabled = true\nuse_history_notes_extension = {use_history_notes_extension}\n\n[mcp_servers.notes]\nurl = \"{}/mcp\"\nstartup_timeout_sec = 10\n",
+            "[features.context_management]\nenabled = false\n\n[features.token_budget]\nenabled = true\nuse_history_notes_extension = {use_history_notes_extension}\n\n[mcp_servers.notes]\nurl = \"{}/mcp\"\nstartup_timeout_sec = 10\n",
             server.uri(),
         ))
         .write(codex_home.path())?;

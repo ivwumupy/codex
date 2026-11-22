@@ -121,13 +121,8 @@ async fn child_loads_remote_tool_search_with_thread_provider_headers(
         .with_config(|config| {
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("enable collaboration");
-            config
-                .features
                 .disable(Feature::MultiAgentV2)
                 .expect("disable multi-agent v2");
-            config.agent_max_depth = 2;
         })
         .build_with_auto_env(&server)
         .await?;
@@ -214,13 +209,8 @@ async fn child_preserves_parent_catalog_after_cache_write_failure() -> Result<()
         .with_config(|config| {
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("enable collaboration");
-            config
-                .features
                 .disable(Feature::MultiAgentV2)
                 .expect("disable multi-agent v2");
-            config.agent_max_depth = 2;
         })
         .build_with_auto_env(&server)
         .await?;
@@ -274,9 +264,9 @@ async fn assert_child_retains_tool_search(test: &mut TestCodex, server: &MockSer
                 ev_response_created("parent-spawn"),
                 ev_function_call_with_namespace(
                     "spawn-child",
-                    "multi_agent_v1",
+                    "collaboration",
                     "spawn_agent",
-                    &json!({"message": "Say done."}).to_string(),
+                    &json!({"message": "Say done.", "task_name":"worker", "fork_turns":"none"}).to_string(),
                 ),
                 ev_completed("parent-spawn"),
             ]),
@@ -1872,7 +1862,7 @@ async fn failed_catalog_refresh_preserves_tool_search_on_the_next_turn() -> Resu
                 .features
                 .enable(Feature::ApiKeyModelDiscovery)
                 .unwrap();
-            config.features.enable(Feature::Collab).unwrap();
+            config.features.enable(Feature::MultiAgentV2).unwrap();
             config.features.disable(Feature::MultiAgentV2).unwrap();
         })
         .build_with_auto_env(&server)

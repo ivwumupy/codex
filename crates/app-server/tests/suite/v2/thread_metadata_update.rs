@@ -32,7 +32,6 @@ use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::ThreadStatus;
 use codex_core::ARCHIVED_SESSIONS_SUBDIR;
-use codex_features::Feature;
 use codex_git_utils::GitSha;
 use codex_protocol::SanitizedGitUrl;
 use codex_protocol::ThreadId;
@@ -1221,5 +1220,4 @@ async fn init_state_db(codex_home: &Path) -> Result<Arc<StateRuntime>> {
 fn mock_responses_config(server_uri: &str) -> MockResponsesConfig {
     MockResponsesConfig::new(server_uri)
         .with_root_config("suppress_unstable_features_warning = true")
-        .enable_feature(Feature::Sqlite)
 }

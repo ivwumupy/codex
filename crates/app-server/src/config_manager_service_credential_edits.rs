@@ -5,7 +5,6 @@
 use super::ConfigManagerError;
 use super::MergeError;
 use super::apply_merge;
-use super::shell_environment_policy_representation_switch;
 use super::sparse_overlay;
 use super::toml_value_to_item;
 use super::value_at_path;
@@ -43,25 +42,17 @@ impl CredentialProviderEdits {
         value: Option<&TomlValue>,
         strategy: MergeStrategy,
     ) -> Result<Option<ConfigEdit>, ConfigManagerError> {
-        let persist_segments = if matches!(strategy, MergeStrategy::Upsert)
-            && value.is_some_and(|value| {
-                shell_environment_policy_representation_switch(config, segments, value)
-            }) {
-            vec!["shell_environment_policy".to_string()]
-        } else {
-            segments.to_vec()
-        };
-        let original_value = value_at_path(config, &persist_segments).cloned();
+        let original_value = value_at_path(config, segments).cloned();
         self.apply_provider_merge(config, segments, value, strategy)
             .map_err(|err| match err {
                 MergeError::Validation(message) => {
                     ConfigManagerError::write(ConfigWriteErrorCode::ConfigValidationError, message)
                 }
             })?;
-        if original_value.as_ref() == value_at_path(config, &persist_segments) {
+        if original_value.as_ref() == value_at_path(config, segments) {
             Ok(None)
         } else {
-            config_edit_at_path(config, persist_segments).map(Some)
+            config_edit_at_path(config, segments.to_vec()).map(Some)
         }
     }
 

@@ -28,8 +28,6 @@ pub struct Arg0DispatchPaths {
     /// instead of the real Codex CLI.
     pub codex_self_exe: Option<PathBuf>,
     pub codex_linux_sandbox_exe: Option<PathBuf>,
-    /// Always absent; retained for clients that still pass the retired wrapper path.
-    pub main_execve_wrapper_exe: Option<PathBuf>,
 }
 
 /// Keeps the per-session PATH entry alive and locked for the process lifetime.
@@ -203,7 +201,6 @@ where
     Fut: Future<Output = anyhow::Result<()>>,
 {
     let paths = Arg0DispatchPaths {
-        main_execve_wrapper_exe: None,
         codex_self_exe: current_exe,
         codex_linux_sandbox_exe: None,
     };
@@ -359,7 +356,6 @@ fn prepare_aliases_in_home(
     let updated_path_env_var = path_env_with_entry(path, existing_path);
 
     let paths = Arg0DispatchPaths {
-        main_execve_wrapper_exe: None,
         codex_self_exe: std::env::current_exe().ok(),
         codex_linux_sandbox_exe: None,
     };
@@ -651,7 +647,6 @@ mod tests {
             temp_dir,
             lock_file,
             Arg0DispatchPaths {
-                main_execve_wrapper_exe: None,
                 codex_self_exe: Some(PathBuf::from("/usr/bin/codex")),
                 codex_linux_sandbox_exe: Some(alias_path.clone()),
             },

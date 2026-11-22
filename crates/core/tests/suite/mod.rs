@@ -73,7 +73,6 @@ mod current_time_reminder;
 mod cyber_access_program;
 mod cyber_exec_policy;
 mod daybreak_access;
-mod deprecation_notice;
 mod direct_tool_metadata;
 mod dynamic_tool_cancellation;
 mod exec;

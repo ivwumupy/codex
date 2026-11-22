@@ -12,6 +12,7 @@ use codex_models_manager::manager::StaticModelsManager;
 use codex_models_manager::model_info::model_info_from_slug;
 use codex_prompts::render_model_instructions;
 use codex_protocol::config_types::ModeKind;
+use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::Settings;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::models::PermissionProfile;
@@ -323,7 +324,7 @@ fn sparse_patch_uses_the_settings_version_being_updated() {
     let constraints = step_settings_constraints(&requirements);
     let initial = configured_settings();
     let tier_update = StepSettingsUpdate {
-        service_tier: Some(Some("fast".to_string())),
+        service_tier: Some(Some("priority".to_string())),
         ..Default::default()
     };
     let latest = initial

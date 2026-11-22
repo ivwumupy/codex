@@ -70,7 +70,7 @@ auth = ["bearer"]
                 ""
             };
             let startup_env = executor_startup_env
-                .map(|key| format!(", \"{key}\""))
+                .map(|key| format!("{key} = 'include'"))
                 .unwrap_or_default();
             fs::write(
                 home.join("config.toml"),
@@ -87,7 +87,13 @@ allow_local_binding = true
 
 [shell_environment_policy]
 ignore_default_excludes = true
-include_only = ["HOME", "PATH", "{credential_env}", "OPENAI_BASE_URL"{startup_env}]
+
+[shell_environment_policy.filters]
+HOME = "include"
+PATH = "include"
+{credential_env} = "include"
+OPENAI_BASE_URL = "include"
+{startup_env}
 
 [features]
 unified_exec = true

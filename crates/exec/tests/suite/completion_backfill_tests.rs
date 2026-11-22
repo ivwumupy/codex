@@ -98,9 +98,9 @@ async fn ignores_unrelated_turn_completion_before_backfilling_primary_turn() -> 
             "-c",
             "model_provider=\"mock_provider\"",
             "-c",
-            "features.multi_agent=true",
+            "features.multi_agent_v2.enabled=true",
             "-c",
-            "features.multi_agent_v2=true",
+            "features.multi_agent_v2.enabled=true",
             "-c",
             "features.enable_request_compression=false",
         ])

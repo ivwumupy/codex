@@ -3,7 +3,6 @@ use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use chrono::Utc;
 use codex_app_server_protocol::MemoryResetResponse;
-use codex_features::Feature;
 use codex_protocol::MemoryVersion;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::SessionSource;
@@ -25,7 +24,6 @@ async fn memory_reset_clears_memory_files_and_rows_preserves_threads() -> Result
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new("http://127.0.0.1:9")
         .with_root_config("suppress_unstable_features_warning = true")
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let state_db = init_state_db(codex_home.path()).await?;
 
@@ -151,7 +149,6 @@ async fn memory_status_requires_successful_v2_consolidation_and_resets() -> Resu
     use codex_state::Phase2JobClaimOutcome;
     let home = TempDir::new()?;
     MockResponsesConfig::new("http://127.0.0.1:9")
-        .enable_feature(Feature::Sqlite)
         .write(home.path())?;
     let db = init_state_db(home.path()).await?;
     let mut server = TestAppServer::builder()

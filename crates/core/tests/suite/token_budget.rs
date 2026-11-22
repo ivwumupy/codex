@@ -243,7 +243,7 @@ async fn token_budget_context_is_only_emitted_with_full_context() -> Result<()> 
 }
 
 #[test_case("features.token_budget.enabled = true"; "token_budget")]
-#[test_case("features.context_management.experimental_mode = true"; "experimental_mode")]
+#[test_case("features.context_management.enabled = true"; "experimental_mode")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn token_budget_guidance_precedes_standalone_context_window(
     activation: &'static str,
@@ -396,10 +396,10 @@ async fn token_budget_history_notes_can_be_enabled_without_experimental_context(
         )?)
         .with_pre_build_hook(move |home| {
             let config = if use_model_defaults {
-                "[features.context_management]\nexperimental_mode = false\n".to_string()
+                "[features.context_management]\nenabled = false\n".to_string()
             } else {
                 format!(
-                    "[features.context_management]\nexperimental_mode = false\n[features.token_budget]\nenabled = true\nuse_history_notes_extension = {use_history_notes}\n"
+                    "[features.context_management]\nenabled = false\n[features.token_budget]\nenabled = true\nuse_history_notes_extension = {use_history_notes}\n"
                 )
             };
             std::fs::write(home.join("config.toml"), config)

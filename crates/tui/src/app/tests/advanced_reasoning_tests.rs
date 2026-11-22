@@ -61,8 +61,6 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
 async fn switching_from_ultra_thread_restores_configured_plan_effort() {
     let mut app = make_test_app().await;
     app.config.plan_mode_reasoning_effort = Some(ReasoningEffortConfig::High);
-    app.chat_widget
-        .set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     let ultra_session = ThreadSessionState {
         daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,

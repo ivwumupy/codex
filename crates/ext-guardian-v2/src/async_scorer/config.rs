@@ -4,7 +4,6 @@ use codex_config::GuardianPolicyLoader;
 use codex_context_fragments::ContextualUserFragment;
 use codex_context_fragments::RenderedFragment;
 use codex_core::config::Config;
-use codex_features::FeatureToml;
 use codex_features::GuardianV2ConfigToml;
 use codex_features::GuardianV2TranscriptConfigToml;
 use codex_prompts::GuardianClassifierInstructions;
@@ -60,25 +59,19 @@ impl GuardianV2Config {
             .and_then(|features| features.get("guardianv2"))
             .cloned()
         {
-            Some(value) => {
-                let feature: FeatureToml<GuardianV2ConfigToml> = value
-                    .try_into()
-                    .map_err(|error| format!("invalid Guardian v2 configuration: {error}"))?;
-                match feature {
-                    FeatureToml::Enabled(_) => GuardianV2ConfigToml::default(),
-                    FeatureToml::Config(configured) => configured,
-                }
-            }
+            Some(value) => value
+                .try_into()
+                .map_err(|error| format!("invalid Guardian v2 configuration: {error}"))?,
             None => GuardianV2ConfigToml::default(),
         };
 
         configured.transcript_mode = Some(config.guardian_transcript_mode);
         let mut resolved = Self::from_overrides(configured.clone())?;
         // Config.features can be changed after loading, including for reviewer threads.
-        let legacy = FeatureToml::Config(GuardianV2ConfigToml {
+        let legacy = GuardianV2ConfigToml {
             enabled: Some(config.features.enabled(codex_features::Feature::GuardianV2)),
             ..configured
-        });
+        };
         resolved.policy = GuardianPolicyLoader::new(Some(&legacy));
         resolved.review_multi_agent_calls = config.guardian_native_multi_agent_history_enabled();
         resolved.multi_agent_namespace = config.multi_agent_v2.tool_namespace.clone();
@@ -265,10 +258,10 @@ impl GuardianV2Config {
             );
         }
 
-        let policy = GuardianPolicyLoader::new(Some(&FeatureToml::Config(GuardianV2ConfigToml {
+        let policy = GuardianPolicyLoader::new(Some(&GuardianV2ConfigToml {
             enabled: Some(true),
             ..configured.clone()
-        })));
+        }));
         Ok(Self {
             local_overrides: configured.clone(),
             review_multi_agent_calls: false,

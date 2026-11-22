@@ -690,7 +690,6 @@ async fn guardian_v2_routes_tool_approvals(
         transcript_content,
         GuardianToolScope::AllTools,
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -705,7 +704,6 @@ async fn guardian_v2_routes_scoped_tool_approvals(
     transcript_content: TranscriptContent,
     scope: GuardianToolScope,
     sensitive_action: Option<bool>,
-    legacy_classifier_mode: codex_protocol::openai_models::AsyncClassifierMode,
 ) -> Result<()> {
     let fail_after_classification = matches!(risk, GuardianRisk::LowWithStreamFailure);
     let review_continuations = matches!(lifecycle, ThreadLifecycle::ReviewContinuations);
@@ -917,12 +915,6 @@ async fn guardian_v2_routes_scoped_tool_approvals(
         "prompt"
     };
     // Exercise the default conversation path and the explicit snapshot rollback.
-    let classifier_config = match legacy_classifier_mode {
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot => {
-            "\nasync_classifier_mode = \"snapshot\""
-        }
-        codex_protocol::openai_models::AsyncClassifierMode::Conversation => "",
-    };
     let mut mock_config = MockResponsesConfig::new(&responses_url)
         .with_model(MODEL)
         .with_provider_config("supports_websockets = false")
@@ -932,7 +924,7 @@ async fn guardian_v2_routes_scoped_tool_approvals(
             analytics_server.uri(),
         ))
         .with_extra_config(&format!(
-            "[mcp_servers.{server_name}]\nurl = \"{mcp_server_url}/mcp\"\ndefault_tools_approval_mode = \"{tool_approval_mode}\"\n\n[analytics]\nenabled = true\n\n[otel]\nmetrics_exporter = {{ otlp-http = {{ endpoint = \"{responses_url}/metrics\", protocol = \"json\" }} }}\n\n[features.guardianv2]\nenabled = true{classifier_config}{guardian_scope_config}"
+            "[mcp_servers.{server_name}]\nurl = \"{mcp_server_url}/mcp\"\ndefault_tools_approval_mode = \"{tool_approval_mode}\"\n\n[analytics]\nenabled = true\n\n[otel]\nmetrics_exporter = {{ otlp-http = {{ endpoint = \"{responses_url}/metrics\", protocol = \"json\" }} }}\n\n[features.guardianv2]\nenabled = true{guardian_scope_config}"
         ))
         .enable_feature(Feature::GuardianApproval);
     if lifecycle.has_user_input() || lifecycle.has_root_user_input() {
@@ -940,7 +932,7 @@ async fn guardian_v2_routes_scoped_tool_approvals(
     }
     if lifecycle.uses_root_worker() {
         mock_config = mock_config
-            .enable_feature(Feature::Collab)
+            .enable_feature(Feature::MultiAgentV2)
             .enable_feature(Feature::MultiAgentV2);
     }
     if matches!(lifecycle, ThreadLifecycle::RootUserInputCompaction) {
@@ -2367,7 +2359,6 @@ async fn guardian_v2_inherits_root_user_skills_for_delegated_workers() -> Result
             server_name: "node_repl",
         },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2390,7 +2381,6 @@ async fn guardian_v2_computer_use_only_scopes_classification_and_fast_reviews(
         TranscriptContent::Normal,
         GuardianToolScope::ComputerUseOnly { server_name },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2780,7 +2770,6 @@ async fn guardian_v2_required_model_computer_use_preserves_strict_approval(
         TranscriptContent::Normal,
         GuardianToolScope::ComputerUseOnly { server_name },
         sensitive_action,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2802,7 +2791,6 @@ async fn guardian_v2_discards_sync_reviews_after_user_input_answer(
             server_name: "node_repl",
         },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2825,7 +2813,6 @@ async fn guardian_v2_validates_user_input_before_history_truncation(
             server_name: "node_repl",
         },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2848,7 +2835,6 @@ async fn guardian_v2_propagates_root_user_input_to_worker_reviews(
             server_name: "node_repl",
         },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }
@@ -2941,7 +2927,6 @@ async fn guardian_v2_low_scores_require_current_authorization(
             server_name: "node_repl",
         },
         /*sensitive_action*/ None,
-        codex_protocol::openai_models::AsyncClassifierMode::Snapshot,
     )
     .await
 }

@@ -1,6 +1,5 @@
 //! Configuration for runtime assertions; enabling the feature is separate from selecting its mode.
 
-use crate::FeatureConfig;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,10 +21,4 @@ pub struct RuntimeAgentInstancesConfigToml {
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<RuntimeAuthMode>,
-}
-
-impl FeatureConfig for RuntimeAgentInstancesConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
 }

@@ -321,10 +321,6 @@ async fn subagent_usage_draws_from_the_shared_budget(host_accounting: bool) -> R
         .with_config(move |config| {
             config
                 .features
-                .enable(Feature::Collab)
-                .expect("test config should allow multi-agent tools");
-            config
-                .features
                 .enable(Feature::MultiAgentV2)
                 .expect("test config should allow multi-agent v2");
             config.rollout_budget = Some(RolloutBudgetConfig {

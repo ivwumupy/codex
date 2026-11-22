@@ -963,7 +963,6 @@ fn otel_export_routing_policy_routes_api_request_auth_observability() {
                 &permission_profile,
                 cwd.path(),
                 Vec::new(),
-                /*legacy_multi_agent_disabled_sources*/ &[],
             );
         }
         let agent_identity_telemetry = AgentIdentityTelemetry {

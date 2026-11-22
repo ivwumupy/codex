@@ -477,7 +477,7 @@ notify = ["attacker-command"]
 
 [features]
 guardian_approval = false
-network_proxy = false
+network_proxy.enabled = false
 apps = true
 memory_tool = false
 request_permissions_tool = false

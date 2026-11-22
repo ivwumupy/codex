@@ -24,7 +24,6 @@ use side_chat_history::side_context_checkpoint;
 mod startup_launch;
 mod thread_list;
 pub(crate) mod user_message_submission;
-mod web_search;
 
 #[cfg(test)]
 #[path = "app_server_session/collaboration_catalog_tests.rs"]
@@ -2430,7 +2429,6 @@ fn approvals_reviewer_override_from_config(
 
 fn config_request_overrides_from_config(
     config: &Config,
-    thread_params_mode: ThreadParamsMode,
 ) -> Option<HashMap<String, serde_json::Value>> {
     let mut session_config = toml::Value::Table(toml::Table::new());
     for layer in config.config_layer_stack.layers_low_to_high() {
@@ -2477,13 +2475,6 @@ fn config_request_overrides_from_config(
     // Only winning launch choices may replace server defaults or saved thread settings.
     let origins = config.config_layer_stack.origins();
     let effective = config.config_layer_stack.effective_config();
-    web_search::apply_launch_override(
-        config,
-        thread_params_mode,
-        &effective,
-        &origins,
-        &mut overrides,
-    );
     let is_launch = |key: &str| {
         origins.get(key).is_some_and(|origin| {
             matches!(
@@ -2496,7 +2487,7 @@ fn config_request_overrides_from_config(
             )
         })
     };
-    for key in ["model_reasoning_summary", "model_verbosity"] {
+    for key in ["model_reasoning_summary", "model_verbosity", "web_search"] {
         if is_launch(key) {
             overrides.insert(key.to_string(), serde_json::json!(effective[key]));
         }
@@ -2693,7 +2684,7 @@ fn thread_start_params_with_reviewer(
         },
         sandbox,
         permissions,
-        config: config_request_overrides_from_config(config, thread_params_mode),
+        config: config_request_overrides_from_config(config),
         ephemeral: Some(config.ephemeral),
         history_mode: (!config.ephemeral).then_some(ThreadHistoryMode::Paginated),
         session_start_source,
@@ -2745,7 +2736,7 @@ fn thread_resume_params_from_config(
             )
         })
         .flatten();
-    let mut config_overrides = config_request_overrides_from_config(&config, thread_params_mode);
+    let mut config_overrides = config_request_overrides_from_config(&config);
     if model_settings == ResumeModelSettings::RestoreFromThread
         && let Some(overrides) = config_overrides.as_mut()
     {
@@ -2824,7 +2815,7 @@ fn thread_fork_params_from_config(
         approvals_reviewer: approvals_reviewer_override_from_config(&config),
         sandbox,
         permissions,
-        config: config_request_overrides_from_config(&config, thread_params_mode),
+        config: config_request_overrides_from_config(&config),
         base_instructions: config.base_instructions.clone().filter(|_| {
             !matches!(
                 config.base_instructions_provenance,
@@ -4374,7 +4365,7 @@ mod tests {
                 })
                 .build()
                 .await?;
-            let overrides = config_request_overrides_from_config(&config, ThreadParamsMode::Remote)
+            let overrides = config_request_overrides_from_config(&config)
                 .expect("config overrides");
             assert_eq!(
                 (

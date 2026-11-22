@@ -517,21 +517,6 @@ pub async fn load_config_layers_state(
             );
     config_layer_stack.is_projectless = is_projectless;
     config_layer_stack.project_trust = project_trust;
-    if config_layer_stack.layers_low_to_high().any(|layer| {
-        matches!(
-            layer.name,
-            ConfigLayerSource::User { .. } | ConfigLayerSource::Project { .. }
-        ) && layer
-            .config
-            .get("features")
-            .and_then(|features| features.get("multi_agent"))
-            .and_then(TomlValue::as_bool)
-            .is_some()
-    }) {
-        startup_warnings.push(
-            "`[features].multi_agent` is deprecated. It still controls the V1 fallback. `[agents].enabled = false` disables subagent tools even when the model selects a subagent version, unless `[features].multi_agent_v2` is enabled.".to_string(),
-        );
-    }
     startup_warnings.extend(ignored_config_warning(
         &config_layer_stack,
         &requirements_layers,
@@ -1373,14 +1358,7 @@ fn sanitize_project_config(
                 ignored_keys.push(format!("features.{key}"));
             }
         }
-        if credential_broker_configured
-            && features
-                .get("network_proxy")
-                .is_some_and(|network_proxy| network_proxy.as_bool().is_some())
-        {
-            features.remove("network_proxy");
-            ignored_keys.push("features.network_proxy".to_string());
-        } else if let Some(network_proxy) = features
+        if let Some(network_proxy) = features
             .get_mut("network_proxy")
             .and_then(TomlValue::as_table_mut)
         {
@@ -1392,6 +1370,9 @@ fn sanitize_project_config(
             }
             if credential_broker_configured && network_proxy.remove("enabled").is_some() {
                 ignored_keys.push("features.network_proxy.enabled".to_string());
+            }
+            if network_proxy.is_empty() {
+                features.remove("network_proxy");
             }
         }
     }

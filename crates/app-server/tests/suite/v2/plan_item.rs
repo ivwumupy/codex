@@ -16,7 +16,6 @@ use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_features::Feature;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
@@ -47,7 +46,6 @@ async fn plan_mode_uses_proposed_plan_block_for_plan_item() -> Result<()> {
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::CollaborationModes)
         .write(codex_home.path())?;
 
     let mut mcp = TestAppServer::builder()
@@ -109,7 +107,6 @@ async fn plan_mode_without_proposed_plan_does_not_emit_plan_item() -> Result<()>
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .enable_feature(Feature::CollaborationModes)
         .write(codex_home.path())?;
 
     let mut mcp = TestAppServer::builder()

@@ -209,7 +209,7 @@ fn thread_sources_round_trip_as_scalar_labels() {
 }
 
 #[test]
-fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
+fn approvals_reviewer_accepts_canonical_values() {
     assert_eq!(
         serde_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
         "\"user\""
@@ -219,7 +219,7 @@ fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagen
         "\"auto_review\""
     );
 
-    for value in ["user", "auto_review", "guardian_subagent"] {
+    for value in ["user", "auto_review"] {
         let json = format!("\"{value}\"");
         let reviewer: ApprovalsReviewer =
             serde_json::from_str(&json).expect("deserialize reviewer");

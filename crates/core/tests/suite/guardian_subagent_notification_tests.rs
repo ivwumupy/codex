@@ -80,7 +80,6 @@ async fn guardian_circuit_breaker_notifies_parent(action: CircuitBreakAction) ->
         .with_extensions(Arc::new(extensions.build()))
         .with_config(move |config| {
             for feature in [
-                Feature::Collab,
                 Feature::MultiAgentV2,
                 Feature::GuardianApproval,
             ] {

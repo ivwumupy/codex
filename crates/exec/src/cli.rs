@@ -66,12 +66,7 @@ pub struct Cli {
     pub color: Color,
 
     /// Print events to stdout as JSONL.
-    #[arg(
-        long = "json",
-        alias = "experimental-json",
-        default_value_t = false,
-        global = true
-    )]
+    #[arg(long = "json", default_value_t = false, global = true)]
     pub json: bool,
 
     /// Specifies file where the last message from the agent should be written.
@@ -167,9 +162,6 @@ impl FromArgMatches for ExecSharedCliOptions {
 
 fn mark_exec_global_args(cmd: clap::Command) -> clap::Command {
     cmd.mut_arg("model", |arg| arg.global(true))
-        .mut_arg("dangerously_bypass_approvals_and_sandbox", |arg| {
-            arg.global(true)
-        })
         .mut_arg("bypass_hook_trust", |arg| arg.global(true))
         .mut_arg("worktree", |arg| arg.global(true))
 }

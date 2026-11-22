@@ -1,5 +1,4 @@
 use super::*;
-use codex_protocol::openai_models::AsyncClassifierMode;
 use test_case::test_case;
 
 #[test_case(GuardianRisk::Low, ThreadLifecycle::New, ModelReviewRequirement::Optional; "low")]
@@ -29,7 +28,6 @@ async fn conversation_classifier_preserves_approval_matrix(
         TranscriptContent::Normal,
         GuardianToolScope::AllTools,
         /*sensitive_action*/ None,
-        AsyncClassifierMode::Conversation,
     )
     .await?;
     Ok(())

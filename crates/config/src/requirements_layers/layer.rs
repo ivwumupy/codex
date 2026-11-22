@@ -148,18 +148,6 @@ impl ComposableRequirementsLayer {
             (regular_toml, requirements)
         };
 
-        // Merge aliases under one key after validating each individual layer.
-        if let Some(table) = regular_toml.as_table_mut()
-            && let Some(features) = table.remove("feature_requirements")
-        {
-            table.insert("features".to_string(), features);
-        }
-        if let Some(table) = regular_toml.as_table_mut()
-            && let Some(network) = table.remove("experimental_network")
-        {
-            table.insert("network_proxy".to_string(), network);
-        }
-
         // Hostname lookup is configuration-driven and may block on DNS, so only
         // resolve it when this layer contains hostname-based sandbox selectors.
         let hostname = requirements
@@ -198,7 +186,7 @@ fn parse_layer_toml(
     toml: &RequirementsLayerToml,
     source: &RequirementSource,
 ) -> Result<TomlValue, RequirementsCompositionError> {
-    match toml {
+    let value: TomlValue = match toml {
         RequirementsLayerToml::String(contents) => {
             toml::from_str(contents).map_err(|err: toml::de::Error| {
                 RequirementsCompositionError::Parse {
@@ -208,7 +196,20 @@ fn parse_layer_toml(
             })
         }
         RequirementsLayerToml::Value(value) => Ok(value.clone()),
+    }?;
+    for (retired, canonical) in [
+        ("feature_requirements", "features"),
+        ("experimental_network", "permissions.network"),
+        ("network_proxy", "permissions.network"),
+    ] {
+        if value.get(retired).is_some() {
+            return Err(RequirementsCompositionError::Parse {
+                layer_source: source.clone(),
+                message: format!("removed requirements table [{retired}], use [{canonical}]"),
+            });
+        }
     }
+    Ok(value)
 }
 
 fn parse_layer_requirements(

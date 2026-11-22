@@ -32,33 +32,9 @@ fn apply_toml_override(root: &mut TomlValue, path: &str, value: TomlValue) {
                     if is_structured_feature_path(&traversed_segments)
                         && let Some(existing) = table.get_mut(segment)
                     {
-                        match (&mut *existing, &value) {
-                            (TomlValue::Table(feature), TomlValue::Boolean(enabled)) => {
-                                feature.insert("enabled".to_string(), TomlValue::Boolean(*enabled));
-                                return;
-                            }
-                            (TomlValue::Boolean(enabled), TomlValue::Table(_)) => {
-                                *existing = TomlValue::Table(Table::from_iter([(
-                                    "enabled".to_string(),
-                                    TomlValue::Boolean(*enabled),
-                                )]));
-                                merge_toml_values(existing, &value);
-                                return;
-                            }
-                            (TomlValue::Table(_), TomlValue::Table(_)) => {
-                                merge_toml_values(existing, &value);
-                                return;
-                            }
-                            (
-                                TomlValue::String(_)
-                                | TomlValue::Integer(_)
-                                | TomlValue::Float(_)
-                                | TomlValue::Boolean(_)
-                                | TomlValue::Datetime(_)
-                                | TomlValue::Array(_)
-                                | TomlValue::Table(_),
-                                _,
-                            ) => {}
+                        if existing.is_table() && value.is_table() {
+                            merge_toml_values(existing, &value);
+                            return;
                         }
                     }
                     table.insert(segment.to_string(), value);
@@ -77,14 +53,6 @@ fn apply_toml_override(root: &mut TomlValue, path: &str, value: TomlValue) {
                 current = table
                     .entry(segment.to_string())
                     .or_insert_with(|| TomlValue::Table(Table::new()));
-                if is_structured_feature_path(&traversed_segments)
-                    && let TomlValue::Boolean(enabled) = current
-                {
-                    *current = TomlValue::Table(Table::from_iter([(
-                        "enabled".to_string(),
-                        TomlValue::Boolean(*enabled),
-                    )]));
-                }
             }
             _ => {
                 *current = TomlValue::Table(Table::new());

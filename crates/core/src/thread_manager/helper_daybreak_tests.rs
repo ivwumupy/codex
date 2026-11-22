@@ -143,7 +143,6 @@ async fn paused_helpers(
     let mut config = test_config().await;
     config.codex_home = home.abs();
     config.cwd = home.abs();
-    config.agent_max_depth = 2;
     config.model_provider.supports_websockets = false;
     config.model_provider.base_url = Some("http://127.0.0.1:9/v1".to_owned());
     config.chatgpt_base_url = "http://127.0.0.1:9".to_owned();

@@ -46,7 +46,6 @@ use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::UserInput;
-use codex_features::Feature;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
@@ -57,7 +56,6 @@ async fn projects_list_by_recency_and_preserve_metadata_timestamps() -> Result<(
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -211,7 +209,6 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let root = AbsolutePathBuf::from_absolute_path(codex_home.path())?;
     let mut server = TestAppServer::builder()
@@ -665,7 +662,6 @@ async fn deleted_project_is_dropped_before_first_durable_thread_persistence() ->
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -759,7 +755,6 @@ async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -911,7 +906,6 @@ async fn projects_validate_filters_cursors_and_sqlite_less_assignment() -> Resul
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -1051,7 +1045,6 @@ async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children()
     let responses = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&responses.uri())
-        .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())

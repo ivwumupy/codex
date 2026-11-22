@@ -1,5 +1,3 @@
-use crate::FeatureConfig;
-use crate::FeatureToml;
 use codex_network_proxy::CredentialProviderConfig;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_utils_redacted_string::RedactedString;
@@ -60,12 +58,6 @@ pub struct CodeModeConfigToml {
     pub direct_only_tool_namespaces: Option<Vec<String>>,
 }
 
-impl FeatureConfig for CodeModeConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CodeModeHostConfigToml {
@@ -76,12 +68,6 @@ pub struct CodeModeHostConfigToml {
     pub disable_in_process_fallback: Option<bool>,
 }
 
-impl FeatureConfig for CodeModeHostConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NonPrefixedMcpToolNamesConfigToml {
@@ -90,12 +76,6 @@ pub struct NonPrefixedMcpToolNamesConfigToml {
     /// MCP servers whose tools should omit the legacy `mcp__` namespace prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_names: Option<Vec<String>>,
-}
-
-impl FeatureConfig for NonPrefixedMcpToolNamesConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
 }
 
 /// Optional conversation sources available to the Guardian v2 classifier.
@@ -169,9 +149,6 @@ pub struct GuardianV2ConfigToml {
     /// Transcript encoding for synchronous Guardian review and asynchronous scoring. Defaults to line.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transcript_mode: Option<codex_protocol::TranscriptFormat>,
-    /// Deprecated and ignored; asynchronous classification always uses conversations.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub async_classifier_mode: Option<codex_protocol::openai_models::AsyncClassifierMode>,
     /// Reset retained async history when the next request exceeds this token estimate.
     /// Defaults to 100,000. Fresh requests remain subject to the model's input limit.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,12 +156,6 @@ pub struct GuardianV2ConfigToml {
     pub async_classifier_conversation_token_limit: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-    /// Legacy setting retained for config compatibility; the backend now controls Guardian billing.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub free_guardian: Option<bool>,
-    /// Deprecated and ignored; thread-owned Guardian context is always enabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thread_context: Option<bool>,
     /// Persist reviewed actions and risk scores to rollout files for debugging.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub persist_scores: Option<bool>,
@@ -214,23 +185,17 @@ pub struct GuardianV2ConfigToml {
     pub transcript: Option<GuardianV2TranscriptConfigToml>,
 }
 
-impl FeatureConfig for GuardianV2ConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 pub(crate) fn deserialize_guardian_v2_feature<'de, D>(
     deserializer: D,
-) -> Result<Option<FeatureToml<GuardianV2ConfigToml>>, D::Error>
+) -> Result<Option<GuardianV2ConfigToml>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     const MIN_TOKENS: usize = 100;
     const MAX_TOKENS: usize = 100_000;
 
-    let feature = Option::<FeatureToml<GuardianV2ConfigToml>>::deserialize(deserializer)?;
-    let Some(FeatureToml::Config(config)) = feature.as_ref() else {
+    let feature = Option::<GuardianV2ConfigToml>::deserialize(deserializer)?;
+    let Some(config) = feature.as_ref() else {
         return Ok(feature);
     };
 
@@ -309,17 +274,12 @@ pub struct GuardianV3ConfigToml {
     pub enabled: Option<bool>,
 }
 
-impl FeatureConfig for GuardianV3ConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MultiAgentV2ConfigToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// Maximum concurrent threads per session, including the root thread. Defaults to four.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1))]
     pub max_concurrent_threads_per_session: Option<usize>,
@@ -332,9 +292,6 @@ pub struct MultiAgentV2ConfigToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 3600000))]
     pub default_wait_timeout_ms: Option<i64>,
-    /// Deprecated compatibility field. Its value is ignored.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage_hint_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_hint_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -378,24 +335,12 @@ pub struct MultiAgentV2ConfigToml {
     pub non_code_mode_only: Option<bool>,
 }
 
-impl FeatureConfig for MultiAgentV2ConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ContextManagementConfigToml {
     /// Enables experimental context management.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub experimental_mode: Option<bool>,
-}
-
-impl FeatureConfig for ContextManagementConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.experimental_mode
-    }
+    pub enabled: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
@@ -429,12 +374,6 @@ pub struct TokenBudgetConfigToml {
     pub auto_compact_fallback_buffer_tokens: Option<i64>,
 }
 
-impl FeatureConfig for TokenBudgetConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RolloutBudgetConfigToml {
@@ -455,12 +394,6 @@ pub struct RolloutBudgetConfigToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0))]
     pub prefill_token_weight: Option<f64>,
-}
-
-impl FeatureConfig for RolloutBudgetConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema)]
@@ -493,25 +426,16 @@ pub struct CurrentTimeReminderConfigToml {
     pub clock_source: Option<CurrentTimeSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_mode: Option<CurrentTimeReminderDeliveryMode>,
-    /// Expose the input-interruptible `clock.sleep` tool.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sleep_tool: Option<bool>,
-}
-
-impl FeatureConfig for CurrentTimeReminderConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
 }
 
 /// How the sleep tool is selected when its feature gate is enabled.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SleepToolMode {
-    /// Preserve the existing model and legacy clock configuration defaults.
+    /// Register sleep when the model advertises the clock tool.
     #[default]
     ModelDriven,
-    /// Register sleep regardless of the model or legacy clock configuration.
+    /// Register sleep regardless of model support.
     AlwaysOn,
 }
 
@@ -522,21 +446,6 @@ pub struct SleepToolConfigToml {
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<SleepToolMode>,
-}
-
-impl FeatureConfig for SleepToolConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct RemovedAppsMcpPathOverrideConfigToml {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
@@ -575,12 +484,6 @@ pub struct NetworkProxyConfigToml {
     pub credentials: Option<BTreeMap<String, CredentialProviderConfig>>,
 }
 
-impl FeatureConfig for NetworkProxyConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum NetworkProxyModeToml {
@@ -613,10 +516,4 @@ pub struct AsyncCompactionConfigToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 100))]
     pub model_async_compact_threshold_percent: Option<u8>,
-}
-
-impl FeatureConfig for AsyncCompactionConfigToml {
-    fn enabled(&self) -> Option<bool> {
-        self.enabled
-    }
 }

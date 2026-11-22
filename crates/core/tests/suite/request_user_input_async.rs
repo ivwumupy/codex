@@ -209,7 +209,6 @@ async fn persistent_async_message_guidance_follows_tool_availability(
 }
 
 #[test_case(SessionSource::Exec, None, &[], false; "root_without_opt_in")]
-#[test_case(SessionSource::Exec, None, &[Feature::SendAsyncMessage], false; "root_with_retired_feature")]
 #[test_case(SessionSource::Exec, Some("send_user_message_async"), &[], false; "root_with_legacy_question_tool")]
 #[test_case(SessionSource::Exec, Some("request_user_input_async"), &[], false; "root_with_question_tool")]
 #[test_case(SessionSource::Exec, Some("send_message_to_user_async"), &[], true; "root_with_catalog_opt_in")]

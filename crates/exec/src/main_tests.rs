@@ -14,7 +14,6 @@ fn top_cli_parses_resume_prompt_after_config_flag() {
         "gpt-5.2-codex",
         "--config",
         "reasoning_level=xhigh",
-        "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
         PROMPT,
     ]);

@@ -30,10 +30,7 @@ pub(super) fn apply_persistent_defaults(config: &mut Config) {
     if config.features.enable(Feature::CurrentTimeReminder).is_ok()
         && config.features.enabled(Feature::CurrentTimeReminder)
     {
-        config.current_time_reminder = Some(CurrentTimeReminderConfig {
-            sleep_tool: true,
-            ..CurrentTimeReminderConfig::default()
-        });
+        config.current_time_reminder = Some(CurrentTimeReminderConfig::default());
     }
 }
 

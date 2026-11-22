@@ -15,7 +15,6 @@ use codex_app_server_protocol::ThreadStatusChangedNotification;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_features::Feature;
 use tempfile::TempDir;
 use tokio::time::timeout;
 
@@ -28,7 +27,6 @@ async fn thread_status_changed_emits_runtime_updates() -> Result<()> {
     let server = create_mock_responses_server_sequence(responses).await;
     MockResponsesConfig::new(&server.uri())
         .with_approval_policy("on-request")
-        .enable_feature(Feature::CollaborationModes)
         .write(codex_home.path())?;
 
     let mut mcp = TestAppServer::builder()
@@ -132,7 +130,6 @@ async fn thread_status_changed_can_be_opted_out() -> Result<()> {
     let server = create_mock_responses_server_sequence(responses).await;
     MockResponsesConfig::new(&server.uri())
         .with_approval_policy("on-request")
-        .enable_feature(Feature::CollaborationModes)
         .write(codex_home.path())?;
 
     let mut mcp = TestAppServer::builder()

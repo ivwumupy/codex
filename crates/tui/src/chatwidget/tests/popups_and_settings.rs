@@ -2540,7 +2540,7 @@ async fn experimental_features_popup_snapshot() {
 
     let features = vec![
         ExperimentalFeatureItem {
-            key: Feature::JsRepl.key().to_string(),
+            key: "example".to_string(),
             writable: true,
             name: "JavaScript REPL".to_string(),
             description: "Enable a persistent Node-backed JavaScript REPL for interactive website debugging and other inline JavaScript execution capabilities.".to_string(),
@@ -2596,7 +2596,7 @@ async fn experimental_features_toggle_saves_on_exit() {
 
     let mut keymap = crate::keymap::RuntimeKeymap::defaults().list;
     keymap.cancel = vec![crate::key_hint::plain(KeyCode::F(2))];
-    let expected_feature = Feature::JsRepl;
+    let expected_feature = Feature::CodeMode;
     let view = ExperimentalFeaturesView::new(
         vec![ExperimentalFeatureItem {
             key: expected_feature.key().to_string(),
@@ -2701,7 +2701,7 @@ async fn feature_enable_prompts_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.set_feature_enabled(Feature::MemoryTool, /*enabled*/ false);
 
-    chat.open_feature_enable_prompt(Feature::Collab);
+    chat.open_feature_enable_prompt(Feature::MultiAgentV2);
     assert_chatwidget_snapshot!(
         "multi_agent_enable_prompt",
         render_bottom_popup(&chat, /*width*/ 80)
@@ -2709,7 +2709,7 @@ async fn feature_enable_prompts_snapshot() {
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::EnableFeatureForNewThreads(Feature::Collab))
+        Ok(AppEvent::EnableFeatureForNewThreads(Feature::MultiAgentV2))
     );
 
     chat.open_memories_popup();
@@ -3485,7 +3485,6 @@ async fn reasoning_up_shortcuts_reach_max_in_default_and_plan_modes() {
                     description: "Maximum reasoning".to_string(),
                 });
             if plan_mode {
-                chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
                 let plan_mask = collaboration_modes::plan_mask(chat.model_catalog.as_ref())
                     .expect("expected plan collaboration mode");
                 chat.set_collaboration_mask(plan_mask);

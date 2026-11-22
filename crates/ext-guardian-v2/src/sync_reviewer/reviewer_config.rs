@@ -40,7 +40,6 @@ pub(crate) fn build_reviewer_config(parent_config: &Config) -> anyhow::Result<Co
         .features
         .enabled(Feature::GuardianConversationHistoryTools);
     for feature in [
-        Feature::Collab,
         Feature::MultiAgentV2,
         Feature::GuardianV2,
         Feature::TokenBudget,
@@ -48,8 +47,6 @@ pub(crate) fn build_reviewer_config(parent_config: &Config) -> anyhow::Result<Co
         Feature::CodexHooks,
         Feature::Apps,
         Feature::Plugins,
-        Feature::WebSearchRequest,
-        Feature::WebSearchCached,
     ] {
         if feature == Feature::Apps && conversation_history_tools {
             continue;

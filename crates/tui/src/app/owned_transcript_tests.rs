@@ -473,7 +473,7 @@ async fn owned_drag_stops_when_focus_or_input_ownership_is_lost() -> Result<()> 
                 TuiEvent::Draw
             }
             "popup" => {
-                app.chat_widget.open_feature_enable_prompt(Feature::Collab);
+                app.chat_widget.open_feature_enable_prompt(Feature::MultiAgentV2);
                 TuiEvent::Draw
             }
             _ => unreachable!(),
@@ -674,7 +674,8 @@ async fn owned_details_keep_the_composer_cursor_and_screen() -> Result<()> {
     assert_eq!(images.len(), 2);
     assert_eq!(images[0], neighbor);
     assert_eq!(area.intersection(images[1]), images[1]);
-    app.chat_widget.open_feature_enable_prompt(Feature::Collab);
+    app.chat_widget
+        .open_feature_enable_prompt(Feature::MultiAgentV2);
     app.handle_tui_event(&mut tui, &mut server, TuiEvent::Draw)
         .await?;
     assert!(presented(&tui).is_empty());
@@ -1910,7 +1911,8 @@ async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
     assert!(app.handle_owned_transcript_event(&mut tui, &mut server, &mouse(Down(Left), x, y))?);
     app.handle_owned_transcript_event(&mut tui, &mut server, &mouse(Drag(Left), x + 1, y))?;
     assert!(app.chat_widget.no_modal_or_popup_active());
-    app.chat_widget.open_feature_enable_prompt(Feature::Collab);
+    app.chat_widget
+        .open_feature_enable_prompt(Feature::MultiAgentV2);
     for event in &copy_events {
         assert!(
             !app.handle_composer_copy_event(&mut tui, event, |_, _| panic!(

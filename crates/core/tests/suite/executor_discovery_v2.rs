@@ -665,7 +665,7 @@ async fn check_acquisition(enabled: bool, version: &'static str) -> Result<()> {
             shell_environment_policy: Default::default(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&test.config),
             windows_sandbox_type: test.config.permissions.windows_sandbox_type,
-            use_legacy_landlock: test.config.features.use_legacy_landlock(),
+            use_legacy_landlock: false,
             exec_policy: None,
             mcp_policy: None,
             network_policy: None,

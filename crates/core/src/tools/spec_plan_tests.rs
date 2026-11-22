@@ -32,7 +32,6 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 
 use crate::WaitForEnvironmentToolConfig;
-use crate::config::CurrentTimeReminderConfig;
 use crate::environment_selection::EnvironmentAttachment;
 use crate::environment_selection::TurnEnvironmentState;
 use crate::responses_metadata::TurnToolFunctionInfo;
@@ -1153,9 +1152,10 @@ async fn environment_tools_follow_the_step_context() {
 }
 
 #[tokio::test]
-async fn sleep_tool_follows_current_time_config() {
+async fn sleep_tool_follows_its_own_configuration() {
     let disabled = probe(|turn| {
         set_feature(turn, Feature::CurrentTimeReminder, /*enabled*/ true);
+        set_feature(turn, Feature::SleepTool, /*enabled*/ false);
     })
     .await;
     assert_eq!(disabled.namespace_function_names("clock"), ["curr_time"]);
@@ -1163,10 +1163,7 @@ async fn sleep_tool_follows_current_time_config() {
     let enabled = probe(|turn| {
         set_feature(turn, Feature::CurrentTimeReminder, /*enabled*/ true);
         let mut config = (*turn.config).clone();
-        config.current_time_reminder = Some(CurrentTimeReminderConfig {
-            sleep_tool: true,
-            ..CurrentTimeReminderConfig::default()
-        });
+        config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
         turn.config = Arc::new(config);
     })
     .await;
@@ -1192,10 +1189,7 @@ async fn sleep_tool_stays_direct_and_outside_code_mode() {
                 set_feature(turn, Feature::CodeModeOnly, /*enabled*/ true);
             }
             update_config(turn, |config| {
-                config.current_time_reminder = Some(CurrentTimeReminderConfig {
-                    sleep_tool: true,
-                    ..CurrentTimeReminderConfig::default()
-                });
+                config.sleep_tool_mode = codex_features::SleepToolMode::AlwaysOn;
                 config.multi_agent_v2.wait_agent_enabled = false;
             });
         })
@@ -1267,7 +1261,7 @@ async fn mcp_and_tool_search_follow_direct_and_deferred_tool_exposure() {
     missing_model_capability.assert_visible_lacks(&["tool_search"]);
 
     let missing_deferred_tools = probe(|turn| {
-        set_feature(turn, Feature::Collab, /*enabled*/ false);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
         update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
         });
@@ -1349,7 +1343,7 @@ async fn code_mode_tool_search_requires_experiment_and_model_capability() {
             for supports_search_tool in [false, true] {
                 let plan = probe_with(
                     |turn| {
-                        set_feature(turn, Feature::Collab, /*enabled*/ false);
+                        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
                         set_feature(turn, Feature::CodeModeToolSearch, experiment_enabled);
                         set_feature(turn, Feature::CodeMode, tool_mode != ToolMode::Direct);
                         set_feature(
@@ -1416,7 +1410,7 @@ async fn code_mode_tool_search_respects_direct_only_functions() {
     {
         let plan = probe_with(
             |turn| {
-                set_feature(turn, Feature::Collab, /*enabled*/ false);
+                set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
                 set_feature(turn, Feature::CodeMode, /*enabled*/ true);
                 set_feature(turn, Feature::CodeModeOnly, code_mode_only);
                 set_feature(turn, Feature::CodeModeToolSearch, nested_search_enabled);
@@ -1469,7 +1463,7 @@ async fn dynamic_tool_search_does_not_enable_ranked_search_guidance() {
         let plan = probe_with(
             |turn| {
                 set_features(turn, &[Feature::CodeMode, Feature::CodeModeOnly]);
-                set_feature(turn, Feature::Collab, /*enabled*/ false);
+                set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
                 set_feature(turn, Feature::CodeModeToolSearch, experiment_enabled);
                 update_turn_settings_for_test(turn, |settings| {
                     Arc::make_mut(&mut settings.model_info).supports_search_tool =
@@ -1522,7 +1516,7 @@ async fn code_mode_tool_search_respects_exclusions_and_requires_deferred_tools()
                         Feature::CodeModeToolSearch,
                     ],
                 );
-                set_feature(turn, Feature::Collab, /*enabled*/ false);
+                set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
                 update_turn_settings_for_test(turn, |settings| {
                     Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
                 });
@@ -2670,7 +2664,7 @@ async fn excluded_deferred_namespaces_do_not_enable_nested_tool_guidance() {
     let plan = probe_with(
         |turn| {
             set_features(turn, &[Feature::CodeMode, Feature::CodeModeOnly]);
-            set_feature(turn, Feature::Collab, /*enabled*/ false);
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
             update_turn_settings_for_test(turn, |settings| {
                 Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
             });
@@ -2726,61 +2720,11 @@ async fn code_mode_excludes_default_namespace_tools() {
 
 #[tokio::test]
 async fn multi_agent_feature_selects_one_agent_tool_family() {
-    let v1 = probe(|turn| {
-        set_feature(turn, Feature::Collab, /*enabled*/ true);
+    let disabled = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
     })
     .await;
-    v1.assert_visible_contains(&[MULTI_AGENT_V1_NAMESPACE]);
-    assert!(v1.can_manage_children);
-    v1.assert_visible_lacks(&[
-        "spawn_agent",
-        "send_input",
-        "resume_agent",
-        "wait_agent",
-        "close_agent",
-        "interrupt_agent",
-        "send_message",
-        "followup_task",
-        "assign_task",
-        "list_agents",
-    ]);
-    assert_eq!(
-        v1.namespace_function_names(MULTI_AGENT_V1_NAMESPACE),
-        &[
-            "close_agent".to_string(),
-            "resume_agent".to_string(),
-            "send_input".to_string(),
-            "spawn_agent".to_string(),
-            "wait_agent".to_string(),
-        ]
-    );
-    let ToolSpec::Namespace(namespace) = v1.visible_spec(MULTI_AGENT_V1_NAMESPACE) else {
-        panic!("expected v1 multi-agent namespace");
-    };
-    let Some(ResponsesApiNamespaceTool::Function(spawn_agent)) =
-        namespace.tools.iter().find(|tool| {
-            matches!(
-                tool,
-                ResponsesApiNamespaceTool::Function(tool) if tool.name == "spawn_agent"
-            )
-        })
-    else {
-        panic!("expected v1 spawn_agent function");
-    };
-    let properties = spawn_agent
-        .parameters
-        .properties
-        .as_ref()
-        .expect("spawn_agent should use object params");
-    for property in ["model", "reasoning_effort"] {
-        assert!(
-            properties.contains_key(property),
-            "expected v1 spawn_agent to expose `{property}`"
-        );
-    }
-    assert!(!properties.contains_key("agent_type"));
-
+    disabled.assert_visible_lacks(&[MULTI_AGENT_V1_NAMESPACE, MULTI_AGENT_V2_NAMESPACE]);
     let v2 = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
         update_config(turn, |config| {
@@ -2940,58 +2884,6 @@ async fn tool_mode_selector_overrides_feature_flags() {
         codex_code_mode::PUBLIC_TOOL_NAME,
         codex_code_mode::WAIT_TOOL_NAME,
     ]);
-}
-
-#[tokio::test]
-async fn v1_multi_agent_tools_defer_when_tool_search_available() {
-    let plan = probe(|turn| {
-        set_feature(
-            turn,
-            Feature::DeferredToolWorldState,
-            /*enabled*/ false,
-        );
-        update_turn_settings_for_test(turn, |settings| {
-            Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
-        });
-        set_feature(turn, Feature::Collab, /*enabled*/ true);
-        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
-    })
-    .await;
-
-    plan.assert_visible_contains(&["tool_search"]);
-    plan.assert_visible_lacks(&[
-        "spawn_agent",
-        "send_input",
-        "resume_agent",
-        "wait_agent",
-        "close_agent",
-        "interrupt_agent",
-    ]);
-    for tool_name in [
-        "spawn_agent",
-        "send_input",
-        "resume_agent",
-        "wait_agent",
-        "close_agent",
-    ] {
-        let namespaced_tool_name = ToolName::namespaced(MULTI_AGENT_V1_NAMESPACE, tool_name);
-        let namespaced_tool_name = namespaced_tool_name.to_string();
-        assert!(
-            plan.registered_names.contains(&namespaced_tool_name),
-            "expected namespaced runtime for {tool_name}"
-        );
-        assert!(
-            !plan
-                .registered_names
-                .contains(&ToolName::plain(tool_name).to_string()),
-            "expected no plain runtime for deferred {tool_name}"
-        );
-        assert_eq!(plan.exposure(&namespaced_tool_name), ToolExposure::Deferred);
-    }
-    let ToolSpec::ToolSearch { description, .. } = plan.visible_spec("tool_search") else {
-        panic!("expected visible tool_search spec");
-    };
-    assert!(description.contains("- Multi-agent tools: Spawn and manage sub-agents."));
 }
 
 #[tokio::test]
