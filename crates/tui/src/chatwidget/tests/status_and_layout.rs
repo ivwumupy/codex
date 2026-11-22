@@ -5749,6 +5749,60 @@ fn hook_status_frame(chat: &ChatWidget, width: u16) -> String {
         .to_string()
 }
 
+#[tokio::test]
+async fn inline_progress_is_erased_after_interrupt() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+    chat.bottom_pane
+        .set_composer_text("Follow-up draft".into(), Vec::new(), Vec::new());
+    let width = 54;
+    let mut terminal = crate::custom_terminal::Terminal::with_options(VT100Backend::new(width, 20))
+        .expect("create terminal");
+    // Leave scrollback above the redrawable viewport for the prompt and interrupt notice.
+    terminal.set_viewport_area(Rect::new(0, 5, width, 15));
+    crate::insert_history::insert_history_lines(&mut terminal, vec!["› Check the build".into()])
+        .expect("insert prompt into scrollback");
+    let mut frames = Vec::new();
+    let mut capture = |label: &str, chat: &ChatWidget| {
+        for lines in helpers::drain_insert_history_with(&mut rx, |cell| {
+            crate::terminal_hyperlinks::visible_lines(
+                cell.scrollback_hyperlink_lines(width, chat.history_render_mode()),
+            )
+        }) {
+            crate::insert_history::insert_history_lines(&mut terminal, lines)
+                .expect("insert history");
+        }
+        terminal
+            .draw(|frame| chat.render(frame.area(), frame.buffer_mut()))
+            .expect("draw inline frame");
+        let screen =
+            helpers::normalize_working_snapshot(terminal.backend().vt100().screen().contents());
+        let rows = screen.trim().lines().map(str::trim_end).collect::<Vec<_>>();
+        frames.push(format!("{label}\n{}", rows.join("\n")));
+    };
+
+    handle_turn_started(&mut chat, "turn-1");
+    complete_assistant_message(
+        &mut chat,
+        "update",
+        "Checking the compiler output before running the unit tests.",
+        Some(MessagePhase::Commentary),
+    );
+    begin_exec(&mut chat, "build", "cargo build");
+    begin_exec(&mut chat, "test", "cargo test");
+    capture("Both commands running", &chat);
+
+    handle_turn_interrupted(&mut chat, "turn-1");
+    capture("Interrupted", &chat);
+    handle_turn_started(&mut chat, "turn-2");
+    begin_exec(&mut chat, "format", "cargo fmt");
+    capture("Next turn", &chat);
+
+    assert_chatwidget_snapshot!(
+        "inline_progress_is_erased_after_interrupt",
+        frames.join("\n\n")
+    );
+}
+
 // Combined visual snapshot using vt100 for history + direct buffer overlay for UI.
 // This renders the final visual as seen in a terminal: history above, then a blank line,
 // then the exec block, another blank line, the status line, a blank line, and the composer.
