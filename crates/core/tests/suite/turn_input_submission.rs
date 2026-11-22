@@ -599,7 +599,6 @@ async fn recover_turn_if_idle_preserves_id_and_resumes_plan_mode() {
             },
             trace: None,
             prompt_cache_ttl: None,
-            cyber_access_program: None,
         })
         .await
         .expect("recovered turn should start");
@@ -857,7 +856,6 @@ async fn recovery_preserves_durable_turn_attribution(
                     },
                     trace: None,
                     prompt_cache_ttl: None,
-                    cyber_access_program: None,
                 })
                 .await?,
             StartIfIdleSubmission::Started {

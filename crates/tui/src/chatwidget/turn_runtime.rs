@@ -426,51 +426,10 @@ impl ChatWidget {
         true
     }
 
-    pub(super) fn cyber_policy_notice(&self) -> crate::daybreak::Notice {
-        let can_enable_daybreak =
-            self.daybreak_account_eligible() && !self.side_conversation_active();
-        crate::daybreak::notice_for_setting(
-            &self.model_catalog.models,
-            self.current_model(),
-            self.daybreak_enabled && can_enable_daybreak,
-            can_enable_daybreak,
-        )
-    }
-
     pub(super) fn on_cyber_policy_error(&mut self) {
-        let notice = self.cyber_policy_notice();
         self.input_queue.submit_pending_steers_after_interrupt = false;
         self.finalize_turn();
-        self.add_to_history(history_cell::new_cyber_policy_error_event(notice));
-        if notice == crate::daybreak::Notice::Disabled
-            && !self.thread_usage.replaying_turn_completion
-            && !self.blocks_direct_input
-            && let Some(thread_id) = self.thread_id
-        {
-            self.bottom_pane.show_selection_view(SelectionViewParams {
-                title: Some("Turn on Daybreak for your next request?".into()),
-                items: vec![
-                    SelectionItem {
-                        name: "Enable Daybreak".into(),
-                        actions: vec![Box::new(move |tx| {
-                            tx.send(AppEvent::PersistDaybreakSelection {
-                                thread_id,
-                                enabled: true,
-                            })
-                        })],
-                        dismiss_on_select: true,
-                        ..Default::default()
-                    },
-                    SelectionItem {
-                        name: "Not now".into(),
-                        dismiss_on_select: true,
-                        ..Default::default()
-                    },
-                ],
-                ..SelectionViewParams::picker()
-            });
-            self.defer_input_until_settings_applied();
-        }
+        self.add_to_history(history_cell::new_cyber_policy_error_event());
         self.request_redraw();
 
         // After an error ends the turn, try sending the next queued input.
@@ -568,15 +527,6 @@ impl ChatWidget {
         }
         self.add_to_history(history_cell::new_warning_event(message));
         self.request_redraw();
-    }
-
-    pub(super) fn on_app_server_model_verification(
-        &mut self,
-        verifications: &[AppServerModelVerification],
-    ) {
-        if verifications.contains(&AppServerModelVerification::TrustedAccessForCyber) {
-            self.on_warning(TRUSTED_ACCESS_FOR_CYBER_VERIFICATION_WARNING);
-        }
     }
 
     pub(super) fn on_plan_update(&mut self, update: UpdatePlanArgs) {

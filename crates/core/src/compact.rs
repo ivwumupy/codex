@@ -288,7 +288,6 @@ async fn run_compact_task_inner_impl(
             input: turn_input,
             base_instructions,
             prompt_cache_ttl: turn_context.prompt_cache_ttl,
-            cyber_access_program: turn_context.cyber_access_program,
             ..Default::default()
         };
         let responses_metadata = sess

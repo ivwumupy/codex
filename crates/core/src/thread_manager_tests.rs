@@ -1,8 +1,5 @@
 #![cfg(test)]
 
-#[path = "thread_manager/helper_daybreak_tests.rs"]
-mod helper_daybreak;
-
 use super::*;
 use crate::ThreadStoreBuilder;
 use crate::agent::types::SpawnAgentOptions;
@@ -48,6 +45,7 @@ use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::protocol::AgentMessageEvent;
 use codex_protocol::protocol::EnvironmentConfigState;
 use codex_protocol::protocol::InternalSessionSource;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
@@ -854,11 +852,6 @@ fn assistant_msg(text: &str) -> ResponseItem {
     }
 }
 
-fn contextual_user_interrupted_marker() -> ResponseItem {
-    interrupted_turn_history_marker(InterruptedTurnHistoryMarker::ContextualUser)
-        .expect("contextual-user interrupted marker should be enabled")
-}
-
 fn developer_interrupted_marker() -> ResponseItem {
     interrupted_turn_history_marker(InterruptedTurnHistoryMarker::Developer)
         .expect("developer interrupted marker should be enabled")
@@ -1609,10 +1602,6 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
         })
         .await
         .expect("start parent thread");
-    parent
-        .thread
-        .session
-        .set_multi_agent_version_if_unset(MultiAgentVersion::V2);
     let parent_snapshot = parent.thread.session.inherited_instructions().await;
     assert_eq!(
         (parent_snapshot.user, parent_snapshot.thread),
@@ -1708,7 +1697,7 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
     assert_eq!(reviewer_config.originator, "codex_work_desktop");
     assert_eq!(
         reviewer.thread.multi_agent_version(),
-        Some(MultiAgentVersion::Disabled)
+        Some(MultiAgentVersion::V2)
     );
     assert_eq!(
         reviewer.session_configured.parent_thread_id,
@@ -3366,14 +3355,14 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
                 /*turn_id*/ None,
                 /*root_turn_id*/ None,
                 /*started_at*/ None,
-                InterruptedTurnHistoryMarker::ContextualUser,
+                InterruptedTurnHistoryMarker::Developer,
             )
             .get_rollout_items()
         )
         .expect("serialize interrupted fork history"),
         serde_json::to_value(vec![
             RolloutItem::ResponseItem(user_msg("hello").into()),
-            RolloutItem::ResponseItem(contextual_user_interrupted_marker().into()),
+            RolloutItem::ResponseItem(developer_interrupted_marker().into()),
             RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
                 root_turn_id: None,
                 turn_id: None,
@@ -3393,13 +3382,13 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
                 /*turn_id*/ None,
                 /*root_turn_id*/ None,
                 /*started_at*/ None,
-                InterruptedTurnHistoryMarker::ContextualUser,
+                InterruptedTurnHistoryMarker::Developer,
             )
             .get_rollout_items()
         )
         .expect("serialize interrupted empty fork history"),
         serde_json::to_value(vec![
-            RolloutItem::ResponseItem(contextual_user_interrupted_marker().into()),
+            RolloutItem::ResponseItem(developer_interrupted_marker().into()),
             RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
                 root_turn_id: None,
                 turn_id: None,
@@ -3477,7 +3466,7 @@ fn interrupted_snapshot_is_not_mid_turn() {
     let interrupted_history = InitialHistory::Forked(vec![
         RolloutItem::ResponseItem(user_msg("hello").into()),
         RolloutItem::ResponseItem(assistant_msg("partial").into()),
-        RolloutItem::ResponseItem(contextual_user_interrupted_marker().into()),
+        RolloutItem::ResponseItem(developer_interrupted_marker().into()),
         RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
             root_turn_id: None,
             turn_id: Some("turn-1".to_string()),
@@ -3665,7 +3654,7 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
         .filter(|item| !matches!(item, RolloutItem::SessionMeta(_)))
         .collect();
     let interrupted_marker_json = serde_json::to_value(RolloutItem::ResponseItem(
-        contextual_user_interrupted_marker().into(),
+        developer_interrupted_marker().into(),
     ))
     .expect("serialize interrupted marker");
     let interrupted_abort_json = serde_json::to_value(RolloutItem::EventMsg(
@@ -3885,7 +3874,7 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         .filter(|item| !matches!(item, RolloutItem::SessionMeta(_)))
         .collect();
     let interrupted_marker_json = serde_json::to_value(RolloutItem::ResponseItem(
-        contextual_user_interrupted_marker().into(),
+        developer_interrupted_marker().into(),
     ))
     .expect("serialize interrupted marker");
     assert_eq!(

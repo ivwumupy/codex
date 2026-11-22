@@ -15,7 +15,6 @@ use codex_extension_api::ToolLifecycleContributor;
 use codex_extension_api::ToolLifecycleFuture;
 use codex_extension_api::ToolStartInput;
 use codex_protocol::openai_models::ToolMode;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::ToolName;
 use std::sync::Arc;
 use std::time::Duration;
@@ -52,9 +51,8 @@ impl ToolLifecycleContributor for CallbackGate {
 
 #[tokio::test]
 async fn dispatch_revokes_access_and_holds_call_id_through_callbacks() -> anyhow::Result<()> {
-    let (mut session, mut turn, _events) =
+    let (mut session, turn, _events) =
         crate::session::tests::make_session_and_context_with_rx().await;
-    Arc::get_mut(&mut turn).unwrap().multi_agent_version = MultiAgentVersion::V2;
     session
         .services
         .thread_extension_data

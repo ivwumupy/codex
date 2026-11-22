@@ -194,7 +194,6 @@ impl ThreadMetadataBuilder {
             section_position: None,
             section_entered_at: None,
             project_id: None,
-            daybreak_enabled: None,
             git_sha: self.git_sha.clone(),
             git_branch: self.git_branch.clone(),
             git_origin_url: self.git_origin_url.clone(),

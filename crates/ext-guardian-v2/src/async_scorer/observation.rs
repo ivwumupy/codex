@@ -19,7 +19,6 @@ use codex_protocol::mcp::is_node_repl_backed_connector;
 use codex_protocol::openai_models::GuardianReviewMode;
 use codex_protocol::openai_models::GuardianScope;
 use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::turn_input::CyberAccessProgram;
 
 use super::action::ActionRenderError;
 use super::action::GuardianAction;
@@ -190,10 +189,6 @@ impl GuardianV2Extension {
         let thread_id = input.thread_store.level_id().to_owned();
         let turn_id = input.turn_id.to_owned();
         let root_turn_id = input.root_turn_id.map(str::to_owned);
-        let cyber_access_program = input
-            .turn_store
-            .get::<CyberAccessProgram>()
-            .map(|program| *program);
         let parent_response_id = input
             .turn_store
             .get::<codex_api::ResponseId>()
@@ -420,7 +415,6 @@ impl GuardianV2Extension {
             thread_id,
             turn_id,
             root_turn_id,
-            cyber_access_program,
             parent_response_id,
             manager,
             thread,

@@ -50,11 +50,7 @@ message ModelProvider {
   bool supports_websockets = 17;
   bool supports_standalone_web_search = 18;
   optional string model_catalog_url = 19;
-  optional ModelProviderCapabilities capabilities = 23;
-}
-
-message ModelProviderCapabilities {
-  optional bool cyber_access_programs = 1;
+  reserved 23;
 }
 
 message StringMap {

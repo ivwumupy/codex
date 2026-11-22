@@ -5,8 +5,6 @@ use super::session_lifecycle_requests::start_recording_app_server_with_history;
 use super::*;
 use codex_app_server_protocol::MisalignmentErrorDetails;
 use codex_app_server_protocol::MisalignmentSteer;
-use codex_protocol::openai_models::ModelAccessPrograms;
-use codex_protocol::turn_input::CyberAccessProgram;
 use pretty_assertions::assert_eq;
 
 fn policy_error() -> AppServerTurnError {
@@ -42,23 +40,13 @@ fn error_notification(
 
 #[tokio::test]
 async fn misalignment_continuation_requires_current_review_and_submits_once() -> Result<()> {
-    for (reject, preserve, daybreak, rollout_enabled, has_chatgpt_account, server_owned) in [
-        (false, false, false, true, true, false),
-        (false, true, true, true, true, false),
-        (true, false, false, true, true, false),
-        (false, false, false, false, true, false),
-        (false, true, true, false, true, false),
-        // Continuations submit directly rather than via the normal turn-start path.
-        (false, false, false, true, false, false),
-        (false, true, true, true, false, false),
-        // Server-owned continuations preserve the acknowledgement without local overrides.
-        (false, false, false, true, true, true),
+    for (reject, preserve, server_owned) in [
+        (false, false, false),
+        (false, true, false),
+        (true, false, false),
+        (false, false, true),
     ] {
         let (mut app, mut rx, _) = make_test_app_with_channels().await;
-        app.chat_widget
-            .set_feature_enabled(Feature::CliDaybreak, rollout_enabled);
-        app.chat_widget
-            .set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, !has_chatgpt_account);
         let (mut server, requests, proxy) = if server_owned {
             start_recording_app_server_with_history(
                 &app.config,
@@ -89,35 +77,6 @@ async fn misalignment_continuation_requires_current_review_and_submits_once() ->
         session.active_permission_profile = None;
         app.active_thread_id = Some(thread_id);
         app.chat_widget.handle_thread_session(session);
-        if !reject {
-            app.chat_widget.update_account_state(
-                (!has_chatgpt_account).then_some(crate::status::StatusAccountDisplay::ApiKey),
-                /*plan_type*/ None,
-                has_chatgpt_account,
-                /*has_codex_backend_auth*/ has_chatgpt_account,
-            );
-            app.chat_widget.open_model_popup();
-            let request_id = std::iter::from_fn(|| rx.try_recv().ok())
-                .filter_map(|event| match event {
-                    AppEvent::FetchModels { request_id } => Some(request_id),
-                    _ => None,
-                })
-                .last()
-                .expect("model catalog request");
-            let mut model = crate::test_support::TEST_MODEL_PRESETS[0].clone();
-            model.model = app.chat_widget.current_model().to_string();
-            model.available_access_programs = Some(ModelAccessPrograms {
-                cyber: vec![
-                    CyberAccessProgram::Standard,
-                    CyberAccessProgram::DaybreakBlue,
-                ],
-            });
-            app.chat_widget
-                .on_models_loaded(request_id, Ok(vec![model]));
-            app.chat_widget
-                .handle_key_event(KeyEvent::from(KeyCode::Esc));
-            app.chat_widget.set_daybreak_enabled(daybreak);
-        }
         app.runtime_permission_profile_override = Some(if preserve {
             RuntimePermissionProfileOverride::from_restored_config(app.chat_widget.config_ref())
         } else {
@@ -255,11 +214,6 @@ async fn misalignment_continuation_requires_current_review_and_submits_once() ->
                 approvals_reviewer: None,
                 sandbox_policy: (!server_owned && !preserve)
                     .then(|| config.legacy_sandbox_policy().into()),
-                cyber_access_program: rollout_enabled.then_some(if daybreak {
-                    CyberAccessProgram::DaybreakBlue.into()
-                } else {
-                    CyberAccessProgram::Standard.into()
-                }),
                 input: vec![codex_app_server_protocol::UserInput::Text {
                     text: "Continue **only** within the requested scope.\nDo not edit files."
                         .to_string(),

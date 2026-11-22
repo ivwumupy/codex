@@ -35,7 +35,6 @@ use crate::session::GitEnrichmentPolicy;
 use crate::session::INITIAL_SUBMIT_ID;
 use crate::session::SessionIo;
 use crate::session::SessionSpawnArgs;
-use crate::session::resolve_multi_agent_version;
 use crate::session::session::Session;
 use crate::session::startup::SessionStartup;
 use crate::session::startup::SessionStartupGuard;
@@ -90,7 +89,6 @@ use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionConfiguredEvent;
 use codex_protocol::protocol::SessionSource;
@@ -477,7 +475,6 @@ struct ThreadStartupContext {
     history_initialization: HistoryInitialization,
     instructions: SessionInstructions,
     exec_policy: Option<Arc<crate::exec_policy::ExecPolicyManager>>,
-    multi_agent_version: Option<MultiAgentVersion>,
     parent_rollout_thread_trace: codex_rollout_trace::ThreadTraceContext,
     originator: String,
     attachment_source: Option<ThreadId>,
@@ -1508,16 +1505,10 @@ impl ThreadManager {
                 ))
             })?;
         let history = stored_thread_to_initial_history(stored_thread, fork_source.rollout_path())?;
-        let inherited_multi_agent_version = fork_source
-            .multi_agent_version()
-            .unwrap_or(MultiAgentVersion::Disabled);
         options.initial_history = fork_history_from_snapshot(
             ForkSnapshot::Interrupted,
             history,
-            InterruptedTurnHistoryMarker::from_config_and_version(
-                &options.config,
-                inherited_multi_agent_version,
-            ),
+            InterruptedTurnHistoryMarker::from_config(&options.config),
         );
         self.start_thread_inner(options, Some(forked_from_thread_id), /*startup*/ None)
             .await
@@ -1911,20 +1902,7 @@ impl ThreadManager {
                 options.thread_instructions_provider.clone(),
             )
             .await;
-        let multi_agent_version = self
-            .state
-            .effective_multi_agent_version_for_spawn(
-                &history,
-                /*session_source*/ None,
-                /*parent_thread_id*/ None,
-                source_thread_id,
-                &options.config,
-            )
-            .await;
-        let interrupted_marker = InterruptedTurnHistoryMarker::from_config_and_version(
-            &options.config,
-            multi_agent_version,
-        );
+        let interrupted_marker = InterruptedTurnHistoryMarker::from_config(&options.config);
         options.initial_history = fork_history_from_snapshot(snapshot, history, interrupted_marker);
         let agent_control = self.agent_control_for_config(&options.config);
         let mut request =
@@ -2141,55 +2119,6 @@ impl ThreadManagerState {
             .inspect(|thread| {
                 thread.session.services.mcp_runtime.revoke_ema();
             })
-    }
-
-    pub(crate) async fn effective_multi_agent_version_for_spawn(
-        &self,
-        initial_history: &InitialHistory,
-        session_source: Option<&SessionSource>,
-        parent_thread_id: Option<ThreadId>,
-        forked_from_thread_id: Option<ThreadId>,
-        config: &Config,
-    ) -> MultiAgentVersion {
-        if let Some(multi_agent_version) = config.multi_agent_version_override() {
-            return multi_agent_version;
-        }
-        self.initial_multi_agent_version_for_spawn(
-            initial_history,
-            session_source,
-            parent_thread_id,
-            forked_from_thread_id,
-        )
-        .await
-        .unwrap_or_else(|| config.multi_agent_version_from_features())
-    }
-
-    async fn initial_multi_agent_version_for_spawn(
-        &self,
-        initial_history: &InitialHistory,
-        session_source: Option<&SessionSource>,
-        parent_thread_id: Option<ThreadId>,
-        forked_from_thread_id: Option<ThreadId>,
-    ) -> Option<MultiAgentVersion> {
-        let inherited_thread_id = match session_source {
-            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id, ..
-            })) => Some(*parent_thread_id),
-            _ => match initial_history {
-                InitialHistory::Resumed(resumed) => Some(resumed.conversation_id),
-                InitialHistory::Forked(_) => forked_from_thread_id.or(parent_thread_id),
-                InitialHistory::New | InitialHistory::Cleared => parent_thread_id,
-            },
-        };
-        let inherited_multi_agent_version = match inherited_thread_id {
-            Some(thread_id) => self
-                .get_thread(thread_id)
-                .await
-                .ok()
-                .and_then(|thread| thread.multi_agent_version()),
-            None => None,
-        };
-        resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
     }
 
     /// Selects instruction sources for a newly spawned runtime without loading providers.
@@ -2660,7 +2589,6 @@ impl ThreadManagerState {
             });
         // Both resume entry points must restore identities before children can be loaded lazily.
         if let InitialHistory::Resumed(resumed) = &initial_history
-            && initial_history.get_multi_agent_version() == Some(MultiAgentVersion::V2)
             && !session_source.is_non_root_agent()
             && let AgentControlInit::Local(control) = &agent_control
         {
@@ -2689,21 +2617,9 @@ impl ThreadManagerState {
             instructions.user_provider = None;
             config.startup_warnings.extend(supplied.warnings);
         }
-        let (exec_policy, multi_agent_version) = match isolation {
-            SessionIsolation::Isolated => (None, Some(MultiAgentVersion::Disabled)),
-            SessionIsolation::Inherit if prepared_child.is_some() => {
-                (inherited_exec_policy, Some(MultiAgentVersion::V2))
-            }
-            SessionIsolation::Inherit => (
-                inherited_exec_policy,
-                self.initial_multi_agent_version_for_spawn(
-                    &initial_history,
-                    Some(&session_source),
-                    parent_thread_id,
-                    forked_from_thread_id,
-                )
-                .await,
-            ),
+        let exec_policy = match isolation {
+            SessionIsolation::Isolated => None,
+            SessionIsolation::Inherit => inherited_exec_policy,
         };
         let (originator, attachment_source) = match prepared_child {
             Some(child) => (child.originator, child.attachment_source),
@@ -2725,7 +2641,6 @@ impl ThreadManagerState {
             history_initialization,
             instructions,
             exec_policy,
-            multi_agent_version,
             parent_rollout_thread_trace: agent_control
                 .runtime()
                 .parent_rollout_thread_trace(&session_source)
@@ -2869,7 +2784,6 @@ impl ThreadManagerState {
             thread_store: Arc::clone(&self.thread_store),
             attestation_provider: self.attestation_provider.clone(),
             external_time_provider: self.external_time_provider.clone(),
-            inherited_multi_agent_version: startup_context.multi_agent_version,
             git_enrichment_policy: if matches!(
                 &tracked_session_source,
                 SessionSource::Internal(InternalSessionSource::Guardian)

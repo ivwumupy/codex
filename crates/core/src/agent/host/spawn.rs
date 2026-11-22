@@ -24,7 +24,6 @@ use codex_protocol::SessionId;
 use codex_protocol::error::AgentErrorContext;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadSource;
 use std::sync::Arc;
 
@@ -46,14 +45,12 @@ async fn prepare_spawn_inputs(
         CodexErr::InvalidRequest("prepared spawn requires captured environments".into())
     })?;
     let (initial_history, history_mode, dynamic_tools) = if options.fork_mode.is_some() {
-        let (history, mode) =
-            prepare_forked_history(&state, &source, &options, &config, MultiAgentVersion::V2)
-                .await
-                .map_err(|error| error.with_agent_context(AgentErrorContext::ForkHistory))?;
+        let (history, mode) = prepare_forked_history(&state, &source, &options, &config)
+            .await
+            .map_err(|error| error.with_agent_context(AgentErrorContext::ForkHistory))?;
         (history, mode, Vec::new())
     } else {
-        let (mode, tools) =
-            fresh_child_history_and_tools(parent, &config, MultiAgentVersion::V2).await;
+        let (mode, tools) = fresh_child_history_and_tools(parent, &config).await;
         (InitialHistory::New, mode, tools)
     };
     if !std::ptr::eq(state.get_thread(caller).await?.as_ref(), parent) {

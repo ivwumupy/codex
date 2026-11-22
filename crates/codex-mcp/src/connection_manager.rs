@@ -65,8 +65,6 @@ use crate::server::McpServerMetadata;
 use crate::tools::ToolFilter;
 use crate::tools::ToolInfo;
 use crate::tools::filter_tools;
-use crate::trusted_access::ENTITLEMENT_CONTEXT_KEY;
-use crate::trusted_access::TrustedAccessContext;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
@@ -344,7 +342,6 @@ pub(crate) struct McpConnectionSet {
     prefix_mcp_tool_names: bool,
     non_prefixed_mcp_tool_servers: Vec<String>,
     elicitation_requests: ElicitationRequestManager,
-    pub(crate) trusted_access: Option<TrustedAccessContext>,
 }
 
 impl McpConnectionSet {
@@ -360,7 +357,6 @@ impl McpConnectionSet {
     ) -> Self {
         let same_owner = previous.as_ref().is_some_and(|state| state.same_owner);
         let previous = previous.map(|state| state.connections);
-        let trusted_access = TrustedAccessContext::from_runtime(&input);
         let McpRuntimeInput {
             startup_policy,
             config,
@@ -1113,7 +1109,6 @@ impl McpConnectionSet {
             prefix_mcp_tool_names,
             non_prefixed_mcp_tool_servers,
             elicitation_requests: elicitation_requests.clone(),
-            trusted_access,
         };
         tokio::spawn(async move {
             if !publication_gate.wait().await {
@@ -1190,7 +1185,6 @@ impl McpConnectionSet {
             prefix_mcp_tool_names,
             non_prefixed_mcp_tool_servers: Vec::new(),
             elicitation_requests: ElicitationRequestManager::default(),
-            trusted_access: None,
         }
     }
 
@@ -1375,7 +1369,7 @@ impl McpConnectionSet {
         tool: &str,
         environment_id: Option<&str>,
         arguments: Option<serde_json::Value>,
-        mut meta: Option<serde_json::Value>,
+        meta: Option<serde_json::Value>,
         requested_timeout: Option<Duration>,
         wait_for_server: bool,
     ) -> Result<CallToolResult> {
@@ -1404,10 +1398,6 @@ impl McpConnectionSet {
             }
             (server_timeout, requested_timeout) => server_timeout.or(requested_timeout),
         };
-        // Direct callers cannot supply host-owned entitlement metadata, even for unlisted tools.
-        if let Some(serde_json::Value::Object(meta)) = meta.as_mut() {
-            meta.remove(ENTITLEMENT_CONTEXT_KEY);
-        }
         let result: rmcp::model::CallToolResult = client
             .call_tool(
                 tool.to_string(),

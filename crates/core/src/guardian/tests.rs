@@ -142,6 +142,15 @@ impl codex_extension_api::ContextContributor for GuardianMemoryContextProbe {
     }
 }
 
+fn use_reviewer_permissions(config: &mut Config) {
+    config
+        .permissions
+        .replace_permission_profile_from_session_snapshot(PermissionProfileSnapshot::legacy(
+            PermissionProfile::read_only(),
+        ))
+        .expect("read-only reviewer fixture");
+}
+
 async fn guardian_test_session_and_turn(
     server: &wiremock::MockServer,
 ) -> (Arc<Session>, Arc<TurnContext>) {
@@ -3339,6 +3348,7 @@ async fn guardian_ephemeral_retry_preserves_parallel_trunk_and_fork_history() ->
 #[tokio::test]
 async fn guardian_review_session_config_preserves_parent_network_proxy() {
     let mut parent_config = test_config().await;
+    use_reviewer_permissions(&mut parent_config);
     let network = NetworkProxySpec::from_config_and_constraints(
         NetworkProxyConfig::default(),
         Some(NetworkConstraints {
@@ -3465,6 +3475,7 @@ async fn guardian_review_session_config_preserves_context_overrides_for_same_eff
 #[tokio::test]
 async fn guardian_review_session_config_uses_live_network_proxy_state() {
     let mut parent_config = test_config().await;
+    use_reviewer_permissions(&mut parent_config);
     let mut parent_network = NetworkProxyConfig {
         enabled: true,
         ..Default::default()
@@ -3513,6 +3524,7 @@ async fn guardian_review_session_config_uses_live_network_proxy_state() {
 async fn guardian_review_session_config_isolates_parent_customizations() {
     let defaults = ResolvedModelMessages::bundled().auto_review();
     let mut parent_config = test_config().await;
+    use_reviewer_permissions(&mut parent_config);
     let server: McpServerConfig =
         toml::from_str("command = \"docs-server\"").expect("deserialize MCP server");
     parent_config

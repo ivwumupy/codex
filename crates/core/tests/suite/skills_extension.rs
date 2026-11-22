@@ -1115,39 +1115,28 @@ async fn repository_skill_cache_cannot_read_inaccessible_files(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum RepositoryGrant {
-    Turn,
+enum RepositoryGrant {
     Session,
     NewNestedRepository,
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn repository_skill_discovery_uses_session_grants() -> Result<()> {
-    repository_skill_grant_history(RepositoryGrant::Session)
-        .await
-        .map(drop)
+    assert_repository_skill_grant(RepositoryGrant::Session).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn repository_skill_grant_excludes_a_parent_after_a_nested_repository_is_created()
 -> Result<()> {
-    repository_skill_grant_history(RepositoryGrant::NewNestedRepository)
-        .await
-        .map(drop)
+    assert_repository_skill_grant(RepositoryGrant::NewNestedRepository).await
 }
 
-pub(super) async fn repository_skill_grant_history(
-    case: RepositoryGrant,
-) -> Result<Option<(Vec<responses::ResponsesRequest>, PathUri)>> {
-    skip_if_no_network!(Ok(None));
+async fn assert_repository_skill_grant(case: RepositoryGrant) -> Result<()> {
+    skip_if_no_network!(Ok(()));
     skip_if_target_windows!(
-        Ok(None),
+        Ok(()),
         "restricted reads require the elevated Windows sandbox backend, unavailable in this fixture"
     );
-    let scope = match case {
-        RepositoryGrant::Turn | RepositoryGrant::NewNestedRepository => PermissionGrantScope::Turn,
-        RepositoryGrant::Session => PermissionGrantScope::Session,
-    };
     let (extensions, _events) =
         catalog_extensions(SkillCatalog::default(), /*include_host_provider*/ true);
     let harness = TestCodexHarness::with_auto_env_builder(
@@ -1158,7 +1147,7 @@ pub(super) async fn repository_skill_grant_history(
             })
             .with_config(move |config| {
                 configure_catalog_test(config);
-                if scope == PermissionGrantScope::Turn {
+                if case != RepositoryGrant::Session {
                     config
                         .features
                         .enable(Feature::SkillCatalogDeltas)
@@ -1229,16 +1218,15 @@ pub(super) async fn repository_skill_grant_history(
         ])
     };
     let complete = |id| sse(vec![ev_response_created(id), ev_completed(id)]);
-    let reapprove = case == RepositoryGrant::Turn;
-    let mut steps = vec![grant("grant-skills"), complete("granted")];
-    if reapprove {
-        steps.push(grant("reapprove-skills"));
-    }
-    steps.push(complete("next-turn"));
+    let steps = vec![
+        grant("grant-skills"),
+        complete("granted"),
+        complete("next-turn"),
+    ];
     let responses = responses::mount_sse_sequence(harness.server(), steps).await;
     for (text, needs_approval) in [
         ("Request access to the repository skills.", true),
-        ("Use $approved-skill.", reapprove),
+        ("Use $approved-skill.", false),
     ] {
         let mut turn = TurnInputRequest::user_input(vec![UserInput::Text {
             text: text.to_string(),
@@ -1271,7 +1259,7 @@ pub(super) async fn repository_skill_grant_history(
                     id: request.call_id,
                     response: RequestPermissionsResponse {
                         permissions: permissions.clone(),
-                        scope,
+                        scope: PermissionGrantScope::Session,
                         strict_auto_review: false,
                     },
                 })
@@ -1292,9 +1280,7 @@ pub(super) async fn repository_skill_grant_history(
                 .contains("- approved-skill:")
         })
         .collect::<Vec<_>>();
-    // Earlier catalog entries remain in the request history after access expires.
     let expected: &[bool] = match case {
-        RepositoryGrant::Turn => &[false, true, true, true],
         RepositoryGrant::Session => &[false, true, true],
         RepositoryGrant::NewNestedRepository => &[false, false, false],
     };
@@ -1304,9 +1290,9 @@ pub(super) async fn repository_skill_grant_history(
             .message_input_texts("user")
             .join("\n")
             .contains("Approved skill body."),
-        scope == PermissionGrantScope::Session,
+        case == RepositoryGrant::Session,
     );
-    Ok(Some((requests, skill_root)))
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2196,7 +2182,7 @@ async fn executor_skill_tool_reads_references_under_current_permissions(
                 id: request.call_id,
                 response: RequestPermissionsResponse {
                     permissions: requested_permissions,
-                    scope: PermissionGrantScope::Turn,
+                    scope: PermissionGrantScope::Session,
                     strict_auto_review: false,
                 },
             })

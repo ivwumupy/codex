@@ -65,12 +65,10 @@ const BACKGROUND_PAGINATED_ROLLOUT_MIGRATION_FEATURE: &str =
     "background_paginated_rollout_migration";
 
 const SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT: &[&str] = &[
-    "api_key_cyber_access_programs",
     "api_key_model_discovery",
     "auth_elicitation",
     BACKGROUND_PAGINATED_ROLLOUT_MIGRATION_FEATURE,
     "codex_apps_mcp_2026_07_28",
-    "daybreak_program_propagation",
     "mcp_2026_07_28",
     "mcp_connection_sharing",
     "mcp_lazy_stdio_startup",

@@ -261,12 +261,6 @@
             "boolean",
             "null"
           ]
-        },
-        "cyberTrustedAccess": {
-          "type": [
-            "boolean",
-            "null"
-          ]
         }
       },
       "required": [
@@ -6275,15 +6269,6 @@
       ],
       "type": "object"
     },
-    "CyberAccessProgram": {
-      "description": "Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.",
-      "enum": [
-        "standard",
-        "daybreakBlue",
-        "daybreakRed"
-      ],
-      "type": "string"
-    },
     "DeprecationNoticeNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -10968,18 +10953,6 @@
             }
           ]
         },
-        "availableAccessPrograms": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ModelAccessPrograms"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Null when the catalog does not provide access-program metadata."
-        },
         "defaultReasoningEffort": {
           "$ref": "#/definitions/ReasoningEffort"
         },
@@ -11081,22 +11054,6 @@
         "isDefault",
         "model",
         "supportedReasoningEfforts"
-      ],
-      "type": "object"
-    },
-    "ModelAccessPrograms": {
-      "description": "Caller-specific explicit access programs advertised by model discovery.",
-      "properties": {
-        "cyber": {
-          "description": "Accepted explicit selections.",
-          "items": {
-            "$ref": "#/definitions/CyberAccessProgram"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "cyber"
       ],
       "type": "object"
     },
@@ -11489,36 +11446,6 @@
       "required": [
         "model"
       ],
-      "type": "object"
-    },
-    "ModelVerification": {
-      "enum": [
-        "trustedAccessForCyber"
-      ],
-      "type": "string"
-    },
-    "ModelVerificationNotification": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "properties": {
-        "threadId": {
-          "type": "string"
-        },
-        "turnId": {
-          "type": "string"
-        },
-        "verifications": {
-          "items": {
-            "$ref": "#/definitions/ModelVerification"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "threadId",
-        "turnId",
-        "verifications"
-      ],
-      "title": "ModelVerificationNotification",
       "type": "object"
     },
     "ModelsRequirements": {
@@ -16466,26 +16393,6 @@
             "params"
           ],
           "title": "Model/reroutedNotification",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "method": {
-              "enum": [
-                "model/verification"
-              ],
-              "title": "Model/verificationNotificationMethod",
-              "type": "string"
-            },
-            "params": {
-              "$ref": "#/definitions/ModelVerificationNotification"
-            }
-          },
-          "required": [
-            "method",
-            "params"
-          ],
-          "title": "Model/verificationNotification",
           "type": "object"
         },
         {

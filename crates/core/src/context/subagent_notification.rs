@@ -11,15 +11,6 @@ pub(crate) struct SubagentNotification {
     pub(crate) status: AgentStatus,
 }
 
-impl SubagentNotification {
-    pub(crate) fn new(agent_reference: impl Into<String>, status: AgentStatus) -> Self {
-        Self {
-            agent_reference: agent_reference.into(),
-            status,
-        }
-    }
-}
-
 impl ContextualUserFragment for SubagentNotification {
     fn content_kind(&self) -> ContentItemKind {
         ContentItemKind("multi_agent.subagent_notification".to_string())

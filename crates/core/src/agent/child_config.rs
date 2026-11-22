@@ -22,12 +22,8 @@ use codex_protocol::protocol::MultiAgentVersion;
 
 pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 5;
 
-pub(crate) fn model_supports_multi_agent_backend(
-    model: &ModelPreset,
-    multi_agent_version: MultiAgentVersion,
-) -> bool {
-    multi_agent_version != MultiAgentVersion::V2
-        || model.multi_agent_version != Some(MultiAgentVersion::Disabled)
+pub(crate) fn model_supports_multi_agent_backend(model: &ModelPreset) -> bool {
+    model.multi_agent_version != Some(MultiAgentVersion::Disabled)
 }
 
 /// Selects the existing spawn tool's role-inheritance rules.
@@ -168,12 +164,11 @@ fn build_agent_shared_config(turn: &TurnContext) -> Result<Config, String> {
         .cloned();
     config.model_reasoning_summary = Some(turn.reasoning_summary());
     config.developer_instructions = turn.developer_instructions.clone();
-    if turn.multi_agent_version == MultiAgentVersion::V2
-        && let Some(developer_instructions) = turn
-            .config
-            .multi_agent_v2
-            .subagent_developer_instructions
-            .clone()
+    if let Some(developer_instructions) = turn
+        .config
+        .multi_agent_v2
+        .subagent_developer_instructions
+        .clone()
     {
         config.developer_instructions = Some(developer_instructions);
     }
@@ -240,11 +235,7 @@ async fn apply_requested_spawn_agent_model_overrides(
             .models_manager
             .list_models(RefreshStrategy::Offline, config.http_client_factory())
             .await;
-        let selected_model_name = find_spawn_agent_model_name(
-            &available_models,
-            requested_model,
-            turn.multi_agent_version,
-        )?;
+        let selected_model_name = find_spawn_agent_model_name(&available_models, requested_model)?;
         let selected_model_info = session
             .services
             .models_manager
@@ -346,20 +337,16 @@ async fn apply_spawn_agent_role(
 fn find_spawn_agent_model_name(
     available_models: &[ModelPreset],
     requested_model: &str,
-    multi_agent_version: MultiAgentVersion,
 ) -> Result<String, String> {
     available_models
         .iter()
-        .find(|model| {
-            model.model == requested_model
-                && model_supports_multi_agent_backend(model, multi_agent_version)
-        })
+        .find(|model| model.model == requested_model && model_supports_multi_agent_backend(model))
         .map(|model| model.model.clone())
         .ok_or_else(|| {
             let available = available_models
                 .iter()
                 .filter(|model| model.show_in_picker)
-                .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
+                .filter(|model| model_supports_multi_agent_backend(model))
                 .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
                 .map(|model| model.model.as_str())
                 .collect::<Vec<_>>()

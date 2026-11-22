@@ -762,15 +762,6 @@
         }
       ]
     },
-    "CyberAccessProgram": {
-      "description": "Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.",
-      "enum": [
-        "standard",
-        "daybreakBlue",
-        "daybreakRed"
-      ],
-      "type": "string"
-    },
     "DynamicToolNamespaceTool": {
       "oneOf": [
         {

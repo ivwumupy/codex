@@ -145,7 +145,6 @@ pub(super) async fn collect_guardian_prompt_items_with_parent_turn(
         .is_some_and(|context| {
             let turn = context.turn();
             turn.config.guardian_native_multi_agent_history_enabled()
-                && turn.multi_agent_version == codex_protocol::protocol::MultiAgentVersion::V2
         })
         .then(|| {
             config

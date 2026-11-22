@@ -3,7 +3,6 @@ use super::token_budget::has_explicit_settings;
 use super::token_budget::resolve_token_budget;
 use super::*;
 use crate::config::TokenBudgetConfig;
-use crate::cyber_access_program;
 use crate::environment_selection::EnvironmentAttachment;
 use crate::environment_selection::EnvironmentConfigOrigin;
 use crate::environment_selection::TurnEnvironmentSnapshot;
@@ -38,9 +37,7 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::sandbox::SandboxOverride;
-use codex_protocol::turn_input::CyberAccessProgram;
 use codex_sandboxing::policy_transforms::effective_permission_profile;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_skills_extension::HostSkillsSnapshot;
 use codex_skills_extension::SkillLoadOutcome;
 use codex_utils_path_uri::PathUri;
@@ -337,8 +334,6 @@ pub(crate) struct NewTurnContextOptions {
     pub(crate) direct_only_tool_namespaces: Option<Vec<String>>,
     pub(crate) final_output_json_schema: Option<Value>,
     pub(crate) prompt_cache_ttl: Option<crate::PromptCacheTtl>,
-    pub(crate) cyber_access_program: Option<CyberAccessProgram>,
-    pub(crate) helper_admission: Option<crate::agent::helper_daybreak::turn::HelperTurnAdmission>,
 }
 
 /// The context needed for a single turn of the thread.
@@ -385,11 +380,7 @@ pub struct TurnContext {
     pub(crate) timezone: Option<String>,
     pub(crate) app_server_client_name: Option<String>,
     pub(crate) developer_instructions: Option<String>,
-    pub(crate) multi_agent_version: MultiAgentVersion,
     pub(crate) network: Option<NetworkProxy>,
-    // TODO(anp): Reconcile this parallel turn snapshot with TurnEnvironment::sandbox_context
-    // so owner-provided environment settings govern the remaining sandbox decisions.
-    pub(crate) windows_sandbox_level: WindowsSandboxLevel,
     pub(crate) available_models: Vec<ModelPreset>,
     pub(crate) final_output_json_schema: Option<Value>,
     pub(crate) prompt_cache_ttl: Option<crate::PromptCacheTtl>,
@@ -399,12 +390,7 @@ pub struct TurnContext {
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
     /// Shares the session-owned store; session approvals remain live across turns.
     session_grants: Arc<StdMutex<HashMap<String, AdditionalPermissionProfile>>>,
-    /// Retained by background cells so a later active turn cannot replace their grants.
-    turn_grants: Arc<StdMutex<TurnGrants>>,
     pub(crate) server_model_warning_emitted: AtomicBool,
-    pub(crate) model_verification_emitted: AtomicBool,
-    /// Effective cyber treatment for this turn, including any child-agent inheritance.
-    pub(crate) cyber_access_program: Option<CyberAccessProgram>,
 }
 
 /// Selects which preparation is needed when building a turn context.
@@ -474,9 +460,7 @@ impl TurnContext {
             timezone: self.timezone.clone(),
             app_server_client_name: self.app_server_client_name.clone(),
             developer_instructions: None,
-            multi_agent_version: MultiAgentVersion::Disabled,
             network: self.network.clone(),
-            windows_sandbox_level: self.windows_sandbox_level,
             #[allow(deprecated)]
             cwd: self.cwd.clone(),
             final_output_json_schema: None,
@@ -486,14 +470,11 @@ impl TurnContext {
             turn_timing_state: Arc::new(TurnTimingState::default()),
             terminal_error: Arc::new(Mutex::new(None)),
             session_grants: Arc::clone(&self.session_grants),
-            turn_grants: Arc::default(),
             server_model_warning_emitted: AtomicBool::new(false),
-            model_verification_emitted: AtomicBool::new(false),
-            cyber_access_program: None,
         }
     }
 
-    /// Returns current session and turn grants for this environment.
+    /// Returns current session grants for this environment.
     #[expect(
         clippy::expect_used,
         reason = "poisoned grant state must not authorize further operations"
@@ -502,87 +483,11 @@ impl TurnContext {
         &self,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let session_grants = self
-            .session_grants
+        self.session_grants
             .lock()
             .expect("session permission grants lock poisoned")
             .get(environment_id)
-            .cloned();
-        let turn_grants = self
-            .turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned")
-            .granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned();
-        merge_permission_profiles(session_grants.as_ref(), turn_grants.as_ref())
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
-    pub(crate) fn turn_skill_filesystem_grants(
-        &self,
-        environments: &TurnEnvironmentSnapshot,
-    ) -> Option<codex_skills_extension::TurnSkillFilesystemGrants> {
-        let grants = self
-            .turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned");
-        let environment_ids = environments
-            .turn_environments()
-            .map(|environment| &environment.selection.environment_id)
-            .filter(|id| {
-                grants
-                    .granted_permissions_by_environment_id
-                    .get(*id)
-                    .and_then(|profile| profile.file_system.as_ref())
-                    .is_some_and(|fs| !fs.is_empty())
-            })
             .cloned()
-            .collect::<std::collections::HashSet<_>>();
-        (!environment_ids.is_empty())
-            .then_some(codex_skills_extension::TurnSkillFilesystemGrants { environment_ids })
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
-    pub(crate) fn record_granted_permissions(
-        &self,
-        environment_id: &str,
-        permissions: AdditionalPermissionProfile,
-        strict_auto_review: bool,
-    ) {
-        let mut grants = self
-            .turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned");
-        let granted_permissions = merge_permission_profiles(
-            grants
-                .granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            grants
-                .granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
-        grants.strict_auto_review_enabled |= strict_auto_review;
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
-    pub(crate) fn strict_auto_review_enabled(&self) -> bool {
-        self.turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned")
-            .strict_auto_review_enabled
     }
 
     pub(crate) fn attribution(&self) -> codex_history::TurnAttribution {
@@ -891,9 +796,7 @@ impl TurnContext {
             timezone: self.timezone.clone(),
             app_server_client_name: self.app_server_client_name.clone(),
             developer_instructions: self.developer_instructions.clone(),
-            multi_agent_version: self.multi_agent_version,
             network: self.network.clone(),
-            windows_sandbox_level: self.windows_sandbox_level,
             available_models,
             final_output_json_schema: self.final_output_json_schema.clone(),
             prompt_cache_ttl: self.prompt_cache_ttl,
@@ -902,14 +805,9 @@ impl TurnContext {
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             terminal_error: Arc::clone(&self.terminal_error),
             session_grants: Arc::clone(&self.session_grants),
-            turn_grants: Arc::clone(&self.turn_grants),
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
-            model_verification_emitted: AtomicBool::new(
-                self.model_verification_emitted.load(Ordering::Relaxed),
-            ),
-            cyber_access_program: self.cyber_access_program,
         }
     }
 
@@ -935,20 +833,11 @@ impl TurnContext {
             model: self.model_info().slug.clone(),
             comp_hash: self.model_info().comp_hash.clone(),
             collaboration_mode: Some(self.collaboration_mode()),
-            multi_agent_version: Some(self.multi_agent_version),
-            cyber_access_program: self.cyber_access_program,
+            multi_agent_version: Some(MultiAgentVersion::V2),
             effort: self.reasoning_effort().cloned(),
             summary: Some(ReasoningSummaryConfig::None),
         }
     }
-}
-
-/// Grants and their review requirement share a lock so readers cannot see a new grant before
-/// its strict-review requirement.
-#[derive(Debug, Default)]
-struct TurnGrants {
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
-    strict_auto_review_enabled: bool,
 }
 
 fn local_time_context() -> (String, String) {
@@ -1059,7 +948,6 @@ impl Session {
         session_telemetry: &SessionTelemetry,
         provider: SharedModelProvider,
         session_configuration: &SessionConfiguration,
-        multi_agent_version: MultiAgentVersion,
         per_turn_config: Config,
         step_settings: Arc<ResolvedStepSettings>,
         models_manager: &SharedModelsManager,
@@ -1101,13 +989,7 @@ impl Session {
         let windows_sandbox_selection = environments
             .primary()
             .map(TurnEnvironment::windows_sandbox_selection_for_turn_metadata)
-            .unwrap_or_else(|| {
-                configured_windows_sandbox_selection(
-                    session_configuration.windows_sandbox_type,
-                    session_configuration.windows_sandbox_level,
-                    &PathUri::from_abs_path(&cwd),
-                )
-            });
+            .unwrap_or_default();
         let per_turn_config = Arc::new(per_turn_config);
         let turn_metadata_state = Arc::new(TurnMetadataState::new(
             session_id.to_string(),
@@ -1159,9 +1041,7 @@ impl Session {
             timezone: Some(timezone),
             app_server_client_name: session_configuration.app_server_client_name.clone(),
             developer_instructions: session_configuration.developer_instructions.clone(),
-            multi_agent_version,
             network,
-            windows_sandbox_level: session_configuration.windows_sandbox_level,
             available_models,
             final_output_json_schema: None,
             prompt_cache_ttl: None,
@@ -1170,10 +1050,7 @@ impl Session {
             turn_timing_state: Arc::new(TurnTimingState::default()),
             terminal_error: Arc::new(Mutex::new(None)),
             session_grants,
-            turn_grants: Arc::default(),
             server_model_warning_emitted: AtomicBool::new(false),
-            model_verification_emitted: AtomicBool::new(false),
-            cyber_access_program: None,
         }
     }
 
@@ -1327,21 +1204,11 @@ impl Session {
                 &session_configuration.model_info_overrides,
             )
             .await;
-        let multi_agent_version = match build_mode {
-            TurnContextBuildMode::Full => {
-                // Only execution and initial context creation publish model metadata.
-                self.services
-                    .thread_extension_data
-                    .insert_arc(Arc::clone(&model_info.model));
-                self.resolve_multi_agent_version_for_model(&model_info, &per_turn_config)
-            }
-            TurnContextBuildMode::StartupPrewarm | TurnContextBuildMode::InjectItems => {
-                per_turn_config.multi_agent_version_for_model(
-                    self.multi_agent_version()
-                        .or(model_info.multi_agent_version),
-                )
-            }
-        };
+        if matches!(build_mode, TurnContextBuildMode::Full) {
+            self.services
+                .thread_extension_data
+                .insert_arc(Arc::clone(&model_info.model));
+        }
         let plugins_input = per_turn_config.plugins_config_input();
         let plugin_outcome = self
             .services
@@ -1415,7 +1282,6 @@ impl Session {
             &self.services.session_telemetry,
             session_configuration.provider.clone(),
             &session_configuration,
-            multi_agent_version,
             per_turn_config,
             step_settings,
             &self.services.models_manager,
@@ -1458,15 +1324,6 @@ impl Session {
 
         turn_context.final_output_json_schema = options.final_output_json_schema;
         turn_context.prompt_cache_ttl = options.prompt_cache_ttl;
-        turn_context.cyber_access_program =
-            cyber_access_program::for_provider(&turn_context.config, options.cyber_access_program);
-        if let Some(admission) = options.helper_admission {
-            admission.capture_intent(self, &mut turn_context).await;
-        }
-        // Tool observers retain this turn's selection even after a later turn starts.
-        if let Some(program) = turn_context.cyber_access_program {
-            turn_context.extension_data.insert(program);
-        }
         let turn_context = Arc::new(turn_context);
         if git_enrichment_policy == GitEnrichmentPolicy::Fresh
             && turn_context

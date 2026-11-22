@@ -764,11 +764,11 @@ impl NetworkApprovalService {
         {
             return NetworkDecision::deny(REASON_NOT_ALLOWED);
         }
-        let active_turn = session.active_turn_context_and_strict_auto_review().await;
+        let active_turn = session.active_turn_settings_and_environments().await;
         let Some(environment_id) = active_environment_id.or_else(|| {
             active_turn
                 .as_ref()
-                .and_then(|(_, _, environments, _)| environments.primary())
+                .and_then(|(_, _, environments)| environments.primary())
                 .map(|environment| environment.selection.environment_id.clone())
         }) else {
             return NetworkDecision::deny(REASON_NOT_ALLOWED);
@@ -784,8 +784,7 @@ impl NetworkApprovalService {
             format!("Network access to \"{target}\" was blocked by policy.");
         let prompt_reason = format!("Network access to {} requires approval", request.host);
 
-        let Some((turn_context, settings, active_environments, strict_auto_review)) = active_turn
-        else {
+        let Some((turn_context, settings, active_environments)) = active_turn else {
             if let Some(owner_call) = owner_call.as_ref() {
                 self.record_call_outcome(&owner_call.registration_id, policy_denial_message);
             }
@@ -905,7 +904,6 @@ impl NetworkApprovalService {
             cancellation_token: None,
             call_id: approval_call_id,
             tool_name: telemetry_tool_name.clone(),
-            strict_auto_review,
             approval_reason: Some(prompt_reason),
             retry_reason: Some(policy_denial_message.clone()),
             network_approval_context: Some(network_approval_context.clone()),

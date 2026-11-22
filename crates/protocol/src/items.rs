@@ -163,9 +163,6 @@ pub struct AgentMessageDisplay {
     pub block_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub cyber_trusted_access: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub check_trusted_contacts: Option<bool>,
 }
 

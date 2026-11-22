@@ -39,7 +39,6 @@ use codex_protocol::items::TurnItem;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::MultiAgentVersion;
 
 struct CapturedRootConversation {
     history: ContextManager,
@@ -268,10 +267,6 @@ impl LocalAgentControl {
         }
         let manager = self.runtime.upgrade().ok()?;
         let root_thread = manager.get_thread(root_thread_id).await.ok()?;
-        if root_thread.multi_agent_version() != Some(MultiAgentVersion::V2) {
-            return None;
-        }
-
         let worker_path = root_thread
             .enabled(codex_features::Feature::GuardianRootHandoffContext)
             .then(|| {

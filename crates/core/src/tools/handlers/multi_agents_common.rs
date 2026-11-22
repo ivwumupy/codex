@@ -12,7 +12,6 @@ use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ResponseInputItem;
-use codex_protocol::protocol::MultiAgentVersion;
 #[cfg(test)]
 use codex_protocol::protocol::SessionSource;
 #[cfg(test)]
@@ -84,7 +83,6 @@ pub(crate) fn record_collab_spawn_failure(
     call_id: &str,
     turn_id: &str,
     fork_mode: Option<&SpawnAgentForkMode>,
-    multi_agent_version: MultiAgentVersion,
 ) {
     let reason = match err.details() {
         CodexErrorDetails::AgentLimitReached { .. } => "limit_reached",
@@ -97,22 +95,10 @@ pub(crate) fn record_collab_spawn_failure(
         None => "none",
         Some(SpawnAgentForkMode::FullHistory) => "all",
     };
-    let multi_agent_version = match multi_agent_version {
-        MultiAgentVersion::Disabled => "disabled",
-        MultiAgentVersion::V1 => "v1",
-        MultiAgentVersion::V2 => "v2",
-    };
     telemetry
         .clone()
         .with_product_sku(product_sku)
-        .record_multi_agent_spawn_failure(
-            reason,
-            err,
-            call_id,
-            turn_id,
-            fork_mode,
-            multi_agent_version,
-        );
+        .record_multi_agent_spawn_failure(reason, err, call_id, turn_id, fork_mode, "v2");
 }
 
 pub(crate) fn collab_agent_error(agent_id: ThreadId, err: CodexErr) -> FunctionCallError {

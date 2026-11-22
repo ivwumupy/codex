@@ -619,7 +619,6 @@ fn image_generation_call_renders_saved_path() {
 
 fn session_configured_event(model: &str) -> ThreadSessionState {
     ThreadSessionState {
-        daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -918,30 +917,8 @@ fn ps_output_multiline_long_command_snapshot() {
 
 #[test]
 fn cyber_policy_error_event_snapshot() {
-    let cell = new_cyber_policy_error_event(crate::daybreak::Notice::Apply);
+    let cell = new_cyber_policy_error_event();
     let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
-    insta::assert_snapshot!(rendered);
-}
-
-#[test]
-fn cyber_policy_error_event_astra_snapshot() {
-    let cell = new_cyber_policy_error_event(crate::daybreak::Notice::Astra);
-    let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
-    insta::assert_snapshot!(rendered);
-}
-
-#[test]
-fn cyber_policy_error_event_available_snapshot() {
-    let rendered = [
-        crate::daybreak::Notice::Disabled,
-        crate::daybreak::Notice::Enabled,
-    ]
-    .into_iter()
-    .map(|notice| {
-        render_lines(&new_cyber_policy_error_event(notice).display_lines(/*width*/ 80)).join("\n")
-    })
-    .collect::<Vec<_>>()
-    .join("\n\n");
     insta::assert_snapshot!(rendered);
 }
 
@@ -956,7 +933,7 @@ fn safety_access_block_event_snapshot() {
 
 #[test]
 fn cyber_policy_error_event_narrow_snapshot() {
-    let cell = new_cyber_policy_error_event(crate::daybreak::Notice::Apply);
+    let cell = new_cyber_policy_error_event();
     let rendered = render_lines(&cell.display_lines(/*width*/ 36)).join("\n");
     insta::assert_snapshot!(rendered);
 }

@@ -440,7 +440,7 @@ stream_max_retries = 0
                         network: None,
                         file_system: params.permissions.file_system,
                     },
-                    scope: PermissionGrantScope::Turn,
+                    scope: PermissionGrantScope::Session,
                     strict_auto_review: None,
                 })?,
             )

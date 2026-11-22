@@ -94,7 +94,6 @@ use codex_protocol::protocol::TurnSettingsUpdate;
 use codex_protocol::protocol::TurnSettingsUpdateOutcome;
 use codex_protocol::request_user_input::RequestUserInputAnswer;
 use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_protocol::turn_input::CyberAccessProgram;
 use codex_protocol::turn_input::TurnInput;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -483,14 +482,12 @@ enum AgentMetadataCase {
     UserOverride,
 }
 
-#[test_case(AgentMetadataCase::ApprovedPlugin, Some(CyberAccessProgram::Standard); "approved plugin")]
-#[test_case(AgentMetadataCase::ApprovedPlugin, None; "approved plugin without an explicit program")]
-#[test_case(AgentMetadataCase::UserOverride, Some(CyberAccessProgram::Standard); "same-name user override")]
-#[test_case(AgentMetadataCase::NoHostOptIn, Some(CyberAccessProgram::Standard); "matching plugin without host opt-in")]
+#[test_case(AgentMetadataCase::ApprovedPlugin; "approved plugin")]
+#[test_case(AgentMetadataCase::UserOverride; "same-name user override")]
+#[test_case(AgentMetadataCase::NoHostOptIn; "matching plugin without host opt-in")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agent_metadata_is_only_sent_to_the_selected_plugin(
     case: AgentMetadataCase,
-    cyber_access_program: Option<CyberAccessProgram>,
 ) -> anyhow::Result<()> {
     skip_if_wine_exec!(
         Ok(()),
@@ -537,7 +534,6 @@ async fn agent_metadata_is_only_sent_to_the_selected_plugin(
         TurnStartOptions {
             root_turn_id: Some("original-root".into()),
             turn_trigger: Some("composer".into()),
-            cyber_access_program,
             ..Default::default()
         },
     )
@@ -548,10 +544,6 @@ async fn agent_metadata_is_only_sent_to_the_selected_plugin(
     assert_eq!(
         meta.get("x-codex-root-turn-id").cloned(),
         expect_private_metadata.then(|| json!("original-root"))
-    );
-    assert_eq!(
-        meta.get("x-codex-cyber-access-program").cloned(),
-        expect_private_metadata.then(|| json!(cyber_access_program))
     );
     Ok(())
 }
@@ -3667,7 +3659,6 @@ async fn stdio_image_responses_are_sanitized_for_text_only_model() -> anyhow::Re
                 additional_speed_tiers: Vec::new(),
                 service_tiers: Vec::new(),
                 default_service_tier: None,
-                available_access_programs: None,
                 upgrade: None,
                 model_messages: None,
                 include_skills_usage_instructions: false,

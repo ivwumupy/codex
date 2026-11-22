@@ -46,7 +46,6 @@ pub use tool_catalog_cache::McpToolCatalogCache;
 pub use tool_request_meta::McpToolRequestMetaHook;
 pub use tool_request_meta::McpToolRequestMetaProvider;
 pub use tools::ToolInfo;
-pub use trusted_access::TrustedAccessContext;
 
 /// Backward-compatible name for the shared Codex Apps tools runtime.
 pub type CodexAppsToolsCache = codex_connectors::ConnectorRuntimeManager<ToolInfo>;
@@ -151,4 +150,3 @@ pub(crate) mod server;
 mod tool_catalog_cache;
 mod tool_request_meta;
 pub(crate) mod tools;
-mod trusted_access;

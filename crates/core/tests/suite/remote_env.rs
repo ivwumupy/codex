@@ -4101,7 +4101,7 @@ async fn remote_request_permissions_grant_unblocks_later_remote_exec() -> Result
     };
     let approved_response = RequestPermissionsResponse {
         permissions: expected_permissions.clone(),
-        scope: PermissionGrantScope::Turn,
+        scope: PermissionGrantScope::Session,
         strict_auto_review: false,
     };
     let command = format!(

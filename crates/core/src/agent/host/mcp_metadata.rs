@@ -5,12 +5,11 @@ use codex_mcp::McpServerSource;
 use codex_mcp::ResolvedMcpCatalog;
 use codex_utils_path_uri::PathUri;
 
-/// Install in thread extension data to send `x-codex-root-turn-id` and
-/// `x-codex-cyber-access-program` to every tool on this plugin registration.
+/// Install in thread extension data to send `x-codex-root-turn-id` to tools on this registration.
 /// Only a registration from the host plugin manager in the `local` MCP environment can match.
 /// The full plugin config name (e.g. `agents@marketplace`), installed plugin root,
 /// server name, and loaded transport configuration must all match the effective registration.
-/// Core omits both keys without this attachment or an exact match. Same-name config
+/// Core omits the key without this attachment or an exact match. Same-name config
 /// overrides, thread-selected plugins, and extension registrations do not match.
 /// A matching registration receives JSON null for an unset value.
 /// Transport configuration may contain credentials and must not be logged.

@@ -1873,7 +1873,6 @@ server_notification_definitions! {
     /// Deprecated: Use `ContextCompaction` item type instead.
     ContextCompacted => "thread/compacted" (v2::ContextCompactedNotification),
     ModelRerouted => "model/rerouted" (v2::ModelReroutedNotification),
-    ModelVerification => "model/verification" (v2::ModelVerificationNotification),
     AuthRecoveryStarted => "modelProvider/authRecoveryStarted" (v2::AuthRecoveryNotification),
     AuthRecoveryCompleted => "modelProvider/authRecoveryCompleted" (v2::AuthRecoveryNotification),
     #[experimental("turn/moderationMetadata")]
@@ -2963,7 +2962,6 @@ mod tests {
                     agent_role: None,
                     git_info: None,
                     name: None,
-                    daybreak_enabled: None,
                     turns: Vec::new(),
                 },
                 model: "gpt-5".to_string(),
@@ -3026,7 +3024,6 @@ mod tests {
                         "agentRole": null,
                         "gitInfo": null,
                         "name": null,
-                        "daybreakEnabled": null,
                         "turns": []
                     },
                     "model": "gpt-5",

@@ -117,7 +117,6 @@ pub use session::is_basic_session_source;
 pub use session::prompt_cache_key_override_for_review_session;
 pub use settings::ReviewerConfig;
 pub use settings::ReviewerTurn;
-pub use settings::guardian_cyber_access_program;
 pub use settings::reviewer_permission_profile;
 pub use settings::reviewer_tool_policy;
 

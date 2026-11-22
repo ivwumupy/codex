@@ -6,7 +6,6 @@
 #![deny(clippy::print_stdout)]
 
 mod cli;
-mod daybreak;
 mod event_processor;
 mod event_processor_with_human_output;
 pub(crate) mod event_processor_with_jsonl_output;
@@ -79,7 +78,6 @@ use codex_core::config::resolve_profile_v2_config_path;
 use codex_core::find_thread_meta_by_name_str;
 use codex_core::path_utils;
 use codex_core::read_session_meta_line;
-use codex_features::Feature;
 use codex_feedback::CodexFeedback;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
@@ -217,7 +215,6 @@ struct ExecRunArgs {
     command: Option<ExecCommand>,
     config: Config,
     resume_approvals_reviewer_override: Option<codex_app_server_protocol::ApprovalsReviewer>,
-    daybreak_override: Option<bool>,
     exec_span: tracing::Span,
     images: Vec<PathBuf>,
     json_mode: bool,
@@ -227,7 +224,6 @@ struct ExecRunArgs {
     prompt: Option<String>,
     stderr_with_ansi: bool,
     thread_source: ThreadSource,
-    cyber_access_program: Option<codex_app_server_protocol::CyberAccessProgram>,
 }
 
 struct ManagedExecWorktree {
@@ -268,7 +264,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         strict_config,
         shared,
         thread_source,
-        cyber_access_program,
         skip_git_repo_check: _,
         trust,
         ephemeral,
@@ -281,17 +276,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         output_schema: output_schema_path,
         config_overrides,
     } = cli;
-    if cyber_access_program.is_some() {
-        match command.as_ref() {
-            Some(ExecCommand::Review(_)) => {
-                anyhow::bail!("--cyber-access-program is not supported with `codex exec review`");
-            }
-            Some(ExecCommand::Fork(args)) if args.prompt.is_none() && prompt.is_none() => {
-                anyhow::bail!("Forking with --cyber-access-program requires a prompt");
-            }
-            Some(ExecCommand::Resume(_) | ExecCommand::Fork(_)) | None => {}
-        }
-    }
     let shared = shared.into_inner();
     let SharedCliOptions {
         images,
@@ -564,10 +548,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             "warning: Untrusted project-local configuration is disabled. Run `codex exec --trust` to allow project configuration and MCP servers for this and future chats in the project, including MCP commands outside the sandbox. Explicitly untrusted projects must have their trust setting updated first."
         );
     }
-    let daybreak_override = cli_kv_overrides
-        .iter()
-        .any(|(key, _)| key == "daybreak")
-        .then_some(config.daybreak_enabled);
     let resume_approvals_reviewer_override = cli_kv_overrides
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")
@@ -685,7 +665,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         command,
         config,
         resume_approvals_reviewer_override,
-        daybreak_override,
         exec_span: exec_span.clone(),
         images,
         json_mode,
@@ -695,7 +674,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         prompt,
         stderr_with_ansi,
         thread_source: thread_source.map(Into::into).unwrap_or(ThreadSource::User),
-        cyber_access_program: cyber_access_program.map(Into::into),
     })
     .instrument(exec_span)
     .await
@@ -748,7 +726,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         command,
         config,
         resume_approvals_reviewer_override,
-        daybreak_override,
         exec_span,
         images,
         json_mode,
@@ -758,7 +735,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         prompt,
         stderr_with_ansi,
         thread_source,
-        cyber_access_program,
     } = args;
 
     let mut event_processor: Box<dyn EventProcessor> = match json_mode {
@@ -882,7 +858,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             anyhow::anyhow!("failed to initialize in-process app-server client: {err}")
         })?;
 
-    let mut daybreak_enabled = config.daybreak_enabled;
     // Resolve resume and fork through existing app-server thread lifecycle APIs.
     let (history_mode, fallback_session_configured) = if let Some(ExecCommand::Resume(args)) =
         command.as_ref()
@@ -907,9 +882,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             let session_configured =
                 session_configured_from_thread_resume_response(&response, &config)
                     .map_err(anyhow::Error::msg)?;
-            daybreak_enabled = daybreak_override
-                .or(response.thread.daybreak_enabled)
-                .unwrap_or(false);
             (response.thread.history_mode, session_configured)
         } else {
             let response = start_thread(&client, &mut request_ids, &config, &thread_source)
@@ -932,24 +904,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             resolve_resume_thread_id(&client, &config, state_db.as_ref(), &source_args)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Session not found: {}", args.session_id))?;
-        let source_daybreak = if config.ephemeral && daybreak_override.is_none() {
-            let response: ThreadReadResponse = send_request_with_response(
-                &client,
-                ClientRequest::ThreadRead {
-                    request_id: request_ids.next(),
-                    params: ThreadReadParams {
-                        thread_id: source_thread_id.clone(),
-                        include_turns: false,
-                    },
-                },
-                "thread/read",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            response.thread.daybreak_enabled
-        } else {
-            None
-        };
         let permissions = permissions_selection_from_config(&config);
         let sandbox = permissions.is_none().then(|| {
             sandbox_mode_from_permission_profile(
@@ -1002,10 +956,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             response.reasoning_effort,
         )
         .map_err(anyhow::Error::msg)?;
-        daybreak_enabled = daybreak_override
-            .or(response.thread.daybreak_enabled)
-            .or(source_daybreak)
-            .unwrap_or(false);
         (response.thread.history_mode, session_configured)
     } else {
         let response = start_thread(&client, &mut request_ids, &config, &thread_source)
@@ -1069,24 +1019,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             items,
             output_schema,
         } => {
-            let cyber_access_program = match cyber_access_program {
-                Some(program) => Some(program),
-                None if config.features.enabled(Feature::CliDaybreak) => {
-                    daybreak::program_for_turn(
-                        &config.features,
-                        &client,
-                        &mut request_ids,
-                        &session_configured.model,
-                        &session_configured.model_provider_id,
-                        config
-                            .model_providers
-                            .get(&session_configured.model_provider_id),
-                        daybreak_enabled,
-                    )
-                    .await?
-                }
-                None => None,
-            };
             let response: TurnStartResponse = send_request_with_response(
                 &client,
                 ClientRequest::TurnStart {
@@ -1119,7 +1051,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                         output_schema,
                         collaboration_mode: None,
                         multi_agent_mode: None,
-                        cyber_access_program,
                     },
                 },
                 "turn/start",
@@ -1320,7 +1251,6 @@ fn thread_start_params_from_config(
         permissions,
         config: thread_config_overrides_from_config(config),
         ephemeral: Some(config.ephemeral),
-        daybreak_enabled: (config.daybreak_enabled && !config.ephemeral).then_some(true),
         history_mode: (!config.ephemeral).then_some(ThreadHistoryMode::Paginated),
         thread_source: Some(thread_source.clone()),
         ..ThreadStartParams::default()
@@ -1571,9 +1501,6 @@ fn should_process_notification(
             notification.thread_id == thread_id && notification.turn_id == turn_id
         }
         ServerNotification::ModelRerouted(notification) => {
-            notification.thread_id == thread_id && notification.turn_id == turn_id
-        }
-        ServerNotification::ModelVerification(notification) => {
             notification.thread_id == thread_id && notification.turn_id == turn_id
         }
         ServerNotification::ThreadTokenUsageUpdated(notification) => {

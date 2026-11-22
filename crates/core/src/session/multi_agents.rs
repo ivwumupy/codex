@@ -7,7 +7,6 @@ use codex_prompts::ResolvedModelMessages;
 use codex_prompts::ResolvedMultiAgentMessages;
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 
@@ -15,10 +14,6 @@ const HOSTED_MULTI_AGENT_SKILL_GUIDANCE: &str = "Before calling any multi-agent 
 
 pub(super) fn usage_hint_text(step_context: &StepContext) -> Option<MultiAgentRoleInstructions> {
     let turn_context = step_context.turn.as_ref();
-    if turn_context.multi_agent_version != MultiAgentVersion::V2 {
-        return None;
-    }
-
     let multi_agent_messages =
         ResolvedModelMessages::from_model(&step_context.settings.model_info).multi_agent();
     let snapshot = resolve_usage_hints(
@@ -82,10 +77,6 @@ pub(crate) fn resolve_usage_hints(
 pub(crate) fn effective_multi_agent_mode(step_context: &StepContext) -> Option<MultiAgentMode> {
     let turn_context = step_context.turn.as_ref();
     let settings = &step_context.settings;
-    if turn_context.multi_agent_version != MultiAgentVersion::V2 {
-        return None;
-    }
-
     let config = &turn_context.config.multi_agent_v2;
     let model_messages = if config.disable_native_tools {
         ResolvedModelMessages::bundled()

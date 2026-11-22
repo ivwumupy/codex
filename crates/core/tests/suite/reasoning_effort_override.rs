@@ -519,7 +519,6 @@ async fn reasoning_effort_override_recovery_sends_latest_tail_update(
                 },
                 trace: None,
                 prompt_cache_ttl: None,
-                cyber_access_program: None,
             })
             .await?,
         StartIfIdleSubmission::Started {

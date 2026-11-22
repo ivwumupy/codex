@@ -13,7 +13,7 @@ use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnEnvironment;
 use crate::tools::handlers::EffectiveAdditionalPermissions;
-use crate::tools::handlers::apply_granted_turn_permissions;
+use crate::tools::handlers::apply_granted_session_permissions;
 use crate::tools::handlers::file_system_sandbox_policy_context_for_cwd;
 use crate::tools::handlers::implicit_granted_permissions;
 use crate::tools::handlers::normalize_and_validate_additional_permissions;
@@ -219,7 +219,7 @@ impl<'a> ParsedExecCommand<'a> {
         let sandbox_context =
             turn_environment.sandbox_context(/*additional_permissions*/ None);
         let permission_context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, &cwd);
-        let mut permissions = apply_granted_turn_permissions(
+        let mut permissions = apply_granted_session_permissions(
             step,
             turn_environment,
             &cwd,

@@ -472,7 +472,7 @@ async fn request_permissions_tool_is_auto_denied_when_granular_request_permissio
     Ok(())
 }
 
-#[test_case("allow" ; "guardian approval grants the requested permissions")]
+#[test_case("allow" ; "guardian turn approval grants no permissions")]
 #[test_case("deny" ; "guardian denial grants no permissions")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_permissions_auto_review_applies_guardian_decision(outcome: &str) -> Result<()> {
@@ -498,7 +498,6 @@ async fn request_permissions_auto_review_applies_guardian_decision(outcome: &str
     let requested_dir = test.workspace_path("guardian-requested-permissions");
     fs::create_dir_all(&requested_dir)?;
     let requested_permissions = requested_directory_write_permissions(&requested_dir);
-    let normalized_permissions = requested_directory_write_permissions(&requested_dir);
     let call_id = "guardian-request-permissions";
     let reason = "Guardian should review access to the requested directory";
     let responses = mount_sse_sequence(
@@ -573,15 +572,10 @@ async fn request_permissions_auto_review_applies_guardian_decision(outcome: &str
         .find_map(|request| request.function_call_output_text(call_id))
         .context("expected request_permissions output")?;
     let actual: RequestPermissionsResponse = serde_json::from_str(&output)?;
-    let expected_permissions = if outcome == "allow" {
-        normalized_permissions
-    } else {
-        RequestPermissionProfile::default()
-    };
     assert_eq!(
         actual,
         RequestPermissionsResponse {
-            permissions: expected_permissions,
+            permissions: RequestPermissionProfile::default(),
             scope: PermissionGrantScope::Turn,
             strict_auto_review: false,
         }
@@ -1324,7 +1318,7 @@ async fn request_permissions_grants_apply_to_later_exec_command_calls() -> Resul
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
                 permissions: normalized_requested_permissions.clone(),
-                scope: PermissionGrantScope::Turn,
+                scope: PermissionGrantScope::Session,
                 strict_auto_review: false,
             },
         })
@@ -1442,7 +1436,7 @@ async fn request_permissions_preapprove_explicit_exec_permissions_outside_on_req
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
                 permissions: normalized_requested_permissions,
-                scope: PermissionGrantScope::Turn,
+                scope: PermissionGrantScope::Session,
                 strict_auto_review: false,
             },
         })
@@ -1657,7 +1651,7 @@ async fn request_permissions_grants_apply_to_later_exec_command_calls_without_in
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
                 permissions: normalized_requested_permissions.clone(),
-                scope: PermissionGrantScope::Turn,
+                scope: PermissionGrantScope::Session,
                 strict_auto_review: false,
             },
         })
@@ -1789,7 +1783,7 @@ async fn partial_request_permissions_grants_do_not_preapprove_new_permissions() 
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
                 permissions: granted_permissions.clone(),
-                scope: PermissionGrantScope::Turn,
+                scope: PermissionGrantScope::Session,
                 strict_auto_review: false,
             },
         })
@@ -2297,16 +2291,23 @@ async fn denied_child_permissions_require_fresh_approval(
     let (decision, reason) = match (tool, event) {
         (WriteTool::ExecCommand, EventMsg::ExecApprovalRequest(approval)) => {
             assert_eq!(approval.call_id, WRITE_CALL_ID);
-            let expected_permissions = PermissionProfile {
-                file_system: Some(FileSystemPermissions {
-                    entries: vec![
-                        FileSystemSandboxEntry::new(target.into(), FileSystemAccessMode::Write),
-                        FileSystemSandboxEntry::new(root.into(), FileSystemAccessMode::Write),
-                        FileSystemSandboxEntry::new(denied_root.into(), FileSystemAccessMode::Deny),
-                    ],
-                    glob_scan_max_depth: None,
-                }),
-                ..Default::default()
+            let expected_permissions = if scope == PermissionGrantScope::Turn {
+                fresh_permissions.into()
+            } else {
+                PermissionProfile {
+                    file_system: Some(FileSystemPermissions {
+                        entries: vec![
+                            FileSystemSandboxEntry::new(target.into(), FileSystemAccessMode::Write),
+                            FileSystemSandboxEntry::new(root.into(), FileSystemAccessMode::Write),
+                            FileSystemSandboxEntry::new(
+                                denied_root.into(),
+                                FileSystemAccessMode::Deny,
+                            ),
+                        ],
+                        glob_scan_max_depth: None,
+                    }),
+                    ..Default::default()
+                }
             };
             assert_eq!(approval.additional_permissions, Some(expected_permissions));
             (
@@ -2348,6 +2349,11 @@ async fn denied_child_permissions_require_fresh_approval(
             .function_call_output_text(PERMISSIONS_CALL_ID)
             .context("request_permissions response")?,
     )?;
-    assert_eq!(recorded_grant, approved_response);
+    if scope == PermissionGrantScope::Session {
+        assert_eq!(recorded_grant, approved_response);
+    } else {
+        assert!(recorded_grant.permissions.is_empty());
+        assert_eq!(recorded_grant.scope, PermissionGrantScope::Turn);
+    }
     Ok(())
 }

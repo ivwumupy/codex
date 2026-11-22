@@ -115,8 +115,6 @@ pub struct RecoverTurnRequest {
     pub trace: Option<W3cTraceContext>,
     /// Cache lifetime to reapply when resuming this turn.
     pub prompt_cache_ttl: Option<PromptCacheTtl>,
-    /// Program recorded in the interrupted turn's persisted context.
-    pub cyber_access_program: Option<CyberAccessProgram>,
 }
 
 impl TurnInputRequest {
@@ -207,17 +205,6 @@ pub enum TurnInputMode {
     Steer { expected_turn_id: String },
 }
 
-/// Requested cyber treatment for an OpenAI model turn.
-/// Authorization and model-tier restrictions remain server-owned.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum CyberAccessProgram {
-    Standard,
-    DaybreakBlue,
-    DaybreakRed,
-}
-
 /// Minimum lifetime requested for new prompt cache entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum PromptCacheTtl {
@@ -254,9 +241,6 @@ pub struct TurnStartOptions {
     pub initiating_agent_path: Option<AgentPath>,
     /// Causal root turn lineage recorded if this request starts a new turn.
     pub root_turn_id: Option<String>,
-    /// Explicit cyber treatment for this turn. Omission preserves the backend's
-    /// automatic behavior.
-    pub cyber_access_program: Option<CyberAccessProgram>,
 }
 
 /// What Core did with input submitted through `start_or_steer_turn`.

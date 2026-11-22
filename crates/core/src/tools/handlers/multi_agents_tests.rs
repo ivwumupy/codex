@@ -42,7 +42,6 @@ use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AgentStatus;
-use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::FileSystemSandboxPolicy;
 use codex_protocol::protocol::InterAgentCommunication;
@@ -145,7 +144,6 @@ model_reasoning_effort = "minimal"
 }
 
 fn set_turn_config(turn: &mut TurnContext, config: crate::config::Config) {
-    turn.multi_agent_version = config.multi_agent_version_from_features();
     turn.config = Arc::new(config);
 }
 
@@ -209,7 +207,6 @@ async fn multi_agent_v2_spawn_fork_turns_all_applies_agent_type_override() {
         .expect("test config should allow feature update");
     let mut turn = turn;
     turn.config = Arc::new(config);
-    turn.multi_agent_version = codex_protocol::protocol::MultiAgentVersion::V2;
 
     SpawnAgentHandlerV2::default()
         .handle(invocation(
@@ -359,7 +356,6 @@ async fn multi_agent_v2_spawn_without_history_allows_agent_type_override() {
         .expect("test config should allow feature update");
     let mut turn = turn;
     turn.config = Arc::new(config);
-    turn.multi_agent_version = codex_protocol::protocol::MultiAgentVersion::V2;
     let parent_provider_id = turn.config.model_provider_id.clone();
 
     let output = SpawnAgentHandlerV2::default()
@@ -2871,11 +2867,6 @@ async fn build_agent_spawn_config_uses_captured_step_settings_and_turn_context_v
         .permissions
         .set_permission_profile(permission_profile)
         .expect("permission profile set");
-    Arc::make_mut(&mut turn.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("approval policy set");
 
     let parent_config = Arc::make_mut(&mut turn.config);
     parent_config
@@ -2925,11 +2916,6 @@ async fn build_agent_spawn_config_uses_captured_step_settings_and_turn_context_v
     {
         expected.cwd = turn.cwd.clone();
     }
-    expected
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("approval policy set");
     assert_eq!(config, expected);
 }
 
@@ -2977,11 +2963,6 @@ async fn build_agent_resume_config_clears_base_instructions() {
         model: turn.model_info().slug.clone(),
     });
     turn.config = Arc::new(base_config);
-    Arc::make_mut(&mut turn.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("approval policy set");
     let environment_permission_profile =
         if turn.permission_profile() == PermissionProfile::read_only() {
             PermissionProfile::workspace_write()
@@ -3013,10 +2994,5 @@ async fn build_agent_resume_config_clears_base_instructions() {
     {
         expected.cwd = turn.cwd.clone();
     }
-    expected
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("approval policy set");
     assert_eq!(config, expected);
 }

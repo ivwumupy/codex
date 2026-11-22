@@ -1498,7 +1498,10 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
             RequirementSource::LegacyManagedConfigTomlFromMdm,
         ));
         let mut requirements_toml = config.config_layer_stack.requirements_toml().clone();
-        requirements_toml.permissions.get_or_insert_default().network = Some(Box::new(codex_config::NetworkRequirementsToml {
+        requirements_toml
+            .permissions
+            .get_or_insert_default()
+            .network = Some(Box::new(codex_config::NetworkRequirementsToml {
             enabled: Some(true),
             ..Default::default()
         }));
@@ -3050,85 +3053,6 @@ async fn prepares_resumed_history_before_installing_it() {
     );
 }
 
-#[test]
-fn resolve_multi_agent_version_handles_unset_and_legacy_history() {
-    let thread_id = ThreadId::default();
-
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Forked(vec![session_meta_item(
-                thread_id,
-                Some(MultiAgentVersion::V1)
-            )]),
-            None,
-        ),
-        Some(MultiAgentVersion::Disabled)
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::New,
-            /*inherited_multi_agent_version*/ None
-        ),
-        None
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Resumed(ResumedHistory {
-                history_revision: None,
-                conversation_id: thread_id,
-                history: Arc::new(Vec::new()),
-                rollout_path: None,
-            }),
-            /*inherited_multi_agent_version*/ None,
-        ),
-        None
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Resumed(ResumedHistory {
-                history_revision: None,
-                conversation_id: thread_id,
-                history: Arc::new(Vec::new()),
-                rollout_path: None,
-            }),
-            Some(MultiAgentVersion::V2),
-        ),
-        Some(MultiAgentVersion::V2)
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Resumed(ResumedHistory {
-                history_revision: None,
-                conversation_id: thread_id,
-                history: Arc::new(vec![session_meta_item(
-                    thread_id,
-                    Some(MultiAgentVersion::Disabled)
-                )]),
-                rollout_path: None,
-            }),
-            Some(MultiAgentVersion::V2),
-        ),
-        Some(MultiAgentVersion::Disabled)
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Forked(vec![session_meta_item(
-                thread_id,
-                Some(MultiAgentVersion::V2)
-            )]),
-            Some(MultiAgentVersion::Disabled),
-        ),
-        Some(MultiAgentVersion::Disabled)
-    );
-    assert_eq!(
-        resolve_multi_agent_version(
-            &InitialHistory::Forked(Vec::new()),
-            /*inherited_multi_agent_version*/ None
-        ),
-        None
-    );
-}
-
 #[tokio::test]
 async fn record_initial_history_new_defers_initial_context_until_first_turn() {
     let (session, _turn_context) = make_session_and_context().await;
@@ -3139,21 +3063,6 @@ async fn record_initial_history_new_defers_initial_context_until_first_turn() {
     assert_eq!(raw_history_items(&history), Vec::<ResponseItem>::new());
     assert!(session.reference_context_item().await.is_none());
     assert_eq!(session.previous_turn_settings().await, None);
-}
-
-fn session_meta_item(
-    thread_id: ThreadId,
-    multi_agent_version: Option<MultiAgentVersion>,
-) -> RolloutItem {
-    RolloutItem::SessionMeta(Box::new(SessionMetaLine {
-        meta: SessionMeta {
-            session_id: thread_id.into(),
-            id: thread_id,
-            multi_agent_version,
-            ..SessionMeta::default()
-        },
-        git: None,
-    }))
 }
 
 #[tokio::test]
@@ -4327,7 +4236,6 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         comp_hash: None,
         collaboration_mode: Some(turn_context.collaboration_mode()),
         multi_agent_version: None,
-        cyber_access_program: None,
         effort: turn_context.reasoning_effort().cloned(),
         summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
     };
@@ -4382,7 +4290,6 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         Some(PreviousTurnSettings {
             model: previous_model.to_string(),
             comp_hash: None,
-            cyber_access_program: None,
         })
     );
     assert_eq!(raw_history_items(&history), Vec::<ResponseItem>::new());
@@ -5138,10 +5045,7 @@ async fn session_settings_custom_service_tier_update_preserves_literal_value() {
         )
         .expect("custom service tier update should apply");
 
-    assert_eq!(
-        updated.step_settings.service_tier,
-        Some("fast".to_string())
-    );
+    assert_eq!(updated.step_settings.service_tier, Some("fast".to_string()));
 }
 
 pub(crate) async fn make_session_configuration_for_tests() -> SessionConfiguration {
@@ -6031,13 +5935,11 @@ async fn compaction_persists_resume_metadata_and_companion_records() {
     let previous_turn_settings = PreviousTurnSettings {
         model: "previous-model".to_string(),
         comp_hash: Some("comp-hash".to_string()),
-        cyber_access_program: None,
     };
     session
         .set_previous_turn_settings(Some(previous_turn_settings.clone()))
         .await;
 
-    session.multi_agent_version = std::sync::OnceLock::from(MultiAgentVersion::V2);
     let expected = CompactionResumeMetadata {
         rejected_audio_file_ids: Default::default(),
         dynamic_tools: Some(Box::new(DynamicToolsSnapshot {
@@ -6803,7 +6705,6 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         tool_policy: Arc::default(),
         windows_sandbox_proxy_settings_mode:
             codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
-        multi_agent_version: OnceLock::from(config.multi_agent_version_from_features()),
         mcp_refresh: McpRefresh::new(),
         mcp_tool_approval_metadata: Default::default(),
         mcp_elicitation_reviewer_handle: OnceLock::new(),
@@ -6856,7 +6757,6 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         &session_telemetry,
         session_configuration.provider.clone(),
         &session_configuration,
-        config.multi_agent_version_from_features(),
         per_turn_config,
         Arc::new(super::step_settings::ResolvedStepSettings::new(
             Arc::clone(&session_configuration.step_settings),
@@ -7019,7 +6919,6 @@ async fn make_session_with_config_and_rx(
         codex_rollout_trace::ThreadTraceContext::disabled(),
         /*attestation_provider*/ None,
         /*external_time_provider*/ None,
-        Some(config.multi_agent_version_from_features()),
         GitEnrichmentPolicy::Fresh,
         codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
     )
@@ -7165,7 +7064,6 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         codex_rollout_trace::ThreadTraceContext::disabled(),
         /*attestation_provider*/ None,
         /*external_time_provider*/ None,
-        Some(config.multi_agent_version_from_features()),
         GitEnrichmentPolicy::Fresh,
         codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
     )
@@ -7321,116 +7219,28 @@ async fn notify_request_permissions_response_ignores_unmatched_call_id() {
 }
 
 #[tokio::test]
-async fn record_granted_request_permissions_for_turn_uses_originating_turn() {
+async fn only_session_scope_records_grants_for_the_requested_environment() {
     let (session, turn_context) = make_session_and_context().await;
-
-    let (_other_session, current_turn_context) = make_session_and_context().await;
-
-    let requested_permissions = RequestPermissionProfile {
-        network: Some(codex_protocol::models::NetworkPermissions {
-            enabled: Some(true),
-        }),
-        ..RequestPermissionProfile::default()
-    };
-    session.record_granted_request_permissions_for_turn(
-        &codex_protocol::request_permissions::RequestPermissionsResponse {
-            permissions: requested_permissions.clone(),
-            scope: PermissionGrantScope::Turn,
-            strict_auto_review: false,
+    let mut response = codex_protocol::request_permissions::RequestPermissionsResponse {
+        permissions: RequestPermissionProfile {
+            network: Some(codex_protocol::models::NetworkPermissions {
+                enabled: Some(true),
+            }),
+            ..RequestPermissionProfile::default()
         },
-        codex_exec_server::LOCAL_ENVIRONMENT_ID,
-        &turn_context,
-    );
-
-    assert_eq!(
-        turn_context.granted_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID),
-        Some(requested_permissions.into())
-    );
-    assert_eq!(
-        current_turn_context.granted_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID),
-        None
-    );
-}
-
-#[tokio::test]
-async fn request_permission_grants_are_environment_keyed() {
-    let (session, turn_context) = make_session_and_context().await;
-
-    let requested_permissions = RequestPermissionProfile {
-        network: Some(codex_protocol::models::NetworkPermissions {
-            enabled: Some(true),
-        }),
-        ..RequestPermissionProfile::default()
+        scope: PermissionGrantScope::Turn,
+        strict_auto_review: false,
     };
-    session.record_granted_request_permissions_for_turn(
-        &codex_protocol::request_permissions::RequestPermissionsResponse {
-            permissions: requested_permissions.clone(),
-            scope: PermissionGrantScope::Turn,
-            strict_auto_review: false,
-        },
-        "remote",
-        &turn_context,
-    );
+    session.record_session_permission_grant(&response, "remote");
+    assert_eq!(turn_context.granted_permissions("remote"), None);
 
+    response.scope = PermissionGrantScope::Session;
+    session.record_session_permission_grant(&response, "remote");
     assert_eq!(
         turn_context.granted_permissions("remote"),
-        Some(requested_permissions.clone().into())
+        Some(response.permissions.into())
     );
     assert_eq!(turn_context.granted_permissions("local"), None);
-
-    session.record_granted_request_permissions_for_turn(
-        &codex_protocol::request_permissions::RequestPermissionsResponse {
-            permissions: requested_permissions.clone(),
-            scope: PermissionGrantScope::Session,
-            strict_auto_review: false,
-        },
-        "remote",
-        &turn_context,
-    );
-
-    assert_eq!(
-        session
-            .services
-            .granted_permissions_by_environment_id
-            .lock()
-            .expect("session permission grants lock poisoned")
-            .get("remote")
-            .cloned(),
-        Some(requested_permissions.into())
-    );
-    assert_eq!(
-        session
-            .services
-            .granted_permissions_by_environment_id
-            .lock()
-            .expect("session permission grants lock poisoned")
-            .get("local")
-            .cloned(),
-        None
-    );
-}
-
-#[tokio::test]
-async fn enable_strict_auto_review_for_turn_uses_originating_turn() {
-    let (session, turn_context) = make_session_and_context().await;
-
-    let requested_permissions = RequestPermissionProfile {
-        network: Some(codex_protocol::models::NetworkPermissions {
-            enabled: Some(true),
-        }),
-        ..RequestPermissionProfile::default()
-    };
-    session.record_granted_request_permissions_for_turn(
-        &codex_protocol::request_permissions::RequestPermissionsResponse {
-            permissions: requested_permissions,
-            scope: PermissionGrantScope::Turn,
-            strict_auto_review: true,
-        },
-        codex_exec_server::LOCAL_ENVIRONMENT_ID,
-        &turn_context,
-    );
-
-    assert!(turn_context.strict_auto_review_enabled());
 }
 
 #[test]
@@ -7476,15 +7286,14 @@ async fn request_permissions_emits_event_when_granular_policy_allows_requests() 
     let turn_context_mut = Arc::get_mut(&mut turn_context).expect("single thread settings ref");
     Arc::make_mut(&mut turn_context_mut.config)
         .permissions
-        .approval_policy
-        .set(AskForApproval::Granular(GranularApprovalConfig {
+        .approval_policy =
+        codex_config::Constrained::allow_any(AskForApproval::Granular(GranularApprovalConfig {
             sandbox_approval: true,
             rules: true,
             skill_approval: true,
             request_permissions: true,
             mcp_elicitations: true,
-        }))
-        .expect("test setup should allow updating approval policy");
+        }));
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -7555,7 +7364,15 @@ async fn request_permissions_emits_event_when_granular_policy_allows_requests() 
         .expect("request_permissions future timed out")
         .expect("request_permissions join error");
 
-    assert_eq!(response, Some(expected_response));
+    assert_eq!(
+        response,
+        Some(
+            codex_protocol::request_permissions::RequestPermissionsResponse {
+                permissions: RequestPermissionProfile::default(),
+                ..expected_response
+            }
+        )
+    );
 }
 
 #[tokio::test]
@@ -7572,15 +7389,14 @@ async fn request_permissions_tool_resolves_legacy_paths_against_selected_environ
     let turn_context_mut = Arc::get_mut(&mut turn_context).expect("single thread settings ref");
     Arc::make_mut(&mut turn_context_mut.config)
         .permissions
-        .approval_policy
-        .set(AskForApproval::Granular(GranularApprovalConfig {
+        .approval_policy =
+        codex_config::Constrained::allow_any(AskForApproval::Granular(GranularApprovalConfig {
             sandbox_approval: true,
             rules: true,
             skill_approval: true,
             request_permissions: true,
             mcp_elicitations: true,
-        }))
-        .expect("test setup should allow updating approval policy");
+        }));
     let current_environment = turn_context_mut
         .initial_environments
         .primary()
@@ -7758,15 +7574,14 @@ async fn request_permissions_response_materializes_session_cwd_grants_before_rec
     let turn_context_mut = Arc::get_mut(&mut turn_context).expect("single thread settings ref");
     Arc::make_mut(&mut turn_context_mut.config)
         .permissions
-        .approval_policy
-        .set(AskForApproval::Granular(GranularApprovalConfig {
+        .approval_policy =
+        codex_config::Constrained::allow_any(AskForApproval::Granular(GranularApprovalConfig {
             sandbox_approval: true,
             rules: true,
             skill_approval: true,
             request_permissions: true,
             mcp_elicitations: true,
-        }))
-        .expect("test setup should allow updating approval policy");
+        }));
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -7867,22 +7682,24 @@ async fn request_permissions_response_materializes_session_cwd_grants_before_rec
     );
 }
 
+#[test_case(AskForApproval::Never; "never")]
+#[test_case(AskForApproval::Granular(GranularApprovalConfig {
+    sandbox_approval: true,
+    rules: true,
+    skill_approval: true,
+    request_permissions: false,
+    mcp_elicitations: true,
+}); "granular")]
 #[tokio::test]
-async fn request_permissions_is_auto_denied_when_granular_policy_blocks_tool_requests() {
+async fn request_permissions_is_auto_denied_when_policy_blocks_tool_requests(
+    approval_policy: AskForApproval,
+) {
     let (session, mut turn_context, rx) = make_session_and_context_with_rx().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let turn_context_mut = Arc::get_mut(&mut turn_context).expect("single thread settings ref");
     Arc::make_mut(&mut turn_context_mut.config)
         .permissions
-        .approval_policy
-        .set(AskForApproval::Granular(GranularApprovalConfig {
-            sandbox_approval: true,
-            rules: true,
-            skill_approval: true,
-            request_permissions: false,
-            mcp_elicitations: true,
-        }))
-        .expect("test setup should allow updating approval policy");
+        .approval_policy = codex_config::Constrained::allow_any(approval_policy);
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -7924,7 +7741,7 @@ async fn request_permissions_is_auto_denied_when_granular_policy_blocks_tool_req
         tokio::time::timeout(StdDuration::from_millis(100), rx.recv())
             .await
             .is_err(),
-        "request_permissions should not emit an event when granular.request_permissions is false"
+        "request_permissions should not emit an event when the policy disallows it"
     );
 }
 
@@ -9110,7 +8927,6 @@ where
         tool_policy: Arc::default(),
         windows_sandbox_proxy_settings_mode:
             codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
-        multi_agent_version: OnceLock::from(config.multi_agent_version_from_features()),
         mcp_refresh: McpRefresh::new(),
         mcp_tool_approval_metadata: Default::default(),
         mcp_elicitation_reviewer_handle: OnceLock::new(),
@@ -9163,7 +8979,6 @@ where
         &session_telemetry,
         session_configuration.provider.clone(),
         &session_configuration,
-        config.multi_agent_version_from_features(),
         per_turn_config,
         Arc::new(super::step_settings::ResolvedStepSettings::new(
             Arc::clone(&session_configuration.step_settings),
@@ -9961,7 +9776,6 @@ async fn capability_discovery_uses_environment_permission_profile() {
         .set_permission_profile(PermissionProfile::Disabled)
         .expect("unrestricted permission profile should be allowed");
     config.permissions.windows_sandbox_mode = Some(WindowsSandboxModeToml::Unelevated);
-    turn_context.windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let mut environment = turn_context
         .initial_environments
         .primary()
@@ -10007,7 +9821,6 @@ async fn capability_discovery_uses_environment_permission_profile() {
             /*resolved_roots*/ &[],
             &turn_context.initial_environments,
             /*v2_snapshots*/ None,
-            /*skill_turn*/ None,
         )
         .await;
     let discovery = discovery.expect("restricted environment should trigger capability discovery");
@@ -10713,7 +10526,7 @@ async fn build_initial_context_adds_multi_agent_v2_subagent_usage_hint_as_develo
 }
 
 #[tokio::test]
-async fn build_initial_context_omits_multi_agent_v2_usage_hints_when_feature_disabled() {
+async fn build_initial_context_uses_multi_agent_v2_guidance_without_opt_in() {
     let (session, turn_context) =
         make_multi_agent_v2_usage_hint_test_session(/*enable_multi_agent_v2*/ false).await;
 
@@ -10721,13 +10534,9 @@ async fn build_initial_context_omits_multi_agent_v2_usage_hints_when_feature_dis
 
     let developer_messages = developer_message_texts(&initial_context);
     assert!(
-        !developer_messages.iter().any(|message| {
-            matches!(
-                message.as_slice(),
-                ["Root guidance."] | ["Subagent guidance."]
-            )
-        }),
-        "did not expect multi-agent v2 usage hint developer messages, got {developer_messages:?}"
+        developer_messages
+            .iter()
+            .any(|message| message.as_slice() == ["Root guidance."])
     );
 }
 
@@ -11095,7 +10904,6 @@ async fn build_initial_context_uses_retained_step_after_model_change() {
         .set_previous_turn_settings(Some(PreviousTurnSettings {
             model: "base-model".to_string(),
             comp_hash: None,
-            cyber_access_program: None,
         }))
         .await;
     session
@@ -11198,7 +11006,6 @@ async fn build_initial_context_prepends_model_switch_message() {
     let previous_turn_settings = PreviousTurnSettings {
         model: "previous-regular-model".to_string(),
         comp_hash: None,
-        cyber_access_program: None,
     };
 
     session
@@ -11252,7 +11059,6 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
         .set_previous_turn_settings(Some(PreviousTurnSettings {
             model: previous_context.model_info().slug.clone(),
             comp_hash: None,
-            cyber_access_program: None,
         }))
         .await;
     let turn_context = Arc::new(turn_context);
@@ -11786,7 +11592,6 @@ async fn interrupting_compaction_fallback_retains_last_known_step_context() {
         .set_previous_turn_settings(Some(PreviousTurnSettings {
             model: "gpt-5.4".to_string(),
             comp_hash: Some("old".to_string()),
-            cyber_access_program: None,
         }))
         .await;
     session

@@ -1,4 +1,4 @@
-//! Request-scoped settings and capabilities, with live grants bound to the originating turn.
+//! Request-scoped settings and capabilities, with access to current session grants.
 
 use std::sync::Arc;
 
@@ -65,7 +65,7 @@ impl StepContext {
             .is_some_and(|feature| self.turn.config.features.enabled(feature))
     }
 
-    /// Pairs the step's environments with access using current session and originating-turn grants.
+    /// Pairs the step's environments with access using current session grants.
     pub(crate) fn environments(&self) -> Vec<(&TurnEnvironment, impl EnvironmentAccess + '_)> {
         self.environments
             .turn_environments()

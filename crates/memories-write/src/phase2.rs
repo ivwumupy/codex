@@ -329,6 +329,7 @@ mod agent {
         // Approval policy
         agent_config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
         // Consolidation runs as an internal worker and must not recursively delegate.
+        agent_config.multi_agent_v2.disable_native_tools = true;
         let _ = agent_config.features.disable(Feature::MultiAgentV2);
         let _ = agent_config.features.disable(Feature::MemoryTool);
         let _ = agent_config.features.disable(Feature::Apps);

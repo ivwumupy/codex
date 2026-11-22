@@ -17,7 +17,6 @@ use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ToolMode;
 use codex_protocol::openai_models::WebSearchToolType;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::DiscoverablePluginInfo;
 use codex_tools::DiscoverableTool;
 use codex_tools::ResponsesApiNamespaceTool;
@@ -258,7 +257,6 @@ fn set_feature(turn: &mut TurnContext, feature: Feature, enabled: bool) {
             .disable(feature)
             .expect("test feature should be disableable in config");
     }
-    turn.multi_agent_version = config.multi_agent_version_from_features();
     turn.config = Arc::new(config);
 }
 
@@ -581,7 +579,6 @@ async fn reviewer_tool_policy_exclude_optional_core_tools() {
     session.tool_policy = Arc::new(codex_guardian_reviewer::reviewer_tool_policy());
     set_feature(&mut turn, Feature::ViewImage, /*enabled*/ true);
     Arc::make_mut(&mut turn.config).update_plan_enabled = true;
-    turn.multi_agent_version = MultiAgentVersion::V2;
     let turn = Arc::new(turn);
     let step_context = StepContext::for_test(Arc::clone(&turn));
 
@@ -2719,12 +2716,13 @@ async fn code_mode_excludes_default_namespace_tools() {
 }
 
 #[tokio::test]
-async fn multi_agent_feature_selects_one_agent_tool_family() {
+async fn multi_agent_tools_always_use_v2() {
     let disabled = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
     })
     .await;
-    disabled.assert_visible_lacks(&[MULTI_AGENT_V1_NAMESPACE, MULTI_AGENT_V2_NAMESPACE]);
+    disabled.assert_visible_lacks(&[MULTI_AGENT_V1_NAMESPACE]);
+    disabled.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
     let v2 = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
         update_config(turn, |config| {

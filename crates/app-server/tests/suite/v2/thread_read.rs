@@ -1073,16 +1073,6 @@ async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_pa
             items: store_history_items(),
         })
         .await?;
-    store
-        .update_thread_metadata(UpdateThreadMetadataParams {
-            thread_id,
-            patch: ThreadMetadataPatch {
-                daybreak_enabled: Some(false),
-                ..Default::default()
-            },
-            include_archived: false,
-        })
-        .await?;
 
     let result = client
         .request(ClientRequest::ThreadRead {
@@ -1096,7 +1086,6 @@ async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_pa
         .expect("thread/read should succeed");
     let ThreadReadResponse { thread, .. } = serde_json::from_value(result)?;
 
-    assert_eq!(thread.daybreak_enabled, Some(false));
     assert_eq!(thread.status, ThreadStatus::Idle);
     assert_eq!(turn_user_texts(&thread.turns), vec!["history from store"]);
     let [

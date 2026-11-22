@@ -1,14 +1,11 @@
 use super::shared::v2_enum_from_core;
-use super::turn::CyberAccessProgram;
 use crate::JsonSchema;
 use crate::TS;
 use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelAccessPrograms as CoreModelAccessPrograms;
 use codex_protocol::openai_models::ModelAvailabilityNux as CoreModelAvailabilityNux;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::default_input_modalities;
 use codex_protocol::protocol::ModelRerouteReason as CoreModelRerouteReason;
-use codex_protocol::protocol::ModelVerification as CoreModelVerification;
 use codex_protocol::protocol::MultiAgentVersion as CoreMultiAgentVersion;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,12 +14,6 @@ use serde_json::Value as JsonValue;
 v2_enum_from_core!(
     pub enum ModelRerouteReason from CoreModelRerouteReason {
         HighRiskCyberActivity
-    }
-);
-
-v2_enum_from_core!(
-    pub enum ModelVerification from CoreModelVerification {
-        TrustedAccessForCyber
     }
 );
 
@@ -90,31 +81,6 @@ pub struct ModelServiceTier {
     pub description: String,
 }
 
-/// Caller-specific explicit access programs advertised by model discovery.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct ModelAccessPrograms {
-    /// Accepted explicit selections.
-    pub cyber: Vec<CyberAccessProgram>,
-}
-
-impl From<CoreModelAccessPrograms> for ModelAccessPrograms {
-    fn from(value: CoreModelAccessPrograms) -> Self {
-        Self {
-            cyber: value.cyber.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl From<ModelAccessPrograms> for CoreModelAccessPrograms {
-    fn from(value: ModelAccessPrograms) -> Self {
-        Self {
-            cyber: value.cyber.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -146,9 +112,6 @@ pub struct Model {
     /// Catalog default service tier id for this model, when one is configured.
     #[serde(default)]
     pub default_service_tier: Option<String>,
-    /// Null when the catalog does not provide access-program metadata.
-    #[serde(default)]
-    pub available_access_programs: Option<ModelAccessPrograms>,
     // Only one model should be marked as default.
     pub is_default: bool,
 }
@@ -193,15 +156,6 @@ pub struct ModelReroutedNotification {
     pub from_model: String,
     pub to_model: String,
     pub reason: ModelRerouteReason,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct ModelVerificationNotification {
-    pub thread_id: String,
-    pub turn_id: String,
-    pub verifications: Vec<ModelVerification>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

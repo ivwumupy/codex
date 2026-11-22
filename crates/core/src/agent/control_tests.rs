@@ -86,6 +86,7 @@ use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ItemCompletedEvent;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode;
@@ -445,21 +446,6 @@ fn history_contains_assistant_inter_agent_communication<'a>(
     })
 }
 
-async fn wait_for_subagent_notification(parent_thread: &Arc<CodexThread>) -> bool {
-    let wait = async {
-        loop {
-            let history = parent_thread.session.clone_history().await;
-            if has_subagent_notification(history.raw_items()) {
-                return true;
-            }
-            sleep(Duration::from_millis(25)).await;
-        }
-    };
-    // CI can take several seconds to schedule the detached completion watcher,
-    // especially on slower Windows runners.
-    timeout(Duration::from_secs(10), wait).await.is_ok()
-}
-
 async fn persist_thread_for_tree_resume(thread: &Arc<CodexThread>, message: &str) {
     // These tests only need a durable resume fixture. Stop the child prompt
     // first so this marker records directly instead of waiting behind an
@@ -689,17 +675,15 @@ async fn spawn_failure_context_distinguishes_execution_and_residency_capacity() 
         .agent_execution_limiter
         .initialize(/*max_threads*/ 1);
     let source = SessionSource::SubAgent(SubAgentSource::Other("worker".to_string()));
-    let running = harness
-        .control
-        .execution_guard(MultiAgentVersion::V2, &source);
+    let running = harness.control.execution_guard(&source);
     let execution_error = harness
         .control
-        .ensure_execution_capacity(MultiAgentVersion::V2, &source)
+        .ensure_execution_capacity(&source)
         .expect_err("running turn fills execution capacity");
     drop(running);
     harness
         .control
-        .ensure_execution_capacity(MultiAgentVersion::V2, &source)
+        .ensure_execution_capacity(&source)
         .expect("execution capacity released");
 
     let state = harness.control.runtime.upgrade().unwrap();
@@ -992,52 +976,6 @@ async fn get_status_returns_pending_init_for_new_thread() {
     let (thread_id, _) = harness.start_thread().await;
     let status = harness.control.get_status(thread_id).await;
     assert_eq!(status, AgentStatus::PendingInit);
-}
-
-#[tokio::test]
-async fn subscribe_status_errors_for_missing_thread() {
-    let harness = AgentControlHarness::new().await;
-    let thread_id = ThreadId::new();
-    let err = harness
-        .control
-        .subscribe_status(thread_id)
-        .await
-        .err()
-        .expect("subscribe_status should fail for missing thread");
-    assert_matches!(
-        err.details(),
-        CodexErrorDetails::ThreadNotFound(id) if *id == thread_id
-    );
-}
-
-#[tokio::test]
-async fn subscribe_status_updates_on_shutdown() {
-    let harness = AgentControlHarness::new().await;
-    let (thread_id, thread) = harness.start_thread().await;
-    let mut status_rx = harness
-        .control
-        .subscribe_status(thread_id)
-        .await
-        .expect("subscribe_status should succeed");
-    let _ = thread
-        .submit(Op::Shutdown {})
-        .await
-        .expect("shutdown should submit");
-    thread.wait_until_terminated().await;
-
-    // The update arrives before the first poll, without replacing the initial snapshot.
-    let initial = status_rx
-        .next()
-        .await
-        .expect("initial snapshot")
-        .expect("snapshot");
-    assert_eq!(initial.status(), Some(&AgentStatus::PendingInit));
-    let shutdown = status_rx
-        .next()
-        .await
-        .expect("shutdown snapshot")
-        .expect("snapshot");
-    assert_eq!(shutdown.status(), Some(&AgentStatus::Shutdown));
 }
 
 #[tokio::test]
@@ -1847,7 +1785,6 @@ async fn cold_resume_with_thread_instructions_preserves_lazy_v2_child_inheritanc
                 start_options: TurnStartOptions {
                     root_turn_id: turn.turn_metadata_state.root_turn_id(),
                     turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
-                    cyber_access_program: turn.cyber_access_program,
                     ..Default::default()
                 },
             })
@@ -1992,7 +1929,6 @@ async fn v2_reload_preserves_shared_instructions_after_root_unloads(
             start_options: TurnStartOptions {
                 root_turn_id: sender_turn.turn_metadata_state.root_turn_id(),
                 turn_trigger: sender_turn.turn_metadata_state.current_turn_trigger(),
-                cyber_access_program: sender_turn.cyber_access_program,
                 ..Default::default()
             },
         })
@@ -2189,10 +2125,7 @@ async fn v2_spawn_resolves_reported_effort_without_changing_child_selection(
 #[tokio::test]
 async fn pending_environment_failure_reaches_child_and_grandchild() {
     let (home, mut config) = test_config().await;
-    for feature in [
-        Feature::DeferredExecutor,
-        Feature::MultiAgentV2,
-    ] {
+    for feature in [Feature::DeferredExecutor, Feature::MultiAgentV2] {
         config.features.enable(feature).expect("enable feature");
     }
     config.model = Some("gpt-5.6-sol".to_string());
@@ -2584,12 +2517,10 @@ async fn spawn_agent_fork_from_paginated_parent_uses_model_context_prefix(
         .expect("parent shutdown should submit");
 }
 
-#[test_case::test_case(MultiAgentVersion::V1, true, false; "v1_gate_enabled")]
-#[test_case::test_case(MultiAgentVersion::V2, false, false; "v2_gate_disabled")]
-#[test_case::test_case(MultiAgentVersion::V2, true, true; "v2_gate_enabled")]
+#[test_case::test_case(false, false; "v2_gate_disabled")]
+#[test_case::test_case(true, true; "v2_gate_enabled")]
 #[tokio::test]
 async fn spawn_agent_without_fork_from_paginated_parent_stays_fresh_and_paginated(
-    multi_agent_version: MultiAgentVersion,
     dynamic_tools_enabled: bool,
     inherits_dynamic_tools: bool,
 ) {
@@ -2624,12 +2555,6 @@ async fn spawn_agent_without_fork_from_paginated_parent_stays_fresh_and_paginate
         .expect("start parent with dynamic tools");
     let parent_thread_id = parent.thread_id;
     let parent_thread = parent.thread;
-    assert_eq!(
-        parent_thread
-            .session
-            .set_multi_agent_version_if_unset(multi_agent_version),
-        multi_agent_version
-    );
     parent_thread
         .inject_response_items(vec![user_message("parent-only context")])
         .await
@@ -2716,7 +2641,6 @@ async fn spawn_agent_fork_sanitizes_inherited_compaction_metadata() {
         previous_turn_settings: Some(codex_history::PreviousTurnSettings {
             model: "parent-model".into(),
             comp_hash: None,
-            cyber_access_program: None,
         }),
     };
     let parent_usage = TokenUsage {
@@ -3873,7 +3797,6 @@ async fn spawn_agent_full_fork_legacy_compaction_rebuilds_child_instructions_onc
                     previous_turn_settings: Some(codex_history::PreviousTurnSettings {
                         model: "parent-model".into(),
                         comp_hash: None,
-                        cyber_access_program: None,
                     }),
                 }),
             })),
@@ -4479,40 +4402,6 @@ async fn resume_agent_releases_slot_after_resume_failure() {
 }
 
 #[tokio::test]
-async fn spawn_child_completion_notifies_parent_history() {
-    let harness = AgentControlHarness::new().await;
-    let (parent_thread_id, parent_thread) = harness.start_thread().await;
-
-    let child_thread_id = harness
-        .control
-        .spawn_agent(
-            harness.config.clone(),
-            text_input("hello child"),
-            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id,
-                depth: 1,
-                agent_path: None,
-                agent_nickname: None,
-                agent_role: Some("explorer".to_string()),
-            })),
-        )
-        .await
-        .expect("child spawn should succeed");
-
-    let child_thread = harness
-        .manager
-        .get_thread(child_thread_id)
-        .await
-        .expect("child thread should exist");
-    let _ = child_thread
-        .submit(Op::Shutdown {})
-        .await
-        .expect("child shutdown should submit");
-
-    assert_eq!(wait_for_subagent_notification(&parent_thread).await, true);
-}
-
-#[tokio::test]
 async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
     let harness = AgentControlHarness::new().await;
     let mut config = harness.config.clone();
@@ -4621,35 +4510,45 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
 #[tokio::test]
 async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
     let harness = AgentControlHarness::new().await;
-    let (_root_thread_id, root_thread) = harness.start_thread().await;
-    let (worker_thread_id, _worker_thread) = harness.start_thread().await;
-    let mut tester_config = harness.config.clone();
-    let _ = tester_config.features.enable(Feature::MultiAgentV2);
-    let tester_thread_id = harness
-        .manager
-        .start_thread(StartThreadOptions::new(tester_config.clone()))
+    let (root_thread_id, root_thread) = harness.start_thread().await;
+    let config = harness.config.clone();
+    let worker_path = AgentPath::root().join("worker_a").expect("worker path");
+    let worker_thread_id = harness
+        .control
+        .spawn_agent(
+            config.clone(),
+            text_input("hello worker"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root_thread_id,
+                depth: 1,
+                agent_path: Some(worker_path.clone()),
+                agent_nickname: None,
+                agent_role: Some("explorer".to_string()),
+            })),
+        )
         .await
-        .expect("tester thread should start")
-        .thread_id;
+        .expect("worker spawn should succeed");
+    let tester_path = worker_path.join("tester").expect("tester path");
+    let tester_thread_id = harness
+        .control
+        .spawn_agent(
+            config,
+            text_input("hello tester"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: worker_thread_id,
+                depth: 2,
+                agent_path: Some(tester_path.clone()),
+                agent_nickname: None,
+                agent_role: Some("explorer".to_string()),
+            })),
+        )
+        .await
+        .expect("tester spawn should succeed");
     let tester_thread = harness
         .manager
         .get_thread(tester_thread_id)
         .await
         .expect("tester thread should exist");
-    let worker_path = AgentPath::root().join("worker_a").expect("worker path");
-    let tester_path = worker_path.join("tester").expect("tester path");
-    harness.control.maybe_start_completion_watcher(
-        tester_thread_id,
-        Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id: worker_thread_id,
-            depth: 2,
-            agent_path: Some(tester_path.clone()),
-            agent_nickname: None,
-            agent_role: Some("explorer".to_string()),
-        })),
-        tester_path.to_string(),
-        Some(tester_path.clone()),
-    );
     let tester_turn = tester_thread.session.new_default_turn().await;
     tester_thread
         .session
@@ -4715,75 +4614,6 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
             /*trigger_turn*/ false,
         )
     ));
-}
-
-#[tokio::test]
-async fn completion_watcher_notifies_parent_when_child_is_missing() {
-    let harness = AgentControlHarness::new().await;
-    let (parent_thread_id, parent_thread) = harness.start_thread().await;
-    let child_thread_id = ThreadId::new();
-
-    harness.control.maybe_start_completion_watcher(
-        child_thread_id,
-        Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id,
-            depth: 1,
-            agent_path: None,
-            agent_nickname: None,
-            agent_role: Some("explorer".to_string()),
-        })),
-        child_thread_id.to_string(),
-        /*child_agent_path*/ None,
-    );
-
-    assert_eq!(wait_for_subagent_notification(&parent_thread).await, true);
-
-    let history = parent_thread.session.clone_history().await;
-    assert_eq!(
-        history_contains_text(
-            history.raw_items(),
-            &format!("\"agent_path\":\"{child_thread_id}\"")
-        ),
-        true
-    );
-    assert_eq!(
-        history_contains_text(history.raw_items(), "\"status\":\"not_found\""),
-        true
-    );
-}
-
-#[tokio::test]
-async fn completion_watcher_does_not_hide_tree_shutdown_failure() {
-    let harness = AgentControlHarness::new().await;
-    let (parent_thread_id, _parent_thread) = harness.start_thread().await;
-    let (child_thread_id, _child_thread) = harness.start_thread().await;
-
-    harness.control.maybe_start_completion_watcher(
-        child_thread_id,
-        Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id,
-            depth: 1,
-            agent_path: None,
-            agent_nickname: None,
-            agent_role: Some("explorer".to_string()),
-        })),
-        child_thread_id.to_string(),
-        /*child_agent_path*/ None,
-    );
-    harness.control.runtime.record_shutdown_failure(
-        crate::thread_manager::AgentTreeShutdownFailure::operation_failed(
-            "completion_watcher_test",
-            "test",
-            Some(parent_thread_id),
-            "test_error",
-        ),
-    );
-    let shutdown = harness.control.runtime.request_shutdown();
-
-    timeout(Duration::from_secs(5), shutdown.wait())
-        .await
-        .expect("completion watcher should stop during tree shutdown")
-        .expect_err("recorded tree shutdown failure should be returned");
 }
 
 #[tokio::test]

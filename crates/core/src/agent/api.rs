@@ -20,7 +20,6 @@ use codex_protocol::ThreadId;
 use codex_protocol::error::Result;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::turn_input::TurnStartOptions;
@@ -83,12 +82,7 @@ pub trait AgentControl: Send + Sync {
 
     /// Stop current work and return the pre-interrupt snapshot. V2 rejects root/self
     /// targets and tolerates known unloaded agents; other modes retain direct-ID interruption.
-    fn interrupt(
-        &self,
-        caller: ThreadId,
-        target: AgentTarget,
-        version: MultiAgentVersion,
-    ) -> BoxFuture<'_, Result<AgentInfo>>;
+    fn interrupt(&self, caller: ThreadId, target: AgentTarget) -> BoxFuture<'_, Result<AgentInfo>>;
 
     /// List loaded agents using the caller's captured source to resolve a path prefix.
     /// The local backend lazily registers callers with no parent. Callers own formatting.
@@ -106,20 +100,12 @@ pub trait AgentControl: Send + Sync {
     fn child_agent_paths(&self, parent: ThreadId) -> BoxFuture<'_, Vec<AgentPath>>;
 
     /// Check capacity before accepting work. This advisory check does not reserve a slot.
-    fn check_turn_admission(
-        &self,
-        version: MultiAgentVersion,
-        source: &SessionSource,
-    ) -> Result<()>;
+    fn check_turn_admission(&self, source: &SessionSource) -> Result<()>;
 
     /// Track a turn's execution until its guard drops. Local admission keeps the existing
     /// separate capacity check and running count; it does not atomically reserve capacity.
     /// Root and non-V2 turns return no guard.
-    fn admit_turn(
-        &self,
-        version: MultiAgentVersion,
-        source: &SessionSource,
-    ) -> Option<AgentExecutionGuard>;
+    fn admit_turn(&self, source: &SessionSource) -> Option<AgentExecutionGuard>;
 
     /// Account for one inference response, including compaction. Each call records usage;
     /// callers report it once. `SessionBudgetExceeded` means the usage was recorded and

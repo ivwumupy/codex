@@ -121,10 +121,6 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
         model.default_service_tier = model
             .is_default
             .then(|| ServiceTier::Fast.request_value().to_string());
-        model.available_access_programs =
-            Some(codex_protocol::openai_models::ModelAccessPrograms {
-                cyber: vec![codex_protocol::turn_input::CyberAccessProgram::Standard],
-            });
     }
     let expected = models.clone();
     Box::pin(app.handle_event(&mut tui, &mut app_server, loaded)).await?;
@@ -170,17 +166,17 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
         })
         .last()
         .expect("account-scoped model refresh");
-    let stripped = app.chat_widget.model_catalog().try_list_models()?;
+    let models = app.chat_widget.model_catalog().try_list_models()?;
     Box::pin(app.handle_event(
         &mut tui,
         &mut app_server,
-        AppEvent::ApiKeyCompatModelsLoaded {
+        AppEvent::ModelsLoaded {
             request_id,
-            result: Ok(stripped.clone()),
+            result: Ok(models.clone()),
         },
     ))
     .await?;
-    assert_eq!(app.model_catalog.try_list_models()?, stripped);
+    assert_eq!(app.model_catalog.try_list_models()?, models);
     let mut config = app.config.clone();
     config.service_tier = None;
     config.features.enable(Feature::FastMode)?;

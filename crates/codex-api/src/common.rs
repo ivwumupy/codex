@@ -4,12 +4,10 @@ use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnModerationMetadataEvent;
 use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::turn_input::CyberAccessProgram;
 use codex_protocol::turn_input::PromptCacheTtl;
 use futures::Stream;
 use serde::Deserialize;
@@ -26,24 +24,6 @@ use tokio::sync::oneshot;
 
 pub const WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY: &str = "ws_request_header_traceparent";
 pub const WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY: &str = "ws_request_header_tracestate";
-
-/// Explicit per-request access selection using the Responses API wire values.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct AccessPrograms {
-    cyber: &'static str,
-}
-
-impl From<CyberAccessProgram> for AccessPrograms {
-    fn from(program: CyberAccessProgram) -> Self {
-        Self {
-            cyber: match program {
-                CyberAccessProgram::Standard => "standard",
-                CyberAccessProgram::DaybreakBlue => "daybreak_blue",
-                CyberAccessProgram::DaybreakRed => "daybreak_red",
-            },
-        }
-    }
-}
 
 /// Canonical input payload for the memory summarize endpoint.
 #[derive(Debug, Clone, Serialize)]
@@ -90,8 +70,6 @@ pub enum ResponseEvent {
     /// Emitted when the server includes `OpenAI-Model` on the stream response.
     /// This can differ from the requested model when backend safety routing applies.
     ServerModel(String),
-    /// Emitted when the server recommends additional account verification.
-    ModelVerifications(Vec<ModelVerification>),
     /// Emitted when the server includes moderation metadata for first-party turn presentation.
     TurnModerationMetadata(TurnModerationMetadataEvent),
     /// Action-bound Guardian evidence for request-scoped consumers, not model history.
@@ -309,8 +287,6 @@ pub struct ResponsesApiRequest {
     pub text: Option<TextControls>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_metadata: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub access_programs: Option<AccessPrograms>,
 }
 
 impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
@@ -333,7 +309,6 @@ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
             text: request.text.as_ref(),
             generate: None,
             client_metadata: request.client_metadata.clone(),
-            access_programs: request.access_programs,
         }
     }
 }
@@ -368,8 +343,6 @@ pub struct ResponseCreateWsRequest<'a> {
     pub generate: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_metadata: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub access_programs: Option<AccessPrograms>,
 }
 
 pub fn response_create_client_metadata(

@@ -120,15 +120,7 @@ async fn terminal_failure_with_retry_header_ends_stream_immediately() {
             "context_length_exceeded",
             CodexErrorInfo::ContextWindowExceeded,
         ),
-        ("invalid_access_program", CodexErrorInfo::Other),
-        ("unsupported_access_program", CodexErrorInfo::Other),
         ("content_policy_violation", CodexErrorInfo::InvalidPrompt),
-        (
-            "access_program_not_enabled",
-            CodexErrorInfo::HttpConnectionFailed {
-                http_status_code: None,
-            },
-        ),
     ] {
         let error = json!({
             "code": code,

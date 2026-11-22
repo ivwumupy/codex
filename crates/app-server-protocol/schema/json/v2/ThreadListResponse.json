@@ -29,12 +29,6 @@
             "boolean",
             "null"
           ]
-        },
-        "cyberTrustedAccess": {
-          "type": [
-            "boolean",
-            "null"
-          ]
         }
       },
       "required": [

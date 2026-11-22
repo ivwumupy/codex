@@ -51,7 +51,6 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
@@ -222,7 +221,6 @@ impl AgentControl for TestAgentControl {
         &self,
         _caller: ThreadId,
         _target: AgentTarget,
-        _version: MultiAgentVersion,
     ) -> BoxFuture<'_, CodexResult<AgentInfo>> {
         panic!("unexpected agent interrupt")
     }
@@ -242,19 +240,11 @@ impl AgentControl for TestAgentControl {
         Box::pin(async { Vec::new() })
     }
 
-    fn check_turn_admission(
-        &self,
-        _version: MultiAgentVersion,
-        _source: &SessionSource,
-    ) -> CodexResult<()> {
+    fn check_turn_admission(&self, _source: &SessionSource) -> CodexResult<()> {
         Ok(())
     }
 
-    fn admit_turn(
-        &self,
-        _version: MultiAgentVersion,
-        _source: &SessionSource,
-    ) -> Option<AgentExecutionGuard> {
+    fn admit_turn(&self, _source: &SessionSource) -> Option<AgentExecutionGuard> {
         None
     }
 
@@ -313,12 +303,9 @@ async fn test_with_host_control(
     let extra_features = extra_features.to_vec();
     let test = test_codex()
         .with_config(move |config| {
-            for feature in [
-                Feature::MultiAgentV2,
-                Feature::AgentMessageBoard,
-            ]
-            .into_iter()
-            .chain(extra_features.iter().copied())
+            for feature in [Feature::MultiAgentV2, Feature::AgentMessageBoard]
+                .into_iter()
+                .chain(extra_features.iter().copied())
             {
                 config
                     .features

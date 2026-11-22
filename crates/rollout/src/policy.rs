@@ -174,7 +174,6 @@ fn persisted_event_msg(
         | EventMsg::GuardianWarning(_)
         | EventMsg::SafetyBuffering(_)
         | EventMsg::ModelReroute(_)
-        | EventMsg::ModelVerification(_)
         | EventMsg::TurnModerationMetadata(_)
         | EventMsg::AgentReasoningSectionBreak(_)
         | EventMsg::PrivateSessionEvent(_)

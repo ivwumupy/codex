@@ -60,7 +60,6 @@ use crate::request_permissions::RequestPermissionsEvent;
 use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::response_item_id::OptionalWireItemId;
-use crate::turn_input::CyberAccessProgram;
 use crate::turn_input::SuspendTurnOutcome;
 use crate::turn_input::TurnInputMode;
 use crate::turn_input::TurnInputRequest;
@@ -1145,9 +1144,6 @@ pub enum EventMsg {
     /// Model routing changed from the requested model to a different model.
     ModelReroute(ModelRerouteEvent),
 
-    /// Backend recommends additional account verification for this turn.
-    ModelVerification(ModelVerificationEvent),
-
     /// Backend moderation metadata intended for first-party turn presentation.
     TurnModerationMetadata(TurnModerationMetadataEvent),
 
@@ -1917,18 +1913,6 @@ pub struct ModelRerouteEvent {
     pub from_model: String,
     pub to_model: String,
     pub reason: ModelRerouteReason,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum ModelVerification {
-    TrustedAccessForCyber,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
-pub struct ModelVerificationEvent {
-    pub verifications: Vec<ModelVerification>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
@@ -3209,8 +3193,6 @@ pub struct TurnContextItem {
     pub collaboration_mode: Option<CollaborationMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multi_agent_version: Option<MultiAgentVersion>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cyber_access_program: Option<CyberAccessProgram>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,
     /// Legacy placeholder written as `Some(ReasoningSummaryConfig::None)` for older readers.
@@ -3242,7 +3224,6 @@ impl<'de> Deserialize<'de> for TurnContextItem {
             comp_hash: Option<String>,
             collaboration_mode: Option<CollaborationMode>,
             multi_agent_version: Option<MultiAgentVersion>,
-            cyber_access_program: Option<CyberAccessProgram>,
             effort: Option<ReasoningEffortConfig>,
             summary: Option<ReasoningSummaryConfig>,
         }
@@ -3287,7 +3268,6 @@ impl<'de> Deserialize<'de> for TurnContextItem {
             comp_hash: wire.comp_hash,
             collaboration_mode: wire.collaboration_mode,
             multi_agent_version: wire.multi_agent_version,
-            cyber_access_program: wire.cyber_access_program,
             effort: wire.effort,
             summary: wire.summary,
         })

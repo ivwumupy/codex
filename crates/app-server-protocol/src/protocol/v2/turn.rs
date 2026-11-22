@@ -16,7 +16,6 @@ use codex_protocol::models::ImageReference as CoreImageReference;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::plan_tool::PlanItemArg as CorePlanItemArg;
 use codex_protocol::plan_tool::StepStatus as CorePlanStepStatus;
-use codex_protocol::turn_input::CyberAccessProgram as CoreCyberAccessProgram;
 use codex_protocol::user_input::ByteRange as CoreByteRange;
 use codex_protocol::user_input::TextElement as CoreTextElement;
 use codex_protocol::user_input::UserInput as CoreUserInput;
@@ -127,38 +126,6 @@ pub struct AdditionalContextEntry {
     /// Optional name for untrusted context, used to label its tool output.
     #[ts(optional = nullable)]
     pub name: Option<String>,
-}
-
-/// Requested cyber treatment for an OpenAI model turn.
-/// Authorization and model-tier restrictions remain server-owned.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub enum CyberAccessProgram {
-    Standard,
-    DaybreakBlue,
-    DaybreakRed,
-}
-
-impl From<CyberAccessProgram> for CoreCyberAccessProgram {
-    fn from(value: CyberAccessProgram) -> Self {
-        match value {
-            CyberAccessProgram::Standard => Self::Standard,
-            CyberAccessProgram::DaybreakBlue => Self::DaybreakBlue,
-            CyberAccessProgram::DaybreakRed => Self::DaybreakRed,
-        }
-    }
-}
-
-impl From<CoreCyberAccessProgram> for CyberAccessProgram {
-    fn from(value: CoreCyberAccessProgram) -> Self {
-        match value {
-            CoreCyberAccessProgram::Standard => Self::Standard,
-            CoreCyberAccessProgram::DaybreakBlue => Self::DaybreakBlue,
-            CoreCyberAccessProgram::DaybreakRed => Self::DaybreakRed,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -305,12 +272,6 @@ pub struct TurnStartParams {
     #[experimental("turn/start.multiAgentMode")]
     #[ts(optional = nullable)]
     pub multi_agent_mode: Option<MultiAgentMode>,
-
-    /// EXPERIMENTAL - Request an authorized cyber program for this
-    /// turn. Omission preserves automatic behavior. This does not grant access.
-    #[experimental("turn/start.cyberAccessProgram")]
-    #[ts(optional = nullable)]
-    pub cyber_access_program: Option<CyberAccessProgram>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

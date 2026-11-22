@@ -40,7 +40,6 @@ fn records_bounded_spawn_phase_metrics() {
     record_spawn_success(
         &telemetry,
         Some(&SpawnAgentForkMode::FullHistory),
-        MultiAgentVersion::V2,
         SpawnMeasurements {
             history_mode: ThreadHistoryMode::Paginated,
             residency_reservation: Some(Duration::from_millis(11)),

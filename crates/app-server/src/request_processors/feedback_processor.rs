@@ -838,7 +838,6 @@ mod tests {
                     comp_hash: None,
                     collaboration_mode: None,
                     multi_agent_version: None,
-                    cyber_access_program: None,
                     effort: effort.clone(),
                     summary: Some(ReasoningSummary::Auto),
                 }),

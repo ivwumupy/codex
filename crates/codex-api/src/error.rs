@@ -44,8 +44,6 @@ pub enum ApiError {
     #[error("invalid request: {message}")]
     InvalidRequest { message: String },
     #[error("{message}")]
-    AccessProgramNotEnabled { message: String },
-    #[error("{message}")]
     InvalidAudioInput {
         message: String,
         /// True when the provider rejected an individual clip, independent of request size.
@@ -110,14 +108,6 @@ pub(crate) fn parse_terminal_provider_error(
         ("context_length_exceeded", None | Some(StatusCode::BAD_REQUEST)) => {
             Some(ApiError::ContextWindowExceeded)
         }
-        // A non-streaming 400 already follows the ordinary invalid-request path.
-        ("invalid_access_program" | "unsupported_access_program", None) => {
-            Some(ApiError::InvalidRequest {
-                message: message
-                    .unwrap_or("The requested access program cannot be used with this model.")
-                    .to_owned(),
-            })
-        }
         ("content_policy_violation", None | Some(StatusCode::BAD_REQUEST)) => {
             Some(ApiError::ContentPolicyViolation {
                 message: message
@@ -126,12 +116,6 @@ pub(crate) fn parse_terminal_provider_error(
                 status,
             })
         }
-        // HTTP 403s retain their request ID and headers in the API bridge.
-        ("access_program_not_enabled", None) => Some(ApiError::AccessProgramNotEnabled {
-            message: message
-                .unwrap_or("The requested access program is not enabled.")
-                .to_owned(),
-        }),
         ("budget_reached", None | Some(StatusCode::BAD_REQUEST)) => {
             Some(ApiError::SessionBudgetExceeded)
         }

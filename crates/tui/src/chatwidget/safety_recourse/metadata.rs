@@ -162,7 +162,6 @@ pub(super) fn parse(mut value: Value) -> Option<(Domain, Option<Recourse>)> {
             || prompt.starts_with(['!', '/'])
             || crate::async_question_reply::parse(prompt).is_some()
             || super::super::skills::contains_tool_mention(prompt)
-            || (wire.domain == Domain::Cyber && label.eq_ignore_ascii_case("Enable Daybreak"))
             || labels.iter().filter(|key| **key == label_key).count() > 1
         {
             continue;

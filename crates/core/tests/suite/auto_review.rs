@@ -1,9 +1,10 @@
+use anyhow::Context;
 use codex_core::TurnInputRequest;
+use core_test_support::TempDirExt;
 use core_test_support::test_codex::local_requests;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context;
 use anyhow::Result;
 use codex_config::test_support::CloudConfigBundleFixture;
 use codex_core::config::Constrained;
@@ -27,13 +28,11 @@ use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::default_input_modalities;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::request_permissions::PermissionGrantScope;
 use codex_protocol::request_permissions::RequestPermissionProfile;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::user_input::UserInput;
-use core_test_support::TempDirExt;
 use core_test_support::responses::ev_apply_patch_custom_tool_call;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -440,7 +439,7 @@ async fn required_model_bypasses_extension_approval_when_guardian_v2_is_disabled
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Result<()> {
+async fn remote_model_override_uses_catalog_model_for_auto_review() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
 
@@ -456,29 +455,11 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         .mount(&server)
         .await;
 
-    let permissions_call_id = "auto-review-permissions-call";
-    let permissions_args = json!({
-        "reason": "exercise strict Guardian model selection",
-        "permissions": {
-            "network": {
-                "enabled": true,
-            },
-        },
-    });
     let patch_call_id = "auto-review-patch-call";
     let patch = "*** Begin Patch\n*** Add File: auto-review-model-override.txt\n+exercise Guardian model selection\n*** End Patch\n";
     let responses = mount_sse_sequence(
         &server,
         vec![
-            sse(vec![
-                ev_response_created("resp-parent-1"),
-                ev_function_call(
-                    permissions_call_id,
-                    "request_permissions",
-                    &serde_json::to_string(&permissions_args)?,
-                ),
-                ev_completed("resp-parent-1"),
-            ]),
             sse(vec![
                 ev_response_created("resp-parent-2"),
                 ev_apply_patch_custom_tool_call(patch_call_id, patch),
@@ -511,14 +492,10 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
-            config.approvals_reviewer = ApprovalsReviewer::User;
+            config.approvals_reviewer = ApprovalsReviewer::AutoReview;
             config
                 .features
                 .enable(Feature::ExecPermissionApprovals)
-                .expect("test config should allow feature update");
-            config
-                .features
-                .enable(Feature::RequestPermissionsTool)
                 .expect("test config should allow feature update");
         });
     let TestCodex {
@@ -583,28 +560,6 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         )
         .await?;
 
-    let permissions_request = wait_for_event(&codex, |event| {
-        matches!(
-            event,
-            EventMsg::RequestPermissions(_) | EventMsg::TurnComplete(_)
-        )
-    })
-    .await;
-    let EventMsg::RequestPermissions(permissions_request) = permissions_request else {
-        panic!("expected request_permissions before completion");
-    };
-    assert_eq!(permissions_request.call_id, permissions_call_id);
-    codex
-        .submit(Op::RequestPermissionsResponse {
-            id: permissions_request.call_id,
-            response: RequestPermissionsResponse {
-                permissions: permissions_request.permissions,
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: true,
-            },
-        })
-        .await?;
-
     wait_for_event_with_timeout(
         &codex,
         |event| matches!(event, EventMsg::TurnComplete(_)),
@@ -660,7 +615,6 @@ fn remote_model_with_auto_review_override(slug: &str, review_model: &str) -> Mod
         additional_speed_tiers: Vec::new(),
         service_tiers: Vec::new(),
         default_service_tier: None,
-        available_access_programs: None,
         upgrade: None,
         model_messages: None,
         include_skills_usage_instructions: false,

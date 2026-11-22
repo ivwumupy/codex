@@ -7,7 +7,6 @@ use codex_protocol::error::AgentErrorContext;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -33,10 +32,10 @@ impl Drop for LocalExecutionPermit {
 impl LocalAgentControl {
     pub(crate) fn ensure_execution_capacity(
         &self,
-        multi_agent_version: MultiAgentVersion,
+
         session_source: &SessionSource,
     ) -> CodexResult<()> {
-        if !is_execution_limited(multi_agent_version, session_source) {
+        if !is_execution_limited(session_source) {
             return Ok(());
         }
         let max_threads = self.runtime.agent_execution_limiter.max_threads();
@@ -52,10 +51,10 @@ impl LocalAgentControl {
 
     pub(crate) fn execution_guard(
         &self,
-        multi_agent_version: MultiAgentVersion,
+
         session_source: &SessionSource,
     ) -> Option<AgentExecutionGuard> {
-        is_execution_limited(multi_agent_version, session_source)
+        is_execution_limited(session_source)
             .then(|| Arc::clone(&self.runtime.agent_execution_limiter).guard())
     }
 }
@@ -79,12 +78,8 @@ impl AgentExecutionLimiter {
     }
 }
 
-fn is_execution_limited(
-    multi_agent_version: MultiAgentVersion,
-    session_source: &SessionSource,
-) -> bool {
-    multi_agent_version == MultiAgentVersion::V2
-        && matches!(session_source, SessionSource::SubAgent(_))
+fn is_execution_limited(session_source: &SessionSource) -> bool {
+    matches!(session_source, SessionSource::SubAgent(_))
 }
 
 #[cfg(test)]

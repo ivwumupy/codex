@@ -142,7 +142,6 @@ fn terminal_title_item_id(item: &str) -> Option<&'static str> {
         "total-output-tokens" => Some("total-output-tokens"),
         "thread-id" | "session-id" => Some("thread-id"),
         "fast-mode" => Some("fast-mode"),
-        "daybreak" => Some("daybreak"),
         "model" | "model-name" => Some("model"),
         "model-with-reasoning" => Some("model-with-reasoning"),
         "reasoning" => Some("reasoning"),
@@ -315,7 +314,6 @@ mod tests {
             configured_items: Some(vec![
                 "thread-credits".to_string(),
                 "estimated-thread-cost".to_string(),
-                "daybreak".to_string(),
             ]),
             cwd: PathBuf::from("/workspace/project"),
             project_root: None,
@@ -323,9 +321,11 @@ mod tests {
 
         assert_eq!(check.status, CheckStatus::Ok);
         assert_eq!(check.summary, "terminal title configured");
-        assert!(check.details.contains(
-            &"terminal title items: thread-credits, estimated-thread-cost, daybreak".to_string()
-        ));
+        assert!(
+            check.details.contains(
+                &"terminal title items: thread-credits, estimated-thread-cost".to_string()
+            )
+        );
         assert!(check.issues.is_empty());
     }
 

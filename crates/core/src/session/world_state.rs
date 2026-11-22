@@ -26,7 +26,6 @@ use crate::context::world_state::ToolsState;
 use crate::context::world_state::TopLevelToolsState;
 use crate::context::world_state::WorldState;
 use crate::context::world_state::format_agent_paths;
-use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use codex_connectors::AppToolPolicyEvaluator;
 use codex_extension_api::WorldStateContributionInput;
 use codex_features::Feature;
@@ -37,7 +36,6 @@ use codex_prompts::render_model_instructions;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::models::ContentItemNamespace;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 
@@ -47,7 +45,6 @@ impl Session {
         turn_context: &TurnContext,
     ) -> Option<&Arc<dyn AgentSessionReader>> {
         if turn_context.config.include_environment_context
-            && turn_context.multi_agent_version == MultiAgentVersion::V2
             && let AgentRuntimeServices::Host(services) = &self.agent_runtime
         {
             services.session_reader.as_ref()
@@ -152,21 +149,13 @@ impl Session {
         let environment_subagents = if turn_context.config.include_environment_context
             && matches!(self.agent_runtime, AgentRuntimeServices::Controller)
         {
-            match turn_context.multi_agent_version {
-                MultiAgentVersion::V2 => format_agent_paths(
-                    self.services
-                        .agent_control
-                        .child_agent_paths(self.thread_id)
-                        .await
-                        .into_iter(),
-                ),
-                MultiAgentVersion::Disabled | MultiAgentVersion::V1 => {
-                    self.services
-                        .local_agent_runtime
-                        .format_legacy_environment_context_subagents(self.thread_id)
-                        .await
-                }
-            }
+            format_agent_paths(
+                self.services
+                    .agent_control
+                    .child_agent_paths(self.thread_id)
+                    .await
+                    .into_iter(),
+            )
         } else {
             String::new()
         };
@@ -418,23 +407,16 @@ impl Session {
             world_state.add_section(usage_hint);
         }
         world_state.add_section(multi_agent_mode);
-        let spawn_tool = match turn_context.multi_agent_version {
-            MultiAgentVersion::Disabled => None,
-            MultiAgentVersion::V1 => Some(ToolName::new(
-                Some(MULTI_AGENT_V1_NAMESPACE.to_string()),
-                "spawn_agent",
-            )),
-            MultiAgentVersion::V2 => turn_context
-                .config
-                .multi_agent_v2
-                .expose_spawn_agent_model_overrides
-                .then(|| {
-                    ToolName::new(
-                        turn_context.config.multi_agent_v2.tool_namespace.clone(),
-                        "spawn_agent",
-                    )
-                }),
-        };
+        let spawn_tool = turn_context
+            .config
+            .multi_agent_v2
+            .expose_spawn_agent_model_overrides
+            .then(|| {
+                ToolName::new(
+                    turn_context.config.multi_agent_v2.tool_namespace.clone(),
+                    "spawn_agent",
+                )
+            });
         let model_overrides_available =
             spawn_tool.is_some_and(|name| step_context.tool_router.exposes_tool(&name));
         world_state.add_section(
@@ -444,18 +426,11 @@ impl Session {
                     .features
                     .enabled(Feature::ModelCatalogInContext)
             {
-                ModelCatalogState::new(
-                    &turn_context.available_models,
-                    turn_context.multi_agent_version,
-                )
+                ModelCatalogState::new(&turn_context.available_models)
             } else {
                 ModelCatalogState::default()
             }
-            .with_namespace(match turn_context.multi_agent_version {
-                MultiAgentVersion::Disabled => None,
-                MultiAgentVersion::V1 => Some(ContentItemNamespace::MultiAgentV1),
-                MultiAgentVersion::V2 => Some(v2_namespace),
-            }),
+            .with_namespace(Some(v2_namespace)),
         );
         if !crate::guardian::is_basic_session_source(&turn_context.session_source) {
             world_state.add_section(ManagedDeveloperInstructionsState::new(

@@ -251,7 +251,6 @@ async fn steer_joins_existing_turn_without_extending_sampling(
                         thread_settings: Default::default(),
                         trace: codex_otel::span_w3c_trace_context(&recovery),
                         prompt_cache_ttl: None,
-                        cyber_access_program: None,
                     })
                     .await?,
                 StartIfIdleSubmission::Started {

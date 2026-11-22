@@ -1,7 +1,6 @@
 use crate::agent::child_config::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use crate::agent::child_config::model_supports_multi_agent_backend;
 use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
@@ -26,7 +25,6 @@ pub struct SpawnAgentToolOptions {
     pub expose_agent_type: bool,
     pub hide_agent_type_model_reasoning: bool,
     pub expose_spawn_agent_model_overrides: bool,
-    pub multi_agent_version: MultiAgentVersion,
     pub model_catalog_in_context: bool,
     pub usage_hint_text: Option<String>,
 }
@@ -39,7 +37,6 @@ impl Default for SpawnAgentToolOptions {
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: false,
-            multi_agent_version: MultiAgentVersion::Disabled,
             model_catalog_in_context: false,
             usage_hint_text: None,
         }
@@ -69,9 +66,7 @@ pub fn create_spawn_agent_tool_v2(
 ) -> ToolSpec {
     let available_models_description = (!options.model_catalog_in_context
         && options.expose_spawn_agent_model_overrides)
-        .then(|| {
-            spawn_agent_models_description(&options.available_models, options.multi_agent_version)
-        });
+        .then(|| spawn_agent_models_description(&options.available_models));
     let inherited_model_guidance = if options.model_catalog_in_context {
         options
             .expose_spawn_agent_model_overrides
@@ -449,14 +444,11 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
     tool_description
 }
 
-fn spawn_agent_models_description(
-    models: &[ModelPreset],
-    multi_agent_version: MultiAgentVersion,
-) -> String {
+fn spawn_agent_models_description(models: &[ModelPreset]) -> String {
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
-        .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
+        .filter(|model| model_supports_multi_agent_backend(model))
         .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
         .collect();
     if visible_models.is_empty() {

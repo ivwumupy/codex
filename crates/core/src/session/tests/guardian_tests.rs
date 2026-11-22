@@ -6,7 +6,6 @@ use crate::session::step_context::StepContext;
 use crate::session::tests::update_turn_settings_for_test;
 use crate::session::turn_context::NewTurnContextOptions;
 use crate::test_support::models_manager_with_provider;
-use crate::tools::context::ToolCallSource;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
 use crate::tools::handlers::PreparedPermissionRequest;
@@ -105,8 +104,8 @@ async fn activate_turn_with_new_review_authority(session: &Arc<Session>) -> Arc<
         )
         .await;
 
-    let (active_turn, _, _, _) = session
-        .active_turn_context_and_strict_auto_review()
+    let (active_turn, _, _) = session
+        .active_turn_settings_and_environments()
         .await
         .expect("next turn should have active review authority");
     assert_eq!(
@@ -193,12 +192,12 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     update_turn_settings_for_test(&mut turn_context_raw, |settings| {
         Arc::make_mut(&mut settings.model_info).node_repl_auto_review_required = true;
     });
-    Arc::make_mut(&mut turn_context_raw.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("test setup should allow updating approval policy");
     let mut config = (*turn_context_raw.config).clone();
+    config.permissions = crate::config::Permissions::from_approval_and_profile(
+        Constrained::allow_any(AskForApproval::OnRequest),
+        Constrained::allow_any(codex_protocol::models::PermissionProfile::read_only()),
+    )
+    .expect("create reviewer test permissions");
     config
         .features
         .enable(Feature::GuardianApproval)
@@ -274,7 +273,7 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     assert_eq!(
         response,
         Some(RequestPermissionsResponse {
-            permissions: requested_permissions.clone(),
+            permissions: RequestPermissionProfile::default(),
             scope: PermissionGrantScope::Turn,
             strict_auto_review: false,
         })
@@ -294,7 +293,7 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     assert_eq!(second_response, response);
     assert_eq!(
         turn_context.granted_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID),
-        Some(requested_permissions.into())
+        None
     );
 
     let guardian_requests = guardian_request_log.requests();
@@ -323,7 +322,11 @@ async fn request_permissions_uses_issuing_step_policy_and_reviewer() {
         CodexAuth::from_api_key("Test API Key"),
         Vec::new(),
         |config| {
-            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+            config.permissions = crate::config::Permissions::from_approval_and_profile(
+                Constrained::allow_any(AskForApproval::Never),
+                Constrained::allow_any(codex_protocol::models::PermissionProfile::read_only()),
+            )
+            .expect("create reviewer test permissions");
             config.approvals_reviewer = ApprovalsReviewer::User;
             config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
             config.model_provider.supports_websockets = false;
@@ -377,7 +380,7 @@ async fn request_permissions_uses_issuing_step_policy_and_reviewer() {
     assert_eq!(
         response,
         Some(RequestPermissionsResponse {
-            permissions,
+            permissions: RequestPermissionProfile::default(),
             scope: PermissionGrantScope::Turn,
             strict_auto_review: false,
         })
@@ -415,9 +418,7 @@ async fn request_permissions_guardian_review_stops_when_cancelled(
     let turn_context_raw = Arc::get_mut(&mut turn_context).expect("single turn context ref");
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("test setup should allow updating approval policy");
+        .approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
     let mut config = (*turn_context_raw.config).clone();
     config
         .features
@@ -629,126 +630,6 @@ async fn guardian_allows_exec_command_additional_permissions_requests_past_polic
 
     let output = expect_text_output(&resp.expect("expected Ok result"));
     assert!(output.contains("hi"));
-}
-
-#[tokio::test]
-async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_skip() {
-    let server = start_mock_server().await;
-    let guardian_request_log = mount_sse_once(
-        &server,
-        sse(vec![
-            ev_response_created("resp-guardian"),
-            ev_assistant_message(
-                "msg-guardian",
-                &serde_json::json!({
-                    "risk_level": "low",
-                    "user_authorization": "high",
-                    "outcome": "allow",
-                    "rationale": "The command stays within the strict turn permission grant.",
-                })
-                .to_string(),
-            ),
-            ev_completed("resp-guardian"),
-        ]),
-    )
-    .await;
-
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    session.record_granted_request_permissions_for_turn(
-        &RequestPermissionsResponse {
-            permissions: RequestPermissionProfile {
-                network: Some(NetworkPermissions {
-                    enabled: Some(true),
-                }),
-                ..Default::default()
-            },
-            scope: PermissionGrantScope::Turn,
-            strict_auto_review: true,
-        },
-        codex_exec_server::LOCAL_ENVIRONMENT_ID,
-        &turn_context_raw,
-    );
-
-    Arc::make_mut(&mut turn_context_raw.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::Never)
-        .expect("test setup should allow updating approval policy");
-    let mut config = (*turn_context_raw.config).clone();
-    // Keep Never outside Full Access without requiring an OS sandbox for this routing test.
-    config
-        .permissions
-        .set_permission_profile(codex_protocol::models::PermissionProfile::External {
-            network: NetworkSandboxPolicy::Restricted,
-        })
-        .expect("test setup should allow external sandbox permissions");
-    let TurnEnvironmentState::Ready(environment) =
-        &mut turn_context_raw.initial_environments.environments[0]
-    else {
-        panic!("primary environment should be ready");
-    };
-    environment.config_mut().permission_profile =
-        config.permissions.permission_profile_state().snapshot();
-    config.approvals_reviewer = ApprovalsReviewer::User;
-    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
-    let config = Arc::new(config);
-    let models_manager = models_manager_with_provider(
-        config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
-        config.model_provider.clone(),
-    );
-    session.services.models_manager = models_manager;
-    crate::guardian::test_host::install(&session, &config);
-    turn_context_raw.config = Arc::clone(&config);
-    turn_context_raw.provider = create_model_provider(
-        config.model_provider.clone(),
-        turn_context_raw.auth_manager.clone(),
-    );
-    let session = Arc::new(session);
-    let turn_context = Arc::new(turn_context_raw);
-    session
-        .start_task(
-            Arc::clone(&turn_context),
-            Vec::new(),
-            super::NeverEndingTask {
-                kind: crate::state::TaskKind::Regular,
-                listen_to_cancellation_token: true,
-            },
-        )
-        .await;
-
-    let handler = crate::tools::handlers::ExecCommandHandler::default();
-    #[allow(deprecated)]
-    let workdir = Some(turn_context.cwd.to_string_lossy().to_string());
-    let step_context = StepContext::for_test(Arc::clone(&turn_context));
-    let resp = handler
-        .handle(ToolInvocation {
-            session: Arc::clone(&session),
-            turn: Arc::clone(&turn_context),
-            step_context,
-            cancellation_token: CancellationToken::new(),
-            tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
-            call_id: "strict-shell-command-call".to_string(),
-            tool_name: codex_tools::ToolName::plain("exec_command"),
-            source: ToolCallSource::Direct,
-            native_call: None,
-            environments: Default::default(),
-            payload: ToolPayload::Function {
-                arguments: serde_json::json!({
-                    "cmd": "echo hi",
-                    "login": false,
-                    "workdir": workdir,
-                    "yield_time_ms": 10_000_u64,
-                })
-                .to_string(),
-            },
-        })
-        .await;
-
-    let output = expect_text_output(&resp.expect("expected Ok result"));
-    assert!(output.contains("hi"));
-    let guardian_request = guardian_request_log.single_request();
-    assert!(guardian_request.body_contains_text("echo hi"));
 }
 
 #[test_case(AskForApproval::Never; "policy_precheck")]
@@ -1124,13 +1005,13 @@ async fn compaction_initial_context_preserves_separate_guardian_developer_messag
 
 #[tokio::test]
 #[cfg(unix)]
-async fn exec_command_allows_sticky_turn_permissions_without_inline_request_permissions_feature() {
+async fn exec_command_allows_session_permissions_without_inline_request_permissions_feature() {
     let (mut session, turn_context_raw) = make_session_and_context().await;
     session
         .features
         .enable(Feature::RequestPermissionsTool)
         .expect("test setup should allow enabling request permissions tool");
-    turn_context_raw.record_granted_permissions(
+    session.services.record_granted_permissions(
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         PermissionProfile {
             network: Some(NetworkPermissions {
@@ -1138,7 +1019,6 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
             }),
             ..Default::default()
         },
-        /*strict_auto_review*/ false,
     );
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context_raw);
@@ -1154,7 +1034,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
             step_context,
             cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
-            call_id: "sticky-turn-grant".to_string(),
+            call_id: "session-grant".to_string(),
             tool_name: codex_tools::ToolName::plain("exec_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             native_call: None,
@@ -1179,7 +1059,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
         Err(FunctionCallError::RespondToModel(output)) => {
             assert!(
                 !output.contains("additional permissions are disabled"),
-                "sticky turn permissions should bypass inline validation: {output}"
+                "session permissions should bypass inline validation: {output}"
             );
         }
         Err(err) => panic!("unexpected error: {err:?}"),

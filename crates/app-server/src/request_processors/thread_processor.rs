@@ -48,7 +48,6 @@ use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::plain_output_text;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_thread_store::LocalHistoryAccount;
-use codex_thread_store::PendingDaybreakPreference;
 use codex_thread_store::PersistContext;
 use std::ops::ControlFlow;
 
@@ -1292,7 +1291,6 @@ impl ThreadRequestProcessor {
             session_start_source,
             thread_source,
             project_id,
-            daybreak_enabled,
             environments,
         } = params;
         if matches!(
@@ -1378,7 +1376,6 @@ impl ThreadRequestProcessor {
                 session_start_source,
                 thread_source.map(Into::into),
                 project_id,
-                daybreak_enabled,
                 environment_requests,
                 service_name,
                 allow_provider_model_fallback,
@@ -1460,7 +1457,6 @@ impl ThreadRequestProcessor {
         session_start_source: Option<codex_app_server_protocol::ThreadStartSource>,
         thread_source: Option<codex_protocol::protocol::ThreadSource>,
         project_id: Option<String>,
-        daybreak_enabled: Option<bool>,
         environment_requests: Option<Vec<TurnEnvironmentRequest>>,
         service_name: Option<String>,
         allow_provider_model_fallback: bool,
@@ -1474,11 +1470,6 @@ impl ThreadRequestProcessor {
             .load_with_overrides(config_overrides.clone(), typesafe_overrides.clone())
             .await
             .map_err(|err| config_load_error(&err))?;
-        if config.ephemeral && daybreak_enabled.is_some() {
-            return Err(invalid_request(
-                "daybreakEnabled is not supported for ephemeral threads",
-            ));
-        }
         // Project-local config can launch host processes, so only the effective
         // permissions after managed constraints can imply project trust.
         let effective_permission_profile = config.permissions.effective_permission_profile();
@@ -1603,7 +1594,6 @@ impl ThreadRequestProcessor {
                 thread_store.as_ref(),
                 StoreThreadMetadataPatch {
                     project_id: project_id.clone().map(Some),
-                    daybreak_enabled,
                     ..Default::default()
                 },
                 "thread/start",
@@ -1698,7 +1688,6 @@ impl ThreadRequestProcessor {
             session_configured.rollout_path.clone(),
         );
         thread.project_id = project_id.clone();
-        thread.daybreak_enabled = daybreak_enabled;
 
         // Auto-attach a thread listener when starting a thread.
         log_listener_attach_result(
@@ -2049,7 +2038,6 @@ impl ThreadRequestProcessor {
             thread_id,
             project_id,
             git_info,
-            daybreak_enabled,
         } = params;
         let thread_uuid = ThreadId::from_string(&thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
@@ -2072,7 +2060,7 @@ impl ThreadRequestProcessor {
             }
         }
 
-        if git_info.is_none() && project_id.is_none() && daybreak_enabled.is_none() {
+        if git_info.is_none() && project_id.is_none() {
             return Err(invalid_request(
                 "thread metadata update must include at least one field",
             ));
@@ -2150,7 +2138,6 @@ impl ThreadRequestProcessor {
             let patch = StoreThreadMetadataPatch {
                 git_info,
                 project_id: project_update.clone(),
-                daybreak_enabled,
                 ..Default::default()
             };
             let updated_thread = self
@@ -3135,14 +3122,6 @@ impl ThreadRequestProcessor {
         thread_id: ThreadId,
         include_turns: bool,
     ) -> Result<Thread, ThreadReadViewError> {
-        let pending_preference =
-            PendingDaybreakPreference::read(self.thread_store.as_ref(), thread_id)
-                .await
-                .map_err(|err| {
-                    ThreadReadViewError::Internal(format!(
-                        "failed to read pending thread metadata: {err}"
-                    ))
-                })?;
         let loaded_thread = self.thread_manager.get_thread(thread_id).await.ok();
         let mut thread = if include_turns {
             if let Some(loaded_thread) = loaded_thread.as_ref() {
@@ -3195,8 +3174,6 @@ impl ThreadRequestProcessor {
                 "thread not loaded: {thread_id}"
             )));
         };
-
-        thread.daybreak_enabled = pending_preference.resolve(thread.daybreak_enabled);
 
         let has_live_in_progress_turn = if let Some(loaded_thread) = loaded_thread.as_ref() {
             matches!(loaded_thread.agent_status().await, AgentStatus::Running)
@@ -5729,7 +5706,6 @@ impl ThreadRequestProcessor {
                 StoreThreadMetadataPatch {
                     preview: (!inherited_preview.is_empty()).then(|| inherited_preview.clone()),
                     project_id: inherited_project_id.clone().map(Some),
-                    daybreak_enabled: source_thread.daybreak_enabled,
                     ..Default::default()
                 },
                 "thread/fork",
@@ -6784,7 +6760,6 @@ fn thread_from_stored_thread(
         thread_source: thread.thread_source.map(Into::into),
         git_info,
         name: thread.name,
-        daybreak_enabled: thread.daybreak_enabled,
         turns: Vec::new(),
     };
     (thread, history)
@@ -6974,7 +6949,6 @@ fn build_thread_from_snapshot(
         thread_source: config_snapshot.thread_source.clone().map(Into::into),
         git_info: None,
         name: None,
-        daybreak_enabled: None,
         turns: Vec::new(),
     }
 }

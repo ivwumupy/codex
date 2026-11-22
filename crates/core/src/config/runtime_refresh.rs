@@ -75,10 +75,7 @@ impl Config {
             .effective_config()
             .try_into()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-        let mut configured_features = Features::from_sources(
-            cfg.features.as_ref(),
-            None,
-        );
+        let mut configured_features = Features::from_sources(cfg.features.as_ref(), None);
         // These operational controls accept host defaults beneath explicit layer values.
         // Enterprise opt-in always comes from trusted layers instead.
         for feature in [
@@ -86,7 +83,6 @@ impl Config {
             Feature::McpLazyStdioStartup,
             Feature::SecretAuthStorage,
             Feature::McpOAuthRefreshCoordination,
-            Feature::DaybreakProgramPropagation,
         ] {
             if matches!(scope, RuntimeConfigRefresh::UserFiles) {
                 let explicitly_configured = cfg.features.as_ref().is_some_and(|features| {
@@ -151,15 +147,6 @@ impl Config {
             .features
             .refresh_mcp_features(&features)
             .map_err(std::io::Error::other)?;
-        if matches!(scope, RuntimeConfigRefresh::UserFiles) {
-            config
-                .features
-                .set_enabled(
-                    Feature::DaybreakProgramPropagation,
-                    features.enabled(Feature::DaybreakProgramPropagation),
-                )
-                .map_err(std::io::Error::other)?;
-        }
         config.mcp_servers =
             constrain_mcp_servers(servers, layers.requirements().mcp_servers.as_ref())
                 .map_err(std::io::Error::other)?;

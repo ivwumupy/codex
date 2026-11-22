@@ -1957,10 +1957,6 @@
       "additionalProperties": false,
       "description": "Overrides for the optional API features supported by a custom provider.",
       "properties": {
-        "cyber_access_programs": {
-          "description": "Whether the provider accepts explicit `access_programs.cyber` selections. Defaults to enabled for the built-in OpenAI provider and disabled otherwise. This does not grant program access or change authentication.",
-          "type": "boolean"
-        },
         "external_web_access": {
           "description": "Whether hosted web search may access the live web.",
           "type": "boolean"
@@ -6274,10 +6270,6 @@
     "computer_use": {
       "$ref": "#/definitions/ComputerUseConfigToml"
     },
-    "daybreak": {
-      "description": "Default Daybreak preference for new threads and non-interactive turns.",
-      "type": "boolean"
-    },
     "desktop": {
       "additionalProperties": true,
       "default": null,
@@ -6312,9 +6304,6 @@
           "type": "boolean"
         },
         "analytics_plan_history": {
-          "type": "boolean"
-        },
-        "api_key_cyber_access_programs": {
           "type": "boolean"
         },
         "api_key_model_discovery": {
@@ -6357,9 +6346,6 @@
           "type": "boolean"
         },
         "chronicle": {
-          "type": "boolean"
-        },
-        "cli_daybreak": {
           "type": "boolean"
         },
         "cli_resume_account_check": {
@@ -6423,9 +6409,6 @@
           "type": "boolean"
         },
         "daemon_auto_start": {
-          "type": "boolean"
-        },
-        "daybreak_program_propagation": {
           "type": "boolean"
         },
         "default_mode_request_user_input": {

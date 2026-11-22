@@ -153,18 +153,6 @@ impl App {
         }
 
         self.sync_active_agent_label();
-        let has_non_primary_agent_thread = self
-            .agent_navigation
-            .has_non_primary_thread(self.primary_thread_id);
-        if !self.config.features.enabled(Feature::MultiAgentV2) && !has_non_primary_agent_thread {
-            if let Some(primary_thread_id) = self.primary_thread_id {
-                self.refresh_agent_picker_threads(app_server, primary_thread_id);
-            }
-            self.chat_widget
-                .open_feature_enable_prompt(Feature::MultiAgentV2);
-            return;
-        }
-
         if self.agent_navigation.is_empty() {
             self.chat_widget
                 .add_info_message("No agents available yet.".to_string(), /*hint*/ None);
@@ -472,7 +460,6 @@ impl App {
         if self.side_threads.contains_key(&thread_id) {
             session.forked_from_id = None;
             session.fork_parent_title = None;
-            session.daybreak_enabled = false;
         }
         // A reattach can discover output missed while the server was disconnected.
         let replay_may_have_output = if self.side_companions.contains_key(&thread_id) {

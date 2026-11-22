@@ -106,11 +106,7 @@ impl Session {
         let ready_selected_capability_roots =
             Self::ready_selected_capability_roots(&selected_capability_roots);
         let (executor_capability_discovery_v2, inventory_changed) = self
-            .executor_capability_discovery_for_step_v2(
-                config,
-                &environments,
-                /*skill_turn*/ None,
-            )
+            .executor_capability_discovery_for_step_v2(config, &environments)
             .await;
         let (executor_capability_discovery, discovery_recovered) = self
             .executor_capability_discovery_for_step(
@@ -118,7 +114,6 @@ impl Session {
                 &selected_capability_roots,
                 &environments,
                 executor_capability_discovery_v2.as_deref(),
-                /*skill_turn*/ None,
             )
             .await;
         if inventory_changed {
@@ -235,11 +230,7 @@ impl Session {
             let ready_selected_capability_roots =
                 Self::ready_selected_capability_roots(&selected_capability_roots);
             let (executor_capability_discovery_v2, _) = self
-                .executor_capability_discovery_for_step_v2(
-                    &desired.config,
-                    &desired.environments,
-                    /*skill_turn*/ None,
-                )
+                .executor_capability_discovery_for_step_v2(&desired.config, &desired.environments)
                 .await;
             let (executor_capability_discovery, _) = self
                 .executor_capability_discovery_for_step(
@@ -247,7 +238,6 @@ impl Session {
                     &selected_capability_roots,
                     &desired.environments,
                     executor_capability_discovery_v2.as_deref(),
-                    /*skill_turn*/ None,
                 )
                 .await;
             let mcp_projection = self
@@ -353,11 +343,7 @@ impl Session {
         let ready_selected_capability_roots =
             Self::ready_selected_capability_roots(&selected_capability_roots);
         let (executor_capability_discovery_v2, _) = self
-            .executor_capability_discovery_for_step_v2(
-                &desired.config,
-                &desired.environments,
-                /*skill_turn*/ None,
-            )
+            .executor_capability_discovery_for_step_v2(&desired.config, &desired.environments)
             .await;
         let (executor_capability_discovery, _) = self
             .executor_capability_discovery_for_step(
@@ -365,7 +351,6 @@ impl Session {
                 &selected_capability_roots,
                 &desired.environments,
                 executor_capability_discovery_v2.as_deref(),
-                /*skill_turn*/ None,
             )
             .await;
         let mcp_projection = self
@@ -513,13 +498,9 @@ impl Session {
     fn discovery_sandbox(
         &self,
         environment: &super::turn_context::TurnEnvironment,
-        skill_turn: Option<&TurnContext>,
     ) -> codex_exec_server::FileSystemSandboxContext {
         let id = &environment.selection.environment_id;
-        let grants = skill_turn.map_or_else(
-            || self.services.granted_permissions(id),
-            |turn| turn.granted_permissions(id),
-        );
+        let grants = self.services.granted_permissions(id);
         environment.sandbox_context(grants)
     }
 
@@ -534,7 +515,6 @@ impl Session {
         resolved_roots: &[ResolvedSelectedCapabilityRoot],
         environments: &TurnEnvironmentSnapshot,
         v2_snapshots: Option<&[ExecutorCapabilityDiscoveryV2Snapshot]>,
-        skill_turn: Option<&TurnContext>,
     ) -> (Option<Arc<ExecutorCapabilityDiscoverySnapshot>>, bool) {
         if v2_snapshots.is_some() {
             return (None, false);
@@ -568,19 +548,16 @@ impl Session {
                 .map(|environment| {
                     (
                         environment.selection.environment_id.clone(),
-                        self.discovery_sandbox(environment, skill_turn),
+                        self.discovery_sandbox(environment),
                     )
                 })
                 .collect::<HashMap<_, _>>()
         } else {
             HashMap::new()
         };
-        // Each scope retains one result per root; temporary grants must not evict the
-        // session inventory on every model step. The turn cache expires with its grants.
-        let cache = skill_turn
-            .map_or(&self.services.thread_extension_data, |turn| {
-                turn.extension_data.as_ref()
-            })
+        let cache = self
+            .services
+            .thread_extension_data
             .get_or_init(ExecutorCapabilityDiscoveryCache::default);
         let selected_capability_roots = resolved_roots
             .iter()
@@ -605,10 +582,7 @@ impl Session {
         let discovery = cache
             .snapshot(&selected_capability_roots, &sandbox_contexts)
             .await;
-        (
-            Some(Arc::new(discovery)),
-            skill_turn.is_none() && cache.take_recovered_discovery(),
-        )
+        (Some(Arc::new(discovery)), cache.take_recovered_discovery())
     }
 
     /// Acquires V2 inventories and reports changes without scheduling an MCP refresh.
@@ -616,7 +590,6 @@ impl Session {
         &self,
         config: &Config,
         environments: &TurnEnvironmentSnapshot,
-        skill_turn: Option<&TurnContext>,
     ) -> (Option<Vec<ExecutorCapabilityDiscoveryV2Snapshot>>, bool) {
         if !config
             .features
@@ -657,7 +630,7 @@ impl Session {
             }
             let request = DiscoverV2CapabilitiesRequest {
                 cwd: selected.cwd().clone(),
-                sandbox: Some(self.discovery_sandbox(selected, skill_turn)),
+                sandbox: Some(self.discovery_sandbox(selected)),
             };
             let result = cache
                 .discover(environment_id, selected.environment(), request)
@@ -668,10 +641,6 @@ impl Session {
             });
         }
         let incompatible = snapshots.is_empty() && skipped_incompatible_executor;
-        if skill_turn.is_some() {
-            // Only session discovery updates the inventory used to invalidate MCP.
-            return ((!incompatible).then_some(snapshots), false);
-        }
         if incompatible {
             let changed = self
                 .services
@@ -929,11 +898,7 @@ impl Session {
         let environment_selections = environments.all_selections();
         let desired = self.latest_mcp_desired_state(auth, environments).await;
         let (executor_capability_discovery_v2, _) = self
-            .executor_capability_discovery_for_step_v2(
-                &desired.config,
-                &desired.environments,
-                /*skill_turn*/ None,
-            )
+            .executor_capability_discovery_for_step_v2(&desired.config, &desired.environments)
             .await;
         let (executor_capability_discovery, _) = self
             .executor_capability_discovery_for_step(
@@ -941,7 +906,6 @@ impl Session {
                 &selected_capability_roots,
                 &desired.environments,
                 executor_capability_discovery_v2.as_deref(),
-                /*skill_turn*/ None,
             )
             .await;
         let mcp_projection = self

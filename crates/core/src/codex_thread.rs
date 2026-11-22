@@ -2,7 +2,6 @@ use crate::WithTurnExtensionData;
 use crate::agent::AgentStatus;
 use crate::agent::api::AgentControl;
 use crate::config::ConstraintResult;
-use crate::context::ContextualUserFragment;
 use crate::context::GuardianReviewEvidence;
 use crate::elicitation::ElicitationRegistration;
 use crate::session::SessionIo;
@@ -84,7 +83,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::sync::oneshot;
-use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -596,11 +594,9 @@ impl CodexThread {
             thread_settings,
             trace,
             prompt_cache_ttl,
-            cyber_access_program,
         } = request;
         let start_options = TurnStartOptions {
             prompt_cache_ttl,
-            cyber_access_program,
             ..self.session.recovered_turn_start_options(&turn_id).await
         };
         match self
@@ -948,7 +944,8 @@ impl CodexThread {
         self.session.terminate_background_terminal(process_id).await
     }
 
-    pub(crate) fn subscribe_status(&self) -> watch::Receiver<AgentStatus> {
+    #[cfg(test)]
+    pub(crate) fn subscribe_status(&self) -> tokio::sync::watch::Receiver<AgentStatus> {
         self.io.agent_status.clone()
     }
 
@@ -961,14 +958,6 @@ impl CodexThread {
     /// `thread/tokenUsage/updated` payload incomplete.
     pub async fn token_usage_info(&self) -> Option<TokenUsageInfo> {
         self.session.token_usage_info().await
-    }
-
-    /// Records a context fragment without creating a new user turn boundary.
-    pub(crate) async fn inject_fragment_without_turn(&self, fragment: impl ContextualUserFragment) {
-        let item = ContextualUserFragment::into(fragment);
-        self.session
-            .inject_no_new_turn(vec![item], /*current_turn_context*/ None)
-            .await;
     }
 
     /// Records an explicit user goal mutation without scheduling a model response.
@@ -1168,10 +1157,8 @@ impl CodexThread {
 
     /// Returns the active turn's reviewer, including live updates, or the thread default.
     pub async fn approvals_reviewer_for_turn(&self, turn_id: &str) -> ApprovalsReviewer {
-        if let Some((turn, settings, _, _)) = self
-            .session
-            .active_turn_context_and_strict_auto_review()
-            .await
+        if let Some((turn, settings, _)) =
+            self.session.active_turn_settings_and_environments().await
             && turn.sub_id == turn_id
         {
             settings.approvals_reviewer()
@@ -1258,7 +1245,7 @@ impl CodexThread {
     }
 
     pub fn multi_agent_version(&self) -> Option<MultiAgentVersion> {
-        self.session.multi_agent_version()
+        Some(MultiAgentVersion::V2)
     }
 
     /// Shares an immutable view of the live parent model context and retained host facts.
@@ -1486,10 +1473,6 @@ impl CodexThread {
         if self.session.active_turn.lock().await.is_some() {
             return Ok(());
         }
-        let config = self.session.get_config().await;
-        let multi_agent_version = self
-            .multi_agent_version()
-            .unwrap_or_else(|| config.multi_agent_version_from_features());
-        control.check_turn_admission(multi_agent_version, &self.session_source)
+        control.check_turn_admission(&self.session_source)
     }
 }

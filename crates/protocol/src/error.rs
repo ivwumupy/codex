@@ -161,9 +161,6 @@ pub enum CodexErrorDetails {
     /// The account cannot use Codex in the selected workspace.
     #[error("{0}")]
     WorkspaceAccessDenied(UnexpectedResponseError),
-    /// The provider denied the access program required for this request.
-    #[error("{0}")]
-    AccessProgramNotEnabled(ProviderRejection),
     /// Unexpected HTTP status code.
     #[error("{0}")]
     UnexpectedStatus(UnexpectedResponseError),
@@ -510,7 +507,6 @@ impl CodexErr {
             | CodexErrorDetails::CyberPolicy { .. }
             | CodexErrorDetails::BioPolicy { .. }
             | CodexErrorDetails::WorkspaceAccessDenied(_)
-            | CodexErrorDetails::AccessProgramNotEnabled(_)
             | CodexErrorDetails::MisalignmentPolicyViolation { .. } => RetryPolicy::Never,
             CodexErrorDetails::ServerOverloaded
             | CodexErrorDetails::PolicyCapacityUnavailable
@@ -588,7 +584,6 @@ impl CodexErr {
             },
             CodexErrorDetails::ConnectionFailed(_)
             | CodexErrorDetails::WorkspaceAccessDenied(_)
-            | CodexErrorDetails::AccessProgramNotEnabled(_)
             | CodexErrorDetails::UnexpectedStatus(_) => CodexErrorInfo::HttpConnectionFailed {
                 http_status_code: self.http_status_code_value(),
             },
@@ -636,7 +631,6 @@ impl CodexErr {
             | CodexErrorDetails::ContentPolicyViolation { status, .. } => *status,
             CodexErrorDetails::RetryLimit(err) => Some(err.status),
             CodexErrorDetails::WorkspaceAccessDenied(err)
-            | CodexErrorDetails::AccessProgramNotEnabled(ProviderRejection::Http(err))
             | CodexErrorDetails::UnexpectedStatus(err) => Some(err.status),
             CodexErrorDetails::ConnectionFailed(err) => err.source.status(),
             CodexErrorDetails::ResponseStreamFailed(err) => err.source.status(),
@@ -675,15 +669,6 @@ impl std::fmt::Display for ResponseStreamFailed {
                 .unwrap_or_default()
         )
     }
-}
-
-/// A provider can reject a request before or after opening the response stream.
-#[derive(Debug, Error)]
-pub enum ProviderRejection {
-    #[error(transparent)]
-    Http(UnexpectedResponseError),
-    #[error("{0}")]
-    Stream(String),
 }
 
 #[derive(Clone, Debug)]

@@ -287,9 +287,6 @@ pub struct Thread {
     pub git_info: Option<GitInfo>,
     /// Optional user-facing thread title.
     pub name: Option<String>,
-    /// Saved Daybreak choice, independent of turn execution. Null if unset.
-    #[experimental("thread.daybreakEnabled")]
-    pub daybreak_enabled: Option<bool>,
     /// Only populated on `thread/resume`, `thread/fork`, and `thread/read`
     /// (when `includeTurns` is true) responses.
     /// For all other responses and notifications returning a Thread,
@@ -338,7 +335,6 @@ struct ThreadCompatibility {
     agent_role: Option<String>,
     git_info: Option<GitInfo>,
     name: Option<String>,
-    daybreak_enabled: Option<bool>,
     turns: Vec<Turn>,
 }
 
@@ -380,7 +376,6 @@ impl<'de> Deserialize<'de> for Thread {
             agent_role: thread.agent_role,
             git_info: thread.git_info,
             name: thread.name,
-            daybreak_enabled: thread.daybreak_enabled,
             turns: thread.turns,
         })
     }

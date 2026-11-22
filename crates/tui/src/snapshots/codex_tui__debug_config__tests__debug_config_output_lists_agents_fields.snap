@@ -5,7 +5,7 @@ expression: render_to_text(&render_agents_config_lines(&config))
 ---
 
 [features.multi_agent_v2]:
-  - enabled = false
+  - disable_native_tools = false
   - max_concurrent_threads_per_session = 7
 [agents]:
   - default_subagent_model = gpt-5.6-terra

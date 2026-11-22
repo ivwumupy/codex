@@ -17,7 +17,6 @@ use codex_protocol::models::ContentItemMetadata;
 use codex_protocol::models::ContentItemNamespace;
 use codex_protocol::models::input_text;
 use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::protocol::MultiAgentVersion;
 
 // Includes XML escaping and markers; at most 1,000 tokens even with byte fallback.
 const MAX_RENDERED_BYTES: usize = 1_000;
@@ -32,12 +31,12 @@ pub(crate) struct ModelCatalogState {
 }
 
 impl ModelCatalogState {
-    pub(crate) fn new(models: &[ModelPreset], multi_agent_version: MultiAgentVersion) -> Self {
+    pub(crate) fn new(models: &[ModelPreset]) -> Self {
         let mut catalog = String::new();
         let mut models = models
             .iter()
             .filter(|model| model.show_in_picker)
-            .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
+            .filter(|model| model_supports_multi_agent_backend(model))
             .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
             .collect::<Vec<_>>();
         // Stabilize the selected choices independently of their picker ordering.

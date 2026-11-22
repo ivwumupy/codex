@@ -100,7 +100,6 @@ impl ResponseResampling {
             ResponseEvent::Created { .. }
             | ResponseEvent::SafetyBuffering(_)
             | ResponseEvent::ServerModel(_)
-            | ResponseEvent::ModelVerifications(_)
             | ResponseEvent::TurnModerationMetadata(_)
             | ResponseEvent::GuardianAssessment(_)
             | ResponseEvent::ServerReasoningIncluded(_)

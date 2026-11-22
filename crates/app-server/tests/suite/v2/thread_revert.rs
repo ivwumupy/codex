@@ -452,7 +452,7 @@ async fn thread_revert_replaces_paginated_history_before_turn() -> Result<()> {
                     text: text.to_string(),
                     text_elements: Vec::new(),
                 }],
-                model: (text == "second").then_some("gpt-daybreak-blue-latest".to_string()),
+                model: (text == "second").then_some("gpt-5.4".to_string()),
                 personality: (text == "second").then_some(Personality::None),
                 ..Default::default()
             })
