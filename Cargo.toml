@@ -53,7 +53,6 @@ codex-message-board-mcp = { path = "crates/message-board-mcp" }
 codex-connectors-extension = { path = "crates/ext-connectors" }
 codex-context-fragments = { path = "crates/context-fragments" }
 codex-core = { path = "crates/core" }
-codex-core-api = { path = "crates/core-api" }
 codex-core-plugin-common = { path = "crates/core-plugin-common" }
 codex-core-plugins = { path = "crates/core-plugins" }
 codex-diagnostics = { path = "crates/diagnostics" }
@@ -157,7 +156,6 @@ codex-utils-stream-parser = { path = "crates/utils-stream-parser" }
 codex-utils-string = { path = "crates/utils-string" }
 codex-utils-template = { path = "crates/utils-template" }
 codex-user-verification = { path = "crates/user-verification" }
-codex-v8-poc = { path = "crates/v8-poc" }
 core_test_support = { path = "crates/core-test-support" }
 
 # External
@@ -170,7 +168,6 @@ assert_cmd = "2"
 assert_matches = "1.5.0"
 async-channel = "2.3.1"
 async-io = "2.6.0"
-async-stream = "0.3.6"
 axum = { version = "0.8", default-features = false }
 base64 = "0.22.1"
 bitflags = "2.13.1"
@@ -208,7 +205,6 @@ ed25519-dalek = { version = "2.2.0", features = ["pkcs8"] }
 encoding_rs = "0.8.35"
 eventsource-stream = "0.2.3"
 file-id = "0.2.3"
-flatbuffers = "25"
 flate2 = "1.1.8"
 futures = { version = "0.3", default-features = false }
 gethostname = "1.1.0"
@@ -248,7 +244,6 @@ maplit = "1.0.2"
 memchr = "2.7.6"
 mime_guess = "2.0.5"
 multimap = "0.10.0"
-mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "b21120168d70befe12356411423266bfef168446" }
 notify = "8.2.0"
 nucleo = { git = "https://github.com/helix-editor/nucleo.git", rev = "4253de9faabb4e5c6d81d946a5e35a90f87347ee" }
 once_cell = "1.20.2"
@@ -294,7 +289,6 @@ rustls-pki-types = "1.14.0"
 schemars = "0.8.22"
 seccompiler = "0.5.0"
 semver = "1.0"
-sentry = "0.46.0"
 serde = { version = "1", features = ["rc"] }
 serde_ignored = "0.1.14"
 serde_json = "1"
@@ -333,7 +327,6 @@ sqlx-sqlite = { version = "=0.9.0", default-features = false, features = ["offli
 strum = "0.27.2"
 strum_macros = "0.28.0"
 supports-color = "3.0.2"
-syntect = "5"
 sys-locale = "0.3.2"
 system-configuration = "0.7"
 tar = { version = "=0.4.45", default-features = false }
